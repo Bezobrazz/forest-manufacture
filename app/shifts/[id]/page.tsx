@@ -1,3 +1,8 @@
+// app/shifts/[id]/page.tsx
+// Додайте наступний код на початку компонента, щоб відключити кешування даних
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEmployees, getProducts, getShiftDetails } from "@/app/actions";
@@ -24,6 +29,8 @@ import {
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
+import { ShiftWages } from "@/components/shift-wages";
+import type { ShiftWithDetails } from "@/lib/types";
 
 interface ShiftPageProps {
   params: {
@@ -43,6 +50,19 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   if (!shift) {
     notFound();
   }
+
+  // Додаємо логування для перевірки даних зміни
+  console.log(
+    `Rendering shift details for ID ${shiftId}:`,
+    JSON.stringify({
+      id: shift.id,
+      status: shift.status,
+      created_at: shift.created_at,
+      completed_at: shift.completed_at,
+      employees_count: shift.employees?.length || 0,
+      production_count: shift.production?.length || 0,
+    })
+  );
 
   const employees = await getEmployees();
   const products = await getProducts();
@@ -92,6 +112,13 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
       }
     });
   }
+
+  // Додаємо логування для перевірки розрахунку заробітної плати
+  console.log(`Wage calculation for shift ID ${shiftId}:`, {
+    totalWages,
+    wagesByProductCount: wagesByProduct.length,
+    totalProduction,
+  });
 
   // Сортуємо за загальною сумою винагороди (від більшої до меншої)
   wagesByProduct.sort((a, b) => b.total - a.total);
@@ -173,13 +200,18 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           </CardContent>
         </Card>
 
-        {/* Додаємо новий розділ для заробітної плати */}
+        {/* Додаємо компонент для погодинної оплати */}
+        {shift.status === "completed" && (
+          <ShiftWages shift={shift} productWages={totalWages} />
+        )}
+
+        {/* Розділ для заробітної плати за продукцію */}
         {shift.production && shift.production.length > 0 && (
           <Card className="mb-4">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
-                <span>Заробітна плата</span>
+                <span>Заробітна плата за продукцію</span>
               </CardTitle>
               <CardDescription>
                 Розрахунок заробітної плати на основі винагороди за продукцію

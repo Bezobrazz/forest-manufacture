@@ -223,7 +223,6 @@ export async function shipInventory(formData: FormData) {
   }
 }
 
-// Модифікуємо функцію updateProduction, щоб вона також оновлювала склад
 export async function updateProduction(formData: FormData) {
   try {
     const supabase = createServerClient();
@@ -293,9 +292,9 @@ export async function updateProduction(formData: FormData) {
         // Отримуємо поточну кількість на складі
         const { data: currentInventory, error: getError } = await supabase
           .from("inventory")
-          .select("quantity")
+          .select("quantity, id")
           .eq("product_id", productId)
-          .single();
+          .maybeSingle();
 
         if (getError && getError.code !== "PGRST116") {
           console.error("Error fetching current inventory:", getError);
@@ -306,11 +305,30 @@ export async function updateProduction(formData: FormData) {
         const newQuantity = currentQuantity + quantityDifference;
 
         // Оновлюємо кількість на складі
-        const { error: updateError } = await supabase.from("inventory").upsert({
-          product_id: productId,
-          quantity: newQuantity,
-          updated_at: new Date().toISOString(),
-        });
+        let updateError;
+
+        if (currentInventory) {
+          // Якщо запис існує, оновлюємо його
+          const updateResult = await supabase
+            .from("inventory")
+            .update({
+              quantity: newQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", currentInventory.id);
+
+          updateError = updateResult.error;
+        } else {
+          // Якщо запису немає, створюємо новий
+          const insertResult = await supabase.from("inventory").insert({
+            product_id: productId,
+            quantity: newQuantity,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          updateError = insertResult.error;
+        }
 
         if (updateError) {
           console.error("Error updating inventory:", updateError);
@@ -610,7 +628,7 @@ export async function completeShift(shiftId: number) {
         // 2.1 Отримуємо поточну кількість на складі
         const { data: inventoryData, error: inventoryError } = await supabase
           .from("inventory")
-          .select("quantity")
+          .select("quantity, id")
           .eq("product_id", item.product_id)
           .maybeSingle();
 
@@ -623,11 +641,30 @@ export async function completeShift(shiftId: number) {
         const newQuantity = currentQuantity + item.quantity;
 
         // 2.2 Оновлюємо кількість на складі
-        const { error: updateError } = await supabase.from("inventory").upsert({
-          product_id: item.product_id,
-          quantity: newQuantity,
-          updated_at: new Date().toISOString(),
-        });
+        let updateError;
+
+        if (inventoryData) {
+          // Якщо запис існує, оновлюємо його
+          const updateResult = await supabase
+            .from("inventory")
+            .update({
+              quantity: newQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", inventoryData.id);
+
+          updateError = updateResult.error;
+        } else {
+          // Якщо запису немає, створюємо новий
+          const insertResult = await supabase.from("inventory").insert({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          updateError = insertResult.error;
+        }
 
         if (updateError) {
           console.error("Error updating inventory:", updateError);

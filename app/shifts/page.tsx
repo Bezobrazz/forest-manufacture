@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { ArrowLeft, Calendar, Clock, Plus, DollarSign } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ShiftsPage() {
   const shifts = await getShifts();
 
