@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
 
 interface ProductionItemsFormProps {
   shift: Shift;
@@ -27,6 +28,9 @@ export function ProductionItemsForm({
   );
   const [localProduction, setLocalProduction] =
     useState<Production[]>(existingProduction);
+  console.log("localProduction", localProduction);
+
+  const router = useRouter();
 
   // Ініціалізуємо кількості з існуючих даних
   useEffect(() => {
@@ -66,6 +70,7 @@ export function ProductionItemsForm({
 
     try {
       const result = await updateProduction(formData);
+      console.log("Результат оновлення кількості продукції:", result);
 
       if (result.success && result.data && result.data.length > 0) {
         // Оновлюємо локальний стан
@@ -98,6 +103,10 @@ export function ProductionItemsForm({
           title: "Дані оновлено",
           description: "Кількість продукції успішно оновлено",
         });
+        // Примусово оновлюємо сторінку
+        setTimeout(() => {
+          router.refresh();
+        }, 1000); // Затримка в 1 секунду
       } else {
         toast({
           title: "Помилка",
