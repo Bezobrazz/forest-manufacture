@@ -7,6 +7,7 @@ import type {
   ShiftWithDetails,
   Inventory,
   InventoryTransaction,
+  Task,
 } from "@/lib/types";
 
 // Отримання інформації про склад
@@ -1347,5 +1348,93 @@ export async function manuallyUpdateInventoryFromProduction() {
   } catch (error) {
     console.error("Error in manuallyUpdateInventoryFromProduction:", error);
     return { success: false, error: "Сталася помилка при оновленні інвентарю" };
+  }
+}
+
+export async function getTasks() {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching tasks:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getTasks:", error);
+    return [];
+  }
+}
+
+export async function createTask(
+  task: Omit<Task, "id" | "created_at" | "completed_at">
+) {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([task])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in createTask:", error);
+    return { success: false, error: "Сталася помилка при створенні задачі" };
+  }
+}
+
+export async function updateTaskStatus(taskId: number, status: Task["status"]) {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .update({
+        status,
+        completed_at: status === "completed" ? new Date().toISOString() : null,
+      })
+      .eq("id", taskId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating task status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in updateTaskStatus:", error);
+    return {
+      success: false,
+      error: "Сталася помилка при оновленні статусу задачі",
+    };
+  }
+}
+
+export async function deleteTask(taskId: number) {
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+
+    if (error) {
+      console.error("Error deleting task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteTask:", error);
+    return { success: false, error: "Сталася помилка при видаленні задачі" };
   }
 }
