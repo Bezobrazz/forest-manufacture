@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   getInventory,
@@ -17,20 +19,30 @@ import { ArrowLeft, Package, ArrowUp, ArrowDown, Settings } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
+import { useEffect, useState } from "react";
+import type { Inventory, InventoryTransaction, Product } from "@/lib/types";
 
-export default async function InventoryPage() {
-  const [inventory, transactions, products] = await Promise.all([
-    getInventory(),
-    getInventoryTransactions(),
-    getProducts(),
-  ]);
+export default function InventoryPage() {
+  const [inventory, setInventory] = useState<Inventory[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  console.log("inventory", inventory);
-  console.log("transactions", transactions);
-  console.log("products", products);
+  useEffect(() => {
+    async function loadData() {
+      const [inventoryData, transactionsData, productsData] = await Promise.all(
+        [getInventory(), getInventoryTransactions(), getProducts()]
+      );
+      setInventory(inventoryData);
+      setTransactions(transactionsData);
+      setProducts(productsData);
+      setIsLoading(false);
+    }
+    loadData();
+  }, []);
 
   // Групуємо інвентар за категоріями
-  const inventoryByCategory: Record<string, typeof inventory> = {};
+  const inventoryByCategory: Record<string, Inventory[]> = {};
 
   inventory.forEach((item) => {
     const categoryName = item.product?.category?.name || "Без категорії";
@@ -42,6 +54,10 @@ export default async function InventoryPage() {
 
   // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(inventoryByCategory).sort();
+
+  if (isLoading) {
+    return <div>Завантаження...</div>;
+  }
 
   return (
     <div className="container py-6">
@@ -128,15 +144,15 @@ export default async function InventoryPage() {
 
         <TabsContent value="transactions" className="space-y-6">
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader>
               <CardTitle>Історія операцій</CardTitle>
-              <CardDescription>Всі операції зі складом</CardDescription>
+              <CardDescription>Лог операцій зі складом</CardDescription>
             </CardHeader>
             <CardContent>
               {transactions.length === 0 ? (
-                <div className="text-center py-4">
+                <div className="text-center py-8">
                   <p className="text-muted-foreground">
-                    Немає даних про операції зі складом
+                    Немає даних про операції
                   </p>
                 </div>
               ) : (
@@ -220,7 +236,17 @@ export default async function InventoryPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <InventoryShipForm inventory={inventory} />
+                <InventoryShipForm
+                  inventory={inventory}
+                  onInventoryUpdated={async () => {
+                    const [newInventory, newTransactions] = await Promise.all([
+                      getInventory(),
+                      getInventoryTransactions(),
+                    ]);
+                    setInventory(newInventory);
+                    setTransactions(newTransactions);
+                  }}
+                />
               </CardContent>
             </Card>
           </div>
