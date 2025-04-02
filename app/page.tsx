@@ -9,6 +9,7 @@ import {
   getProducts,
   getProductionStats,
   getInventory,
+  getActiveTasks,
 } from "@/app/actions";
 import {
   Card,
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatDate } from "@/lib/utils";
 import {
   Calendar,
   Clock,
@@ -41,12 +42,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DatabaseError } from "@/components/database-error";
-import type { Shift, Employee, Product, Inventory } from "@/lib/types";
+import type {
+  ShiftWithDetails,
+  Employee,
+  Product,
+  Inventory,
+  Task,
+} from "@/lib/types";
 
 export default function HomePage() {
   const [data, setData] = useState<{
-    shifts: Shift[];
-    activeShifts: Shift[];
+    shifts: ShiftWithDetails[];
+    activeShifts: ShiftWithDetails[];
     employees: Employee[];
     products: Product[];
     productionStats: {
@@ -54,6 +61,7 @@ export default function HomePage() {
       productionByCategory: Record<string, number>;
     };
     inventory: Inventory[];
+    activeTasks: Task[];
   }>({
     shifts: [],
     activeShifts: [],
@@ -61,6 +69,7 @@ export default function HomePage() {
     products: [],
     productionStats: { totalProduction: 0, productionByCategory: {} },
     inventory: [],
+    activeTasks: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
@@ -77,6 +86,7 @@ export default function HomePage() {
         products,
         productionStats,
         inventory,
+        activeTasks,
       ] = await Promise.all([
         getShifts(),
         getActiveShifts(),
@@ -84,6 +94,7 @@ export default function HomePage() {
         getProducts(),
         getProductionStats(),
         getInventory(),
+        getActiveTasks(),
       ]);
 
       setData({
@@ -93,6 +104,7 @@ export default function HomePage() {
         products,
         productionStats,
         inventory,
+        activeTasks,
       });
     } catch (err: any) {
       console.error("Помилка при завантаженні даних:", err);
@@ -280,6 +292,27 @@ export default function HomePage() {
             <Link href="/inventory" className="w-full">
               <Button variant="outline" className="w-full">
                 <span>Управління складом</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <CheckSquare className="h-5 w-5 text-primary" />
+              <span>Активні задачі</span>
+            </CardTitle>
+            <CardDescription>Кількість активних задач</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{data.activeTasks.length}</div>
+          </CardContent>
+          <CardFooter>
+            <Link href="/tasks" className="w-full">
+              <Button variant="outline" className="w-full">
+                <span>Переглянути задачі</span>
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </Link>
@@ -473,6 +506,67 @@ export default function HomePage() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckSquare className="h-5 w-5 text-primary" />
+              <span>Активні задачі</span>
+            </CardTitle>
+            <CardDescription>Список активних задач</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.activeTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Немає активних задач
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {data.activeTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-start gap-4 p-4 border rounded-lg"
+                  >
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">{task.title}</h3>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            task.priority === "low"
+                              ? "bg-green-500"
+                              : task.priority === "medium"
+                              ? "bg-yellow-500"
+                              : "bg-red-500"
+                          }
+                        >
+                          {task.priority === "low"
+                            ? "Низький"
+                            : task.priority === "medium"
+                            ? "Середній"
+                            : "Високий"}
+                        </Badge>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground">
+                          {task.description}
+                        </p>
+                      )}
+                      {task.due_date && (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          <span>Термін: {formatDate(task.due_date)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

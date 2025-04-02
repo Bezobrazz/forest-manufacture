@@ -373,13 +373,19 @@ export async function updateProduction(formData: FormData) {
   }
 }
 
-export async function getActiveShifts(): Promise<Shift[]> {
+export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
   try {
     const supabase = createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
-      .select("*")
+      .select(
+        `
+        *,
+        employees:shift_employees(*, employee:employees(*)),
+        production:production(*, product:products(*, category:product_categories(*)))
+      `
+      )
       .eq("status", "active")
       .order("created_at", { ascending: false });
 
@@ -388,20 +394,26 @@ export async function getActiveShifts(): Promise<Shift[]> {
       return [];
     }
 
-    return data as Shift[];
+    return data as ShiftWithDetails[];
   } catch (error) {
     console.error("Error in getActiveShifts:", error);
     return [];
   }
 }
 
-export async function getShifts(): Promise<Shift[]> {
+export async function getShifts(): Promise<ShiftWithDetails[]> {
   try {
     const supabase = createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
-      .select("*")
+      .select(
+        `
+        *,
+        employees:shift_employees(*, employee:employees(*)),
+        production:production(*, product:products(*, category:product_categories(*)))
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -409,7 +421,7 @@ export async function getShifts(): Promise<Shift[]> {
       return [];
     }
 
-    return data as Shift[];
+    return data as ShiftWithDetails[];
   } catch (error) {
     console.error("Error in getShifts:", error);
     return [];
@@ -503,16 +515,21 @@ export async function getProductionStats(): Promise<{
       let totalProduction = 0;
       const productionByCategory: Record<string, number> = {};
 
-      productionData.forEach((item) => {
-        totalProduction += item.quantity;
+      productionData.forEach(
+        (item: {
+          quantity: number;
+          product?: { category_id: number | null };
+        }) => {
+          totalProduction += item.quantity;
 
-        const categoryName = item.product?.category_id
-          ? (item.product as any)?.product_categories?.name || "Без категорії"
-          : "Без категорії";
+          const categoryName = item.product?.category_id
+            ? (item.product as any)?.product_categories?.name || "Без категорії"
+            : "Без категорії";
 
-        productionByCategory[categoryName] =
-          (productionByCategory[categoryName] || 0) + item.quantity;
-      });
+          productionByCategory[categoryName] =
+            (productionByCategory[categoryName] || 0) + item.quantity;
+        }
+      );
 
       return { totalProduction, productionByCategory };
     } catch (error) {
@@ -1436,5 +1453,27 @@ export async function deleteTask(taskId: number) {
   } catch (error) {
     console.error("Error in deleteTask:", error);
     return { success: false, error: "Сталася помилка при видаленні задачі" };
+  }
+}
+
+export async function getActiveTasks() {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error("Error fetching active tasks:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getActiveTasks:", error);
+    return [];
   }
 }

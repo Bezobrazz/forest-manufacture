@@ -32,9 +32,9 @@ export function TaskList({ tasks }: TaskListProps) {
 
       if (result.success) {
         toast({
-          title: "Статус оновлено",
+          title: "Успіх",
           description: `Задачу позначено як ${
-            currentStatus === "completed" ? "невиконану" : "виконану"
+            currentStatus === "completed" ? "виконану" : "невиконану"
           }`,
         });
         router.refresh();
