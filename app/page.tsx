@@ -10,6 +10,9 @@ import {
   getProductionStats,
   getInventory,
   getActiveTasks,
+  getInventoryTransactions,
+  getTasks,
+  updateTaskStatus,
 } from "@/app/actions";
 import {
   Card,
@@ -50,6 +53,7 @@ import type {
   Inventory,
   Task,
 } from "@/lib/types";
+import { toast } from "@/components/ui/use-toast";
 
 function LoadingSkeleton() {
   return (
@@ -616,11 +620,21 @@ export default function HomePage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckSquare className="h-5 w-5 text-primary" />
-              <span>Активні задачі</span>
-            </CardTitle>
-            <CardDescription>Список активних задач</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckSquare className="h-5 w-5 text-primary" />
+                  <span>Активні задачі</span>
+                </CardTitle>
+                <CardDescription>Список активних задач</CardDescription>
+              </div>
+              <Link href="/tasks">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <span>Всі задачі</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
           <CardContent>
             {data.activeTasks.length === 0 ? (
@@ -666,6 +680,37 @@ export default function HomePage() {
                         </div>
                       )}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const result = await updateTaskStatus(
+                          task.id,
+                          "completed"
+                        );
+                        if (result.success) {
+                          // Оновлюємо список активних задач
+                          const newActiveTasks = await getActiveTasks();
+                          setData((prev) => ({
+                            ...prev,
+                            activeTasks: newActiveTasks,
+                          }));
+                          toast({
+                            title: "Успішно",
+                            description: "Задачу завершено",
+                          });
+                        } else {
+                          toast({
+                            title: "Помилка",
+                            description:
+                              result.error || "Не вдалося завершити задачу",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      Завершити
+                    </Button>
                   </div>
                 ))}
               </div>
