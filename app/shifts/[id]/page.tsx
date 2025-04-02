@@ -29,7 +29,6 @@ import {
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
-import { ShiftWages } from "@/components/shift-wages";
 import type { ShiftWithDetails } from "@/lib/types";
 
 interface ShiftPageProps {
@@ -199,11 +198,6 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             </div>
           </CardContent>
         </Card>
-
-        {/* Додаємо компонент для погодинної оплати */}
-        {shift.status === "completed" && (
-          <ShiftWages shift={shift} productWages={totalWages} />
-        )}
 
         {/* Розділ для заробітної плати за продукцію */}
         {shift.production && shift.production.length > 0 && (
