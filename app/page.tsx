@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DatabaseError } from "@/components/database-error";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   ShiftWithDetails,
   Employee,
@@ -49,6 +50,115 @@ import type {
   Inventory,
   Task,
 } from "@/lib/types";
+
+function LoadingSkeleton() {
+  return (
+    <div className="container py-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-10 w-64 mb-2" />
+          <Skeleton className="h-6 w-96" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-4">
+        {[...Array(5)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-6 w-32 mb-2" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-8 w-16" />
+            </CardContent>
+            <CardFooter>
+              <Skeleton className="h-10 w-full" />
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+
+      <div>
+        <Skeleton className="h-8 w-64 mb-4" />
+        <Card>
+          <CardHeader className="pb-2">
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 mb-4">
+              <Skeleton className="h-10 w-24" />
+              <div className="flex-1">
+                <Skeleton className="h-4 w-32 mb-2" />
+                <div className="flex flex-wrap gap-2">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-6 w-24" />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-6 w-16" />
+                </div>
+                <Skeleton className="h-4 w-48" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-4 p-4 border rounded-lg"
+                >
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-6 w-48" />
+                      <Skeleton className="h-6 w-20" />
+                    </div>
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const [data, setData] = useState<{
@@ -147,12 +257,7 @@ export default function HomePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="container py-12 text-center">
-        <div className="inline-block animate-spin h-8 w-8 border-4 border-current border-t-transparent rounded-full mb-4"></div>
-        <p>Завантаження даних...</p>
-      </div>
-    );
+    return <LoadingSkeleton />;
   }
 
   return (
