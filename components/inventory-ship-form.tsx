@@ -1,7 +1,6 @@
 "use client";
 
-import type React from "react";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { shipInventory } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Inventory } from "@/lib/types";
 
 interface InventoryShipFormProps {
@@ -22,11 +22,33 @@ interface InventoryShipFormProps {
   onInventoryUpdated?: () => Promise<void>;
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-16" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-16" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+      <Skeleton className="h-10 w-full" />
+    </div>
+  );
+}
+
 export function InventoryShipForm({
   inventory,
   onInventoryUpdated,
 }: InventoryShipFormProps) {
   const [isPending, setIsPending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
@@ -53,6 +75,14 @@ export function InventoryShipForm({
     (item) => item.product_id.toString() === selectedProduct
   );
   const maxQuantity = selectedInventoryItem?.quantity || 0;
+
+  useEffect(() => {
+    // Імітуємо завантаження даних
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -135,6 +165,10 @@ export function InventoryShipForm({
     } finally {
       setIsPending(false);
     }
+  }
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
   }
 
   return (

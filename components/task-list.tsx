@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { updateTaskStatus, deleteTask } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,35 @@ import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Calendar } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Task } from "@/lib/types";
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex items-start gap-4 p-4 border rounded-lg bg-card"
+        >
+          <Skeleton className="h-5 w-5" />
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+            <Skeleton className="h-4 w-full" />
+            <div className="flex items-center gap-1">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+          <Skeleton className="h-8 w-8" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface TaskListProps {
   tasks: Task[];
@@ -18,6 +46,15 @@ interface TaskListProps {
 export function TaskList({ tasks }: TaskListProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Імітуємо завантаження даних
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   async function handleStatusChange(
     taskId: number,
@@ -90,6 +127,10 @@ export function TaskList({ tasks }: TaskListProps) {
     medium: "bg-yellow-500",
     high: "bg-red-500",
   };
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
+  }
 
   return (
     <div className="space-y-4">
