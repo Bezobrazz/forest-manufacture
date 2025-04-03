@@ -1500,3 +1500,152 @@ export async function getActiveTasks() {
     return [];
   }
 }
+
+export async function getExpenseCategories() {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching expense categories:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error("Failed to fetch expense categories:", err);
+    throw err;
+  }
+}
+
+export async function createExpenseCategory(
+  name: string,
+  description: string | null
+) {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .insert([{ name, description }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating expense category:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createExpenseCategory:", error);
+    throw error;
+  }
+}
+
+export async function deleteExpenseCategory(id: number) {
+  try {
+    const supabase = createServerClient();
+
+    const { error } = await supabase
+      .from("expense_categories")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error deleting expense category:", error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in deleteExpenseCategory:", error);
+    throw error;
+  }
+}
+
+export async function getExpenses() {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching expenses:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getExpenses:", error);
+    return [];
+  }
+}
+
+export async function createExpense(
+  category_id: number,
+  amount: number,
+  description: string
+) {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .insert([
+        {
+          category_id,
+          amount,
+          description,
+          date: new Date().toISOString(),
+        },
+      ])
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error creating expense:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createExpense:", error);
+    throw error;
+  }
+}
+
+export async function deleteExpense(id: number) {
+  try {
+    const supabase = createServerClient();
+
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error deleting expense:", error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in deleteExpense:", error);
+    throw error;
+  }
+}

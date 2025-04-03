@@ -37,6 +37,7 @@ import {
   Menu,
   Boxes,
   CheckSquare,
+  DollarSign,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -318,6 +319,12 @@ export default function HomePage() {
                 <span>Статистика виробництва</span>
               </DropdownMenuItem>
             </Link>
+            <Link href="/expenses" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <DollarSign className="h-4 w-4 mr-2" />
+                <span>Облік витрат</span>
+              </DropdownMenuItem>
+            </Link>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -422,6 +429,27 @@ export default function HomePage() {
             <Link href="/tasks" className="w-full">
               <Button variant="outline" className="w-full">
                 <span>Переглянути задачі</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              <span>Облік витрат</span>
+            </CardTitle>
+            <CardDescription>Кількість витрат за тиждень</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{activeShiftsCount}</div>
+          </CardContent>
+          <CardFooter>
+            <Link href="/expenses" className="w-full">
+              <Button variant="outline" className="w-full">
+                <span>Переглянути витрати</span>
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </Link>
