@@ -493,19 +493,42 @@ export async function getProductCategories(): Promise<ProductCategory[]> {
   }
 }
 
-export async function getProductionStats(): Promise<{
+export async function getProductionStats(
+  period: "year" | "month" | "week" = "year"
+): Promise<{
   totalProduction: number;
   productionByCategory: Record<string, number>;
 }> {
   try {
     const supabase = createServerClient();
 
+    // Визначаємо початкову дату в залежності від періоду
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case "year":
+        startDate = new Date(now.getFullYear(), 0, 1); // 1 січня поточного року
+        break;
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 1 число поточного місяця
+        break;
+      case "week":
+        const day = now.getDay();
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - day); // Неділя поточного тижня
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), 0, 1);
+    }
+
     try {
       const { data: productionData, error: productionError } = await supabase
         .from("production")
         .select(
-          "quantity, product:products(category_id, product_categories(name))"
-        );
+          "quantity, shift:shifts(created_at), product:products(category_id, product_categories(name))"
+        )
+        .gte("shift.created_at", startDate.toISOString());
 
       if (productionError) {
         console.error("Error fetching production data:", productionError);
