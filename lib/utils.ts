@@ -56,3 +56,30 @@ export function formatDateTime(dateString: string): string {
 
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
+
+/**
+ * Отримує номер тижня з дати, де тиждень починається з понеділка
+ * @param date Дата
+ * @returns Номер тижня
+ */
+export function getWeekNumber(date: Date): number {
+  // Встановлюємо початок року
+  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+
+  // Визначаємо понеділок першого тижня року
+  const firstMonday = new Date(firstDayOfYear);
+  const dayOfWeek = firstDayOfYear.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Якщо неділя (0), відступаємо на 6 днів назад
+  firstMonday.setDate(firstDayOfYear.getDate() + diff);
+
+  // Якщо дата раніше першого понеділка року, повертаємо 1
+  if (date < firstMonday) {
+    return 1;
+  }
+
+  // Розраховуємо кількість тижнів від першого понеділка
+  const pastDays = Math.floor(
+    (date.getTime() - firstMonday.getTime()) / (24 * 60 * 60 * 1000)
+  );
+  return Math.floor(pastDays / 7) + 1;
+}

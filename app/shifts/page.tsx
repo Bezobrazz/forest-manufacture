@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime, getWeekNumber } from "@/lib/utils";
 import { ArrowLeft, Calendar, Clock, Plus, DollarSign } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -33,30 +33,29 @@ export default async function ShiftsPage() {
   const getDayOfWeek = (dateString: string) => {
     const date = new Date(dateString);
     const days = [
-      "Неділя",
       "Понеділок",
       "Вівторок",
       "Середа",
       "Четвер",
       "П'ятниця",
       "Субота",
+      "Неділя",
     ];
     return days[date.getDay()];
   };
 
-  // Функція для отримання номера тижня з дати
-  const getWeekNumber = (dateString: string) => {
-    const date = new Date(dateString);
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const pastDaysOfYear =
-      (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-  };
-
   // Отримуємо поточний тиждень
   const currentDate = new Date();
-  const currentWeek = getWeekNumber(currentDate.toISOString());
+  const currentWeek = getWeekNumber(currentDate);
   const currentYear = currentDate.getFullYear();
+
+  // Фільтруємо зміни за поточний тиждень
+  const shiftsForCurrentWeek = shifts.filter((shift) => {
+    const shiftDate = new Date(shift.shift_date);
+    const shiftWeek = getWeekNumber(shiftDate);
+    const shiftYear = shiftDate.getFullYear();
+    return shiftWeek === currentWeek && shiftYear === currentYear;
+  });
 
   // Групуємо зміни за днями тижня і розраховуємо заробітну плату
   const shiftsByDay: Record<
@@ -76,10 +75,10 @@ export default async function ShiftsPage() {
   detailedShifts.forEach((shift) => {
     if (!shift) return;
 
-    const shiftDate = shift.shift_date;
-    const dayOfWeek = getDayOfWeek(shiftDate);
+    const shiftDate = new Date(shift.shift_date);
+    const dayOfWeek = getDayOfWeek(shift.shift_date);
     const weekNumber = getWeekNumber(shiftDate);
-    const year = new Date(shiftDate).getFullYear();
+    const year = shiftDate.getFullYear();
 
     // Перевіряємо, чи зміна належить до поточного тижня
     const isCurrentWeek = weekNumber === currentWeek && year === currentYear;
@@ -101,12 +100,12 @@ export default async function ShiftsPage() {
     weeklyTotalWages += shiftWages;
 
     // Додаємо до групи за днем тижня
-    const dateKey = shiftDate.split("T")[0]; // Формат YYYY-MM-DD
+    const dateKey = shiftDate.toISOString().split("T")[0]; // Формат YYYY-MM-DD
 
     if (!shiftsByDay[dateKey]) {
       shiftsByDay[dateKey] = {
         day: dayOfWeek,
-        date: shiftDate,
+        date: shiftDate.toISOString(),
         shifts: [],
         totalWages: 0,
       };
