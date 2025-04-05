@@ -9,6 +9,7 @@ import type {
   InventoryTransaction,
   Task,
 } from "@/lib/types";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -646,31 +647,70 @@ export async function createProductCategory(formData: FormData) {
 
 export async function completeShift(shiftId: number) {
   try {
+    console.log("Starting completeShift function with shiftId:", shiftId);
     const supabase = createServerClient();
 
     if (!shiftId) {
+      console.error("No shiftId provided");
       return { success: false, error: "Необхідно вказати ID зміни" };
     }
 
     try {
-      // 1. Отримуємо всі дані про виробництво на цій зміні
+      console.log("Fetching shift data from Supabase...");
+      // 1. Отримуємо інформацію про зміну
+      const { data: shiftData, error: shiftError } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("id", shiftId)
+        .single();
+
+      console.log("Supabase response:", { shiftData, shiftError });
+
+      if (shiftError) {
+        console.error("Error fetching shift data:", shiftError);
+        return { success: false, error: shiftError.message };
+      }
+
+      if (!shiftData) {
+        console.error("No shift data found for ID:", shiftId);
+        return { success: false, error: "Зміну не знайдено" };
+      }
+
+      // 1.1 Отримуємо інформацію про вироблену продукцію
+      console.log("Fetching production data...");
       const { data: productionData, error: productionError } = await supabase
         .from("production")
-        .select("product_id, quantity")
+        .select(
+          `
+          quantity,
+          product:products (
+            id,
+            name,
+            category:product_categories (
+              name
+            )
+          )
+        `
+        )
         .eq("shift_id", shiftId);
+
+      console.log("Production data:", { productionData, productionError });
 
       if (productionError) {
         console.error("Error fetching production data:", productionError);
         return { success: false, error: productionError.message };
       }
 
-      // 2. Оновлюємо склад для кожного виробленого продукту
-      for (const item of productionData) {
+      // Об'єднуємо дані
+      shiftData.production = productionData || [];
+
+      // 2. Оновлюємо інвентар та створюємо транзакції
+      for (const item of shiftData.production || []) {
         // 2.1 Отримуємо поточну кількість на складі
         const { data: inventoryData, error: inventoryError } = await supabase
           .from("inventory")
           .select("quantity, id")
-          .eq("product_id", item.product_id)
+          .eq("product_id", item.product.id)
           .maybeSingle();
 
         if (inventoryError && inventoryError.code !== "PGRST116") {
@@ -698,7 +738,7 @@ export async function completeShift(shiftId: number) {
         } else {
           // Якщо запису немає, створюємо новий
           const insertResult = await supabase.from("inventory").insert({
-            product_id: item.product_id,
+            product_id: item.product.id,
             quantity: item.quantity,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -716,7 +756,7 @@ export async function completeShift(shiftId: number) {
         const { error: transactionError } = await supabase
           .from("inventory_transactions")
           .insert({
-            product_id: item.product_id,
+            product_id: item.product.id,
             quantity: item.quantity,
             transaction_type: "production",
             reference_id: shiftId,
@@ -743,6 +783,80 @@ export async function completeShift(shiftId: number) {
         console.error("Error completing shift:", error);
         return { success: false, error: error.message };
       }
+
+      // 4. Формуємо та відправляємо сповіщення в Telegram
+      const productionSummary = shiftData.production?.reduce(
+        (
+          acc: Record<string, number>,
+          item: {
+            quantity: number;
+            product: {
+              name: string;
+              category?: {
+                name: string;
+              };
+            };
+          }
+        ) => {
+          const category = item.product.category?.name || "Без категорії";
+          acc[category] = (acc[category] || 0) + item.quantity;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+      // Підраховуємо загальну кількість виробленої продукції
+      let totalProduction = 0;
+      if (productionSummary) {
+        for (const quantity of Object.values(productionSummary)) {
+          totalProduction += quantity as number;
+        }
+      }
+
+      // Групуємо продукцію за категоріями для детального звіту
+      const productsByCategory: Record<
+        string,
+        Array<{ name: string; quantity: number }>
+      > = {};
+
+      if (shiftData.production) {
+        for (const item of shiftData.production) {
+          const category = item.product.category?.name || "Без категорії";
+          if (!productsByCategory[category]) {
+            productsByCategory[category] = [];
+          }
+          productsByCategory[category].push({
+            name: item.product.name,
+            quantity: item.quantity,
+          });
+        }
+      }
+
+      const message = `
+<b>Зміну #${shiftId} завершено</b>
+
+📅 Дата: ${new Date().toLocaleDateString("uk-UA")}
+⏰ Час закриття: ${new Date().toLocaleTimeString("uk-UA")}
+
+📦 Вироблено всього: <b>${totalProduction} шт</b>
+
+📊 Вироблено по категоріях:
+${Object.entries(productionSummary || {})
+  .map(([category, quantity]) => `• ${category}: ${quantity} шт`)
+  .join("\n")}
+
+📋 Детальний звіт по продукції:
+${Object.entries(productsByCategory)
+  .map(
+    ([category, products]) =>
+      `<b>${category}:</b>\n${products
+        .map((product) => `  • ${product.name}: ${product.quantity} шт`)
+        .join("\n")}`
+  )
+  .join("\n\n")}
+`;
+
+      await sendTelegramMessage(message);
 
       return { success: true, data: data };
     } catch (error) {
