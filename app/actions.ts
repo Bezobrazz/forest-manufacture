@@ -1600,7 +1600,22 @@ export async function createExpense(
   description: string
 ) {
   try {
+    if (!category_id || amount <= 0) {
+      throw new Error("Некоректні дані для створення витрати");
+    }
+
     const supabase = createServerClient();
+
+    // Перевіряємо існування категорії
+    const { data: category, error: categoryError } = await supabase
+      .from("expense_categories")
+      .select("id")
+      .eq("id", category_id)
+      .single();
+
+    if (categoryError || !category) {
+      throw new Error("Категорія витрат не знайдена");
+    }
 
     const { data, error } = await supabase
       .from("expenses")
@@ -1608,7 +1623,7 @@ export async function createExpense(
         {
           category_id,
           amount,
-          description,
+          description: description?.trim() || "",
           date: new Date().toISOString(),
         },
       ])
@@ -1646,6 +1661,58 @@ export async function deleteExpense(id: number) {
     return true;
   } catch (error) {
     console.error("Error in deleteExpense:", error);
+    throw error;
+  }
+}
+
+export async function updateExpense(
+  id: number,
+  category_id: number,
+  amount: number,
+  description: string
+) {
+  try {
+    if (!id || !category_id || amount <= 0) {
+      throw new Error("Некоректні дані для оновлення витрати");
+    }
+
+    const supabase = createServerClient();
+
+    // Перевіряємо існування категорії
+    const { data: category, error: categoryError } = await supabase
+      .from("expense_categories")
+      .select("id")
+      .eq("id", category_id)
+      .single();
+
+    if (categoryError || !category) {
+      throw new Error("Категорія витрат не знайдена");
+    }
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .update({
+        category_id,
+        amount,
+        description: description?.trim() || "",
+      })
+      .eq("id", id)
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error updating expense:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in updateExpense:", error);
     throw error;
   }
 }

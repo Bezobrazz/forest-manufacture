@@ -11,6 +11,7 @@ import {
   getExpenses,
   createExpense,
   deleteExpense,
+  updateExpense,
 } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import type { ShiftWithDetails } from "@/lib/types";
 
-type PeriodFilter = "year" | "month" | "week";
+type PeriodFilter = "year" | "month" | "week" | "day";
 
 interface ExpenseCategory {
   id: number;
@@ -55,6 +56,41 @@ interface Expense {
   date: string;
   created_at: string;
   category?: ExpenseCategory;
+}
+
+interface DeleteConfirmationDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  description: string;
+}
+
+function DeleteConfirmationDialog({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  description,
+}: DeleteConfirmationDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Скасувати
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            Видалити
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function LoadingSkeleton() {
@@ -106,7 +142,7 @@ function LoadingSkeleton() {
 }
 
 export default function ExpensesPage() {
-  const [period, setPeriod] = useState<PeriodFilter>("year");
+  const [period, setPeriod] = useState<PeriodFilter>("week");
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -117,6 +153,41 @@ export default function ExpensesPage() {
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
   const [newExpenseDescription, setNewExpenseDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+
+  // Стани для модальних вікон підтвердження
+  const [deleteCategoryDialog, setDeleteCategoryDialog] = useState<{
+    isOpen: boolean;
+    categoryId: number | null;
+    categoryName: string;
+  }>({
+    isOpen: false,
+    categoryId: null,
+    categoryName: "",
+  });
+
+  const [deleteExpenseDialog, setDeleteExpenseDialog] = useState<{
+    isOpen: boolean;
+    expenseId: number | null;
+    expenseAmount: number;
+  }>({
+    isOpen: false,
+    expenseId: null,
+    expenseAmount: 0,
+  });
+
+  // Стан для редагування витрати
+  const [editExpenseDialog, setEditExpenseDialog] = useState<{
+    isOpen: boolean;
+    expense: Expense | null;
+  }>({
+    isOpen: false,
+    expense: null,
+  });
+
+  // Стани для форми редагування
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseDescription, setEditExpenseDescription] = useState("");
+  const [editSelectedCategory, setEditSelectedCategory] = useState<string>("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -153,11 +224,41 @@ export default function ExpensesPage() {
       case "month":
         return new Date(now.getFullYear(), now.getMonth(), 1);
       case "week":
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        return new Date(now.setDate(diff));
+        const currentDay = now.getDay();
+        const diff = currentDay === 0 ? -6 : 1 - currentDay;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() + diff);
+        return monday;
+      case "day":
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
     }
   };
+
+  const filteredExpenses = expenses.filter((expense) => {
+    const expenseDate = new Date(expense.date);
+    const startDate = getStartDate(period);
+    return expenseDate >= startDate;
+  });
+
+  const totalExpenses = filteredExpenses.reduce(
+    (sum, expense) => sum + expense.amount,
+    0
+  );
+
+  const expensesByCategory = categories.map((category) => {
+    const categoryExpenses = filteredExpenses.filter(
+      (e) => e.category_id === category.id
+    );
+    const total = categoryExpenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
+    );
+    return {
+      ...category,
+      total,
+      count: categoryExpenses.length,
+    };
+  });
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
@@ -192,10 +293,20 @@ export default function ExpensesPage() {
   };
 
   const handleAddExpense = async () => {
-    if (!selectedCategory || !newExpenseAmount || !newExpenseDescription) {
+    if (!selectedCategory || !newExpenseAmount) {
       toast({
         title: "Помилка",
-        description: "Всі поля мають бути заповнені",
+        description: "Необхідно вказати категорію та суму",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amount = parseFloat(newExpenseAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Помилка",
+        description: "Сума має бути більше нуля",
         variant: "destructive",
       });
       return;
@@ -204,8 +315,8 @@ export default function ExpensesPage() {
     try {
       const newExpense = await createExpense(
         parseInt(selectedCategory),
-        parseFloat(newExpenseAmount),
-        newExpenseDescription
+        amount,
+        newExpenseDescription || ""
       );
       setExpenses([...expenses, newExpense]);
       setNewExpenseAmount("");
@@ -217,6 +328,7 @@ export default function ExpensesPage() {
         description: "Витрату додано",
       });
     } catch (error) {
+      console.error("Помилка при додаванні витрати:", error);
       toast({
         title: "Помилка",
         description: "Не вдалося додати витрату",
@@ -225,11 +337,30 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleDeleteCategory = async (categoryId: number) => {
+  const handleDeleteCategory = async (
+    categoryId: number,
+    categoryName: string
+  ) => {
+    setDeleteCategoryDialog({
+      isOpen: true,
+      categoryId,
+      categoryName,
+    });
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!deleteCategoryDialog.categoryId) return;
+
     try {
-      await deleteExpenseCategory(categoryId);
-      setCategories(categories.filter((c) => c.id !== categoryId));
-      setExpenses(expenses.filter((e) => e.category_id !== categoryId));
+      await deleteExpenseCategory(deleteCategoryDialog.categoryId);
+      setCategories(
+        categories.filter((c) => c.id !== deleteCategoryDialog.categoryId)
+      );
+      setExpenses(
+        expenses.filter(
+          (e) => e.category_id !== deleteCategoryDialog.categoryId
+        )
+      );
 
       toast({
         title: "Успіх",
@@ -241,13 +372,31 @@ export default function ExpensesPage() {
         description: "Не вдалося видалити категорію",
         variant: "destructive",
       });
+    } finally {
+      setDeleteCategoryDialog({
+        isOpen: false,
+        categoryId: null,
+        categoryName: "",
+      });
     }
   };
 
-  const handleDeleteExpense = async (expenseId: number) => {
+  const handleDeleteExpense = async (expenseId: number, amount: number) => {
+    setDeleteExpenseDialog({
+      isOpen: true,
+      expenseId,
+      expenseAmount: amount,
+    });
+  };
+
+  const confirmDeleteExpense = async () => {
+    if (!deleteExpenseDialog.expenseId) return;
+
     try {
-      await deleteExpense(expenseId);
-      setExpenses(expenses.filter((e) => e.id !== expenseId));
+      await deleteExpense(deleteExpenseDialog.expenseId);
+      setExpenses(
+        expenses.filter((e) => e.id !== deleteExpenseDialog.expenseId)
+      );
 
       toast({
         title: "Успіх",
@@ -258,6 +407,77 @@ export default function ExpensesPage() {
         title: "Помилка",
         description: "Не вдалося видалити витрату",
         variant: "destructive",
+      });
+    } finally {
+      setDeleteExpenseDialog({
+        isOpen: false,
+        expenseId: null,
+        expenseAmount: 0,
+      });
+    }
+  };
+
+  const handleEditExpense = (expense: Expense) => {
+    setEditExpenseDialog({
+      isOpen: true,
+      expense,
+    });
+    setEditExpenseAmount(expense.amount.toString());
+    setEditExpenseDescription(expense.description || "");
+    setEditSelectedCategory(expense.category_id.toString());
+  };
+
+  const handleSaveExpense = async () => {
+    if (
+      !editExpenseDialog.expense ||
+      !editSelectedCategory ||
+      !editExpenseAmount
+    ) {
+      toast({
+        title: "Помилка",
+        description: "Необхідно вказати категорію та суму",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amount = parseFloat(editExpenseAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Помилка",
+        description: "Сума має бути більше нуля",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const updatedExpense = await updateExpense(
+        editExpenseDialog.expense.id,
+        parseInt(editSelectedCategory),
+        amount,
+        editExpenseDescription || ""
+      );
+
+      setExpenses(
+        expenses.map((e) => (e.id === updatedExpense.id ? updatedExpense : e))
+      );
+
+      toast({
+        title: "Успіх",
+        description: "Витрату оновлено",
+      });
+    } catch (error) {
+      console.error("Помилка при оновленні витрати:", error);
+      toast({
+        title: "Помилка",
+        description: "Не вдалося оновити витрату",
+        variant: "destructive",
+      });
+    } finally {
+      setEditExpenseDialog({
+        isOpen: false,
+        expense: null,
       });
     }
   };
@@ -276,6 +496,105 @@ export default function ExpensesPage() {
 
   return (
     <div className="container py-6">
+      {/* Модальні вікна підтвердження */}
+      <DeleteConfirmationDialog
+        isOpen={deleteCategoryDialog.isOpen}
+        onClose={() =>
+          setDeleteCategoryDialog({
+            isOpen: false,
+            categoryId: null,
+            categoryName: "",
+          })
+        }
+        onConfirm={confirmDeleteCategory}
+        title="Видалити категорію"
+        description={`Ви впевнені, що хочете видалити категорію "${deleteCategoryDialog.categoryName}"? Всі витрати в цій категорії також будуть видалені.`}
+      />
+
+      <DeleteConfirmationDialog
+        isOpen={deleteExpenseDialog.isOpen}
+        onClose={() =>
+          setDeleteExpenseDialog({
+            isOpen: false,
+            expenseId: null,
+            expenseAmount: 0,
+          })
+        }
+        onConfirm={confirmDeleteExpense}
+        title="Видалити витрату"
+        description={`Ви впевнені, що хочете видалити витрату на суму ${deleteExpenseDialog.expenseAmount.toLocaleString()} ₴?`}
+      />
+
+      {/* Модальне вікно редагування витрати */}
+      <Dialog
+        open={editExpenseDialog.isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditExpenseDialog({ isOpen: false, expense: null });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редагувати витрату</DialogTitle>
+            <DialogDescription>Змініть дані витрати</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="editCategory">Категорія</Label>
+              <Select
+                value={editSelectedCategory}
+                onValueChange={setEditSelectedCategory}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Оберіть категорію" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                    >
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editAmount">Сума</Label>
+              <Input
+                id="editAmount"
+                type="number"
+                value={editExpenseAmount}
+                onChange={(e) => setEditExpenseAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editExpenseDescription">Опис</Label>
+              <Input
+                id="editExpenseDescription"
+                value={editExpenseDescription}
+                onChange={(e) => setEditExpenseDescription(e.target.value)}
+                placeholder="Опис витрати (необов'язково)"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setEditExpenseDialog({ isOpen: false, expense: null })
+              }
+            >
+              Скасувати
+            </Button>
+            <Button onClick={handleSaveExpense}>Зберегти</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <Link
@@ -384,7 +703,7 @@ export default function ExpensesPage() {
                     id="expenseDescription"
                     value={newExpenseDescription}
                     onChange={(e) => setNewExpenseDescription(e.target.value)}
-                    placeholder="Опис витрати"
+                    placeholder="Опис витрати (необов'язково)"
                   />
                 </div>
               </div>
@@ -396,8 +715,40 @@ export default function ExpensesPage() {
         </div>
       </div>
 
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-2">
+          <Button
+            variant={period === "day" ? "default" : "outline"}
+            onClick={() => setPeriod("day")}
+          >
+            День
+          </Button>
+          <Button
+            variant={period === "week" ? "default" : "outline"}
+            onClick={() => setPeriod("week")}
+          >
+            Тиждень
+          </Button>
+          <Button
+            variant={period === "month" ? "default" : "outline"}
+            onClick={() => setPeriod("month")}
+          >
+            Місяць
+          </Button>
+          <Button
+            variant={period === "year" ? "default" : "outline"}
+            onClick={() => setPeriod("year")}
+          >
+            Рік
+          </Button>
+        </div>
+        <div className="text-2xl font-bold">
+          {totalExpenses.toLocaleString()} ₴
+        </div>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-        {categories.map((category) => (
+        {expensesByCategory.map((category) => (
           <Card key={category.id}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -405,7 +756,9 @@ export default function ExpensesPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDeleteCategory(category.id)}
+                  onClick={() =>
+                    handleDeleteCategory(category.id, category.name)
+                  }
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
@@ -419,15 +772,10 @@ export default function ExpensesPage() {
             <CardContent>
               <div className="space-y-2">
                 <div className="text-2xl font-bold">
-                  {expenses
-                    .filter((e) => e.category_id === category.id)
-                    .reduce((sum, expense) => sum + expense.amount, 0)
-                    .toLocaleString()}{" "}
-                  ₴
+                  {category.total.toLocaleString()} ₴
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {expenses.filter((e) => e.category_id === category.id).length}{" "}
-                  витрат
+                  {category.count} витрат
                 </p>
               </div>
             </CardContent>
@@ -437,7 +785,7 @@ export default function ExpensesPage() {
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Історія витрат</h2>
-        {expenses.length === 0 ? (
+        {filteredExpenses.length === 0 ? (
           <Card>
             <CardContent className="py-8">
               <div className="text-center">
@@ -448,7 +796,7 @@ export default function ExpensesPage() {
             </CardContent>
           </Card>
         ) : (
-          expenses.map((expense) => (
+          filteredExpenses.map((expense) => (
             <Card key={expense.id}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -462,7 +810,30 @@ export default function ExpensesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDeleteExpense(expense.id)}
+                      onClick={() => handleEditExpense(expense)}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-4 w-4"
+                      >
+                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                        <path d="m15 5 4 4" />
+                      </svg>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        handleDeleteExpense(expense.id, expense.amount)
+                      }
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
