@@ -1568,6 +1568,37 @@ export async function deleteExpenseCategory(id: number) {
   }
 }
 
+export async function updateExpenseCategory(
+  id: number,
+  name: string,
+  description: string | null
+) {
+  try {
+    const supabase = createServerClient();
+
+    if (!name.trim()) {
+      throw new Error("Назва категорії не може бути порожньою");
+    }
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .update({ name, description })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating expense category:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in updateExpenseCategory:", error);
+    throw error;
+  }
+}
+
 export async function getExpenses() {
   try {
     const supabase = createServerClient();
