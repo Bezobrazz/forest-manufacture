@@ -1861,3 +1861,43 @@ export async function updateExpense(
     throw error;
   }
 }
+
+export async function updateEmployee(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const id = Number(formData.get("id"));
+    const name = formData.get("name") as string;
+    const position = formData.get("position") as string;
+
+    if (!id || !name) {
+      return {
+        success: false,
+        error: "Необхідно вказати ID та ім'я працівника",
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("employees")
+      .update({
+        name,
+        position: position || null,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating employee:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in updateEmployee:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні працівника",
+    };
+  }
+}

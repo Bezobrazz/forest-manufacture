@@ -5,7 +5,7 @@ import { createEmployee } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 export function EmployeeForm() {
@@ -19,8 +19,7 @@ export function EmployeeForm() {
       const result = await createEmployee(formData);
 
       if (result.success) {
-        toast({
-          title: "Працівника додано",
+        toast.success("Працівника додано", {
           description: "Нового працівника успішно додано до системи",
         });
 
@@ -33,17 +32,13 @@ export function EmployeeForm() {
         // Оновлюємо сторінку
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при додаванні працівника",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);
