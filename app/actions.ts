@@ -7,7 +7,9 @@ import type {
   ShiftWithDetails,
   Inventory,
   InventoryTransaction,
+  Task,
 } from "@/lib/types";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -372,13 +374,19 @@ export async function updateProduction(formData: FormData) {
   }
 }
 
-export async function getActiveShifts(): Promise<Shift[]> {
+export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
   try {
     const supabase = createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
-      .select("*")
+      .select(
+        `
+        *,
+        employees:shift_employees(*, employee:employees(*)),
+        production:production(*, product:products(*, category:product_categories(*)))
+      `
+      )
       .eq("status", "active")
       .order("created_at", { ascending: false });
 
@@ -387,20 +395,26 @@ export async function getActiveShifts(): Promise<Shift[]> {
       return [];
     }
 
-    return data as Shift[];
+    return data as ShiftWithDetails[];
   } catch (error) {
     console.error("Error in getActiveShifts:", error);
     return [];
   }
 }
 
-export async function getShifts(): Promise<Shift[]> {
+export async function getShifts(): Promise<ShiftWithDetails[]> {
   try {
     const supabase = createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
-      .select("*")
+      .select(
+        `
+        *,
+        employees:shift_employees(*, employee:employees(*)),
+        production:production(*, product:products(*, category:product_categories(*)))
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -408,7 +422,7 @@ export async function getShifts(): Promise<Shift[]> {
       return [];
     }
 
-    return data as Shift[];
+    return data as ShiftWithDetails[];
   } catch (error) {
     console.error("Error in getShifts:", error);
     return [];
@@ -480,19 +494,42 @@ export async function getProductCategories(): Promise<ProductCategory[]> {
   }
 }
 
-export async function getProductionStats(): Promise<{
+export async function getProductionStats(
+  period: "year" | "month" | "week" = "year"
+): Promise<{
   totalProduction: number;
   productionByCategory: Record<string, number>;
 }> {
   try {
     const supabase = createServerClient();
 
+    // Визначаємо початкову дату в залежності від періоду
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case "year":
+        startDate = new Date(now.getFullYear(), 0, 1); // 1 січня поточного року
+        break;
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 1 число поточного місяця
+        break;
+      case "week":
+        const day = now.getDay();
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - day); // Неділя поточного тижня
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), 0, 1);
+    }
+
     try {
       const { data: productionData, error: productionError } = await supabase
         .from("production")
         .select(
-          "quantity, product:products(category_id, product_categories(name))"
-        );
+          "quantity, shift:shifts(created_at), product:products(category_id, product_categories(name))"
+        )
+        .gte("shift.created_at", startDate.toISOString());
 
       if (productionError) {
         console.error("Error fetching production data:", productionError);
@@ -502,16 +539,21 @@ export async function getProductionStats(): Promise<{
       let totalProduction = 0;
       const productionByCategory: Record<string, number> = {};
 
-      productionData.forEach((item) => {
-        totalProduction += item.quantity;
+      productionData.forEach(
+        (item: {
+          quantity: number;
+          product?: { category_id: number | null };
+        }) => {
+          totalProduction += item.quantity;
 
-        const categoryName = item.product?.category_id
-          ? (item.product as any)?.product_categories?.name || "Без категорії"
-          : "Без категорії";
+          const categoryName = item.product?.category_id
+            ? (item.product as any)?.product_categories?.name || "Без категорії"
+            : "Без категорії";
 
-        productionByCategory[categoryName] =
-          (productionByCategory[categoryName] || 0) + item.quantity;
-      });
+          productionByCategory[categoryName] =
+            (productionByCategory[categoryName] || 0) + item.quantity;
+        }
+      );
 
       return { totalProduction, productionByCategory };
     } catch (error) {
@@ -605,31 +647,70 @@ export async function createProductCategory(formData: FormData) {
 
 export async function completeShift(shiftId: number) {
   try {
+    console.log("Starting completeShift function with shiftId:", shiftId);
     const supabase = createServerClient();
 
     if (!shiftId) {
+      console.error("No shiftId provided");
       return { success: false, error: "Необхідно вказати ID зміни" };
     }
 
     try {
-      // 1. Отримуємо всі дані про виробництво на цій зміні
+      console.log("Fetching shift data from Supabase...");
+      // 1. Отримуємо інформацію про зміну
+      const { data: shiftData, error: shiftError } = await supabase
+        .from("shifts")
+        .select("*")
+        .eq("id", shiftId)
+        .single();
+
+      console.log("Supabase response:", { shiftData, shiftError });
+
+      if (shiftError) {
+        console.error("Error fetching shift data:", shiftError);
+        return { success: false, error: shiftError.message };
+      }
+
+      if (!shiftData) {
+        console.error("No shift data found for ID:", shiftId);
+        return { success: false, error: "Зміну не знайдено" };
+      }
+
+      // 1.1 Отримуємо інформацію про вироблену продукцію
+      console.log("Fetching production data...");
       const { data: productionData, error: productionError } = await supabase
         .from("production")
-        .select("product_id, quantity")
+        .select(
+          `
+          quantity,
+          product:products (
+            id,
+            name,
+            category:product_categories (
+              name
+            )
+          )
+        `
+        )
         .eq("shift_id", shiftId);
+
+      console.log("Production data:", { productionData, productionError });
 
       if (productionError) {
         console.error("Error fetching production data:", productionError);
         return { success: false, error: productionError.message };
       }
 
-      // 2. Оновлюємо склад для кожного виробленого продукту
-      for (const item of productionData) {
+      // Об'єднуємо дані
+      shiftData.production = productionData || [];
+
+      // 2. Оновлюємо інвентар та створюємо транзакції
+      for (const item of shiftData.production || []) {
         // 2.1 Отримуємо поточну кількість на складі
         const { data: inventoryData, error: inventoryError } = await supabase
           .from("inventory")
           .select("quantity, id")
-          .eq("product_id", item.product_id)
+          .eq("product_id", item.product.id)
           .maybeSingle();
 
         if (inventoryError && inventoryError.code !== "PGRST116") {
@@ -657,7 +738,7 @@ export async function completeShift(shiftId: number) {
         } else {
           // Якщо запису немає, створюємо новий
           const insertResult = await supabase.from("inventory").insert({
-            product_id: item.product_id,
+            product_id: item.product.id,
             quantity: item.quantity,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -675,7 +756,7 @@ export async function completeShift(shiftId: number) {
         const { error: transactionError } = await supabase
           .from("inventory_transactions")
           .insert({
-            product_id: item.product_id,
+            product_id: item.product.id,
             quantity: item.quantity,
             transaction_type: "production",
             reference_id: shiftId,
@@ -702,6 +783,80 @@ export async function completeShift(shiftId: number) {
         console.error("Error completing shift:", error);
         return { success: false, error: error.message };
       }
+
+      // 4. Формуємо та відправляємо сповіщення в Telegram
+      const productionSummary = shiftData.production?.reduce(
+        (
+          acc: Record<string, number>,
+          item: {
+            quantity: number;
+            product: {
+              name: string;
+              category?: {
+                name: string;
+              };
+            };
+          }
+        ) => {
+          const category = item.product.category?.name || "Без категорії";
+          acc[category] = (acc[category] || 0) + item.quantity;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+      // Підраховуємо загальну кількість виробленої продукції
+      let totalProduction = 0;
+      if (productionSummary) {
+        for (const quantity of Object.values(productionSummary)) {
+          totalProduction += quantity as number;
+        }
+      }
+
+      // Групуємо продукцію за категоріями для детального звіту
+      const productsByCategory: Record<
+        string,
+        Array<{ name: string; quantity: number }>
+      > = {};
+
+      if (shiftData.production) {
+        for (const item of shiftData.production) {
+          const category = item.product.category?.name || "Без категорії";
+          if (!productsByCategory[category]) {
+            productsByCategory[category] = [];
+          }
+          productsByCategory[category].push({
+            name: item.product.name,
+            quantity: item.quantity,
+          });
+        }
+      }
+
+      const message = `
+<b>Зміну #${shiftId} завершено</b>
+
+📅 Дата: ${new Date().toLocaleDateString("uk-UA")}
+⏰ Час закриття: ${new Date().toLocaleTimeString("uk-UA")}
+
+📦 Вироблено всього: <b>${totalProduction} шт</b>
+
+📊 Вироблено по категоріях:
+${Object.entries(productionSummary || {})
+  .map(([category, quantity]) => `• ${category}: ${quantity} шт`)
+  .join("\n")}
+
+📋 Детальний звіт по продукції:
+${Object.entries(productsByCategory)
+  .map(
+    ([category, products]) =>
+      `<b>${category}:</b>\n${products
+        .map((product) => `  • ${product.name}: ${product.quantity} шт`)
+        .join("\n")}`
+  )
+  .join("\n\n")}
+`;
+
+      await sendTelegramMessage(message);
 
       return { success: true, data: data };
     } catch (error) {
@@ -1347,5 +1502,362 @@ export async function manuallyUpdateInventoryFromProduction() {
   } catch (error) {
     console.error("Error in manuallyUpdateInventoryFromProduction:", error);
     return { success: false, error: "Сталася помилка при оновленні інвентарю" };
+  }
+}
+
+export async function getTasks() {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching tasks:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getTasks:", error);
+    return [];
+  }
+}
+
+export async function createTask(
+  task: Omit<Task, "id" | "created_at" | "completed_at">
+) {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([task])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in createTask:", error);
+    return { success: false, error: "Сталася помилка при створенні задачі" };
+  }
+}
+
+export async function updateTaskStatus(taskId: number, status: Task["status"]) {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .update({
+        status,
+        completed_at: status === "completed" ? new Date().toISOString() : null,
+      })
+      .eq("id", taskId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating task status:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in updateTaskStatus:", error);
+    return {
+      success: false,
+      error: "Сталася помилка при оновленні статусу задачі",
+    };
+  }
+}
+
+export async function deleteTask(taskId: number) {
+  try {
+    const supabase = createServerClient();
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+
+    if (error) {
+      console.error("Error deleting task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteTask:", error);
+    return { success: false, error: "Сталася помилка при видаленні задачі" };
+  }
+}
+
+export async function getActiveTasks() {
+  try {
+    const supabase = createServerClient();
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.error("Error fetching active tasks:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getActiveTasks:", error);
+    return [];
+  }
+}
+
+export async function getExpenseCategories() {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching expense categories:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error("Failed to fetch expense categories:", err);
+    throw err;
+  }
+}
+
+export async function createExpenseCategory(
+  name: string,
+  description: string | null
+) {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .insert([{ name, description }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating expense category:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createExpenseCategory:", error);
+    throw error;
+  }
+}
+
+export async function deleteExpenseCategory(id: number) {
+  try {
+    const supabase = createServerClient();
+
+    const { error } = await supabase
+      .from("expense_categories")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error deleting expense category:", error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in deleteExpenseCategory:", error);
+    throw error;
+  }
+}
+
+export async function updateExpenseCategory(
+  id: number,
+  name: string,
+  description: string | null
+) {
+  try {
+    const supabase = createServerClient();
+
+    if (!name.trim()) {
+      throw new Error("Назва категорії не може бути порожньою");
+    }
+
+    const { data, error } = await supabase
+      .from("expense_categories")
+      .update({ name, description })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating expense category:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in updateExpenseCategory:", error);
+    throw error;
+  }
+}
+
+export async function getExpenses() {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching expenses:", error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getExpenses:", error);
+    return [];
+  }
+}
+
+export async function createExpense(
+  category_id: number,
+  amount: number,
+  description: string
+) {
+  try {
+    if (!category_id || amount <= 0) {
+      throw new Error("Некоректні дані для створення витрати");
+    }
+
+    const supabase = createServerClient();
+
+    // Перевіряємо існування категорії
+    const { data: category, error: categoryError } = await supabase
+      .from("expense_categories")
+      .select("id")
+      .eq("id", category_id)
+      .single();
+
+    if (categoryError || !category) {
+      throw new Error("Категорія витрат не знайдена");
+    }
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .insert([
+        {
+          category_id,
+          amount,
+          description: description?.trim() || "",
+          date: new Date().toISOString(),
+        },
+      ])
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error creating expense:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createExpense:", error);
+    throw error;
+  }
+}
+
+export async function deleteExpense(id: number) {
+  try {
+    const supabase = createServerClient();
+
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error deleting expense:", error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in deleteExpense:", error);
+    throw error;
+  }
+}
+
+export async function updateExpense(
+  id: number,
+  category_id: number,
+  amount: number,
+  description: string
+) {
+  try {
+    if (!id || !category_id || amount <= 0) {
+      throw new Error("Некоректні дані для оновлення витрати");
+    }
+
+    const supabase = createServerClient();
+
+    // Перевіряємо існування категорії
+    const { data: category, error: categoryError } = await supabase
+      .from("expense_categories")
+      .select("id")
+      .eq("id", category_id)
+      .single();
+
+    if (categoryError || !category) {
+      throw new Error("Категорія витрат не знайдена");
+    }
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .update({
+        category_id,
+        amount,
+        description: description?.trim() || "",
+      })
+      .eq("id", id)
+      .select(
+        `
+        *,
+        category:expense_categories(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error updating expense:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in updateExpense:", error);
+    throw error;
   }
 }

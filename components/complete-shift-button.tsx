@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { completeShift } from "@/app/actions"
-import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { useState } from "react";
+import { completeShift } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,52 +14,57 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { CheckCircle } from "lucide-react"
-import type { Shift } from "@/lib/types"
+} from "@/components/ui/alert-dialog";
+import { CheckCircle } from "lucide-react";
+import type { Shift } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 interface CompleteShiftButtonProps {
-  shift: Shift
+  shift: Shift;
 }
 
 export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
-  const [isPending, setIsPending] = useState(false)
+  const [isPending, setIsPending] = useState(false);
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   async function handleComplete() {
-    setIsPending(true)
+    setIsPending(true);
 
     try {
-      const result = await completeShift(shift.id)
+      const result = await completeShift(shift.id);
 
       if (result.success) {
         toast({
           title: "Зміну завершено",
           description: "Зміну успішно завершено",
-        })
+        });
+        setOpen(false);
+        router.refresh();
       } else {
         toast({
           title: "Помилка",
           description: result.error,
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
       toast({
         title: "Помилка",
         description: "Сталася помилка при завершенні зміни",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
   }
 
   if (shift.status !== "active") {
-    return null
+    return null;
   }
 
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
         <Button className="gap-2">
           <CheckCircle className="h-4 w-4" />
@@ -70,8 +75,9 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
         <AlertDialogHeader>
           <AlertDialogTitle>Завершити зміну?</AlertDialogTitle>
           <AlertDialogDescription>
-            Ви впевнені, що хочете завершити цю зміну? Після завершення зміни ви не зможете додавати працівників або
-            змінювати дані про вироблену продукцію.
+            Ви впевнені, що хочете завершити цю зміну? Після завершення зміни ви
+            не зможете додавати працівників або змінювати дані про вироблену
+            продукцію.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -81,11 +87,17 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
             disabled={isPending}
             className="bg-primary text-primary-foreground"
           >
-            {isPending ? "Завершення..." : "Завершити зміну"}
+            {isPending ? (
+              <div className="flex items-center gap-2">
+                <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                <span>Завершення...</span>
+              </div>
+            ) : (
+              "Завершити зміну"
+            )}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 }
-

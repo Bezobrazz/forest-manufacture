@@ -1,40 +1,75 @@
-"use client"
+"use client";
 
-import type React from "react"
+import React, { useState, useEffect } from "react";
+import { updateInventoryQuantity } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { Product } from "@/lib/types";
 
-import { useState } from "react"
-import { updateInventoryQuantity } from "@/app/actions"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/use-toast"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Product } from "@/lib/types"
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-3 w-48" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-16" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+      <Skeleton className="h-10 w-full" />
+    </div>
+  );
+}
 
 export function InventoryAdjustForm({ products }: { products: Product[] }) {
-  const [isPending, setIsPending] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState<string>("")
-  const [quantity, setQuantity] = useState<string>("")
-  const [notes, setNotes] = useState<string>("")
+  const [isPending, setIsPending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState<string>("");
+  const [quantity, setQuantity] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
+
+  useEffect(() => {
+    // Імітуємо завантаження даних
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Групуємо продукти за категоріями для зручності вибору
-  const productsByCategory: Record<string, Product[]> = {}
+  const productsByCategory: Record<string, Product[]> = {};
 
   products.forEach((product) => {
-    const categoryName = product.category?.name || "Без категорії"
+    const categoryName = product.category?.name || "Без категорії";
     if (!productsByCategory[categoryName]) {
-      productsByCategory[categoryName] = []
+      productsByCategory[categoryName] = [];
     }
-    productsByCategory[categoryName].push(product)
-  })
+    productsByCategory[categoryName].push(product);
+  });
 
   // Сортуємо категорії за алфавітом
-  const sortedCategories = Object.keys(productsByCategory).sort()
+  const sortedCategories = Object.keys(productsByCategory).sort();
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsPending(true)
+    e.preventDefault();
+    setIsPending(true);
 
     try {
       if (!selectedProduct || !quantity) {
@@ -42,50 +77,58 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
           title: "Помилка",
           description: "Виберіть продукт та вкажіть кількість",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
 
-      const productId = Number.parseInt(selectedProduct)
-      const quantityValue = Number.parseFloat(quantity)
+      const productId = Number.parseInt(selectedProduct);
+      const quantityValue = Number.parseFloat(quantity);
 
       if (isNaN(quantityValue)) {
         toast({
           title: "Помилка",
           description: "Кількість повинна бути числом",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
 
-      const result = await updateInventoryQuantity(productId, quantityValue, notes)
+      const result = await updateInventoryQuantity(
+        productId,
+        quantityValue,
+        notes
+      );
 
       if (result.success) {
         toast({
           title: "Успішно",
           description: "Кількість на складі успішно оновлено",
-        })
+        });
 
         // Очищаємо форму
-        setSelectedProduct("")
-        setQuantity("")
-        setNotes("")
+        setSelectedProduct("");
+        setQuantity("");
+        setNotes("");
       } else {
         toast({
           title: "Помилка",
           description: result.error || "Не вдалося оновити кількість на складі",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
       toast({
         title: "Помилка",
         description: "Сталася помилка при оновленні кількості на складі",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
+  }
+
+  if (isLoading) {
+    return <LoadingSkeleton />;
   }
 
   return (
@@ -99,7 +142,9 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
           <SelectContent>
             {sortedCategories.map((category) => (
               <div key={category}>
-                <div className="px-2 py-1.5 text-sm font-semibold">{category}</div>
+                <div className="px-2 py-1.5 text-sm font-semibold">
+                  {category}
+                </div>
                 {productsByCategory[category].map((product) => (
                   <SelectItem key={product.id} value={product.id.toString()}>
                     {product.name}
@@ -139,6 +184,5 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
         {isPending ? "Оновлення..." : "Оновити кількість"}
       </Button>
     </form>
-  )
+  );
 }
-
