@@ -87,7 +87,14 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
             disabled={isPending}
             className="bg-primary text-primary-foreground"
           >
-            {isPending ? "Завершення..." : "Завершити зміну"}
+            {isPending ? (
+              <div className="flex items-center gap-2">
+                <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                <span>Завершення...</span>
+              </div>
+            ) : (
+              "Завершити зміну"
+            )}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
