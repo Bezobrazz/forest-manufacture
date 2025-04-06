@@ -10,6 +10,7 @@ import type {
   Task,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { revalidatePath } from "next/cache";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -1197,32 +1198,31 @@ export async function createEmployee(formData: FormData) {
   try {
     const supabase = createServerClient();
 
-    const name = formData.get("name");
-    const position = formData.get("position");
+    const name = formData.get("name") as string;
+    const position = formData.get("position") as string;
 
     if (!name) {
-      return { success: false, error: "Необхідно вказати ім'я працівника" };
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("employees")
-        .insert([{ name: name, position: position }])
-        .select();
-
-      if (error) {
-        console.error("Error creating employee:", error);
-        return { success: false, error: error.message };
-      }
-
-      return { success: true, data: data };
-    } catch (error) {
-      console.error("Unexpected error in createEmployee:", error);
       return {
         success: false,
-        error: "Сталася непередбачена помилка при створенні працівника",
+        error: "Ім'я працівника обов'язкове",
       };
     }
+
+    const { data, error } = await supabase
+      .from("employees")
+      .insert({
+        name,
+        position: position || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating employee:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
   } catch (error) {
     console.error("Error in createEmployee:", error);
     return {
