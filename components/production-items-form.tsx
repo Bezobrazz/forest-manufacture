@@ -161,7 +161,7 @@ export function ProductionItemsForm({
           categoryProducts.length > 0 && (
             <Card key={categoryName} className="mb-4">
               <CardContent className="p-4">
-                <h3 className="font-medium text-lg mb-2">{categoryName}</h3>
+                <h3 className="font-bold text-lg mb-2">{categoryName}</h3>
                 <div className="grid gap-4">
                   {categoryProducts.map((product) => {
                     // Використовуємо локальний стан для перевірки існуючих елементів
