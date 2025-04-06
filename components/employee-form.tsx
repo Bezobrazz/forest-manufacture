@@ -1,45 +1,47 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { createEmployee } from "@/app/actions"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { toast } from "@/components/ui/use-toast"
+import { useState } from "react";
+import { createEmployee } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export function EmployeeForm() {
-  const [isPending, setIsPending] = useState(false)
+  const [isPending, setIsPending] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
-    setIsPending(true)
+    setIsPending(true);
 
     try {
-      const result = await createEmployee(formData)
+      const result = await createEmployee(formData);
 
       if (result.success) {
-        toast({
-          title: "Працівника додано",
+        toast.success("Працівника додано", {
           description: "Нового працівника успішно додано до системи",
-        })
+        });
 
         // Очищаємо форму
-        const form = document.getElementById("employee-form") as HTMLFormElement
-        form.reset()
+        const form = document.getElementById(
+          "employee-form"
+        ) as HTMLFormElement;
+        form.reset();
+
+        // Оновлюємо сторінку
+        router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
-        })
+        });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при додаванні працівника",
-        variant: "destructive",
-      })
+      });
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
   }
 
@@ -57,6 +59,5 @@ export function EmployeeForm() {
         {isPending ? "Додавання..." : "Додати працівника"}
       </Button>
     </form>
-  )
+  );
 }
-

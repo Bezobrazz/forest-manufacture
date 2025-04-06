@@ -418,7 +418,7 @@ export default function HomePage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               <CheckSquare className="h-5 w-5 text-primary" />
-              <span>Активні задачі</span>
+              <span>Задачі</span>
             </CardTitle>
             <CardDescription>Кількість активних задач</CardDescription>
           </CardHeader>
