@@ -11,6 +11,10 @@ import type { Task } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DatabaseError } from "@/components/database-error";
 import Link from "next/link";
+import { CreateTaskForm } from "@/components/create-task-form";
+import { EditTaskForm } from "@/components/edit-task-form";
+import { DeleteTaskButton } from "@/components/delete-task-button";
+import { CompleteTaskButton } from "@/components/complete-task-button";
 
 type TaskFilter = "all" | "active" | "completed";
 
@@ -49,24 +53,24 @@ export default function TasksPage() {
   const [filter, setFilter] = useState<TaskFilter>("all");
 
   // Завантаження даних
-  useEffect(() => {
-    const loadTasks = async () => {
-      setIsLoading(true);
-      setDatabaseError(false);
+  const loadTasks = async () => {
+    setIsLoading(true);
+    setDatabaseError(false);
 
-      try {
-        const data = await getTasks();
-        setTasks(data);
-      } catch (err: any) {
-        console.error("Помилка при завантаженні задач:", err);
-        if (err?.message?.includes("Supabase")) {
-          setDatabaseError(true);
-        }
-      } finally {
-        setIsLoading(false);
+    try {
+      const data = await getTasks();
+      setTasks(data);
+    } catch (err: any) {
+      console.error("Помилка при завантаженні задач:", err);
+      if (err?.message?.includes("Supabase")) {
+        setDatabaseError(true);
       }
-    };
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadTasks();
   }, []);
 
@@ -127,6 +131,7 @@ export default function TasksPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Задачі</h1>
         <div className="flex items-center gap-2">
+          <CreateTaskForm onTaskCreated={loadTasks} />
           <Button
             variant={filter === "all" ? "default" : "outline"}
             onClick={() => handleFilterChange("all")}
@@ -175,13 +180,27 @@ export default function TasksPage() {
                   >
                     {task.title}
                   </CardTitle>
-                  <Badge
-                    variant={
-                      task.status === "completed" ? "secondary" : "default"
-                    }
-                  >
-                    {task.status === "completed" ? "Виконано" : "Активна"}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        task.status === "completed" ? "secondary" : "default"
+                      }
+                    >
+                      {task.status === "completed" ? "Виконано" : "Активна"}
+                    </Badge>
+                    {task.status === "pending" && (
+                      <CompleteTaskButton
+                        task={task}
+                        onTaskCompleted={loadTasks}
+                      />
+                    )}
+                    <EditTaskForm task={task} onTaskUpdated={loadTasks} />
+                    <DeleteTaskButton
+                      taskId={task.id}
+                      taskTitle={task.title}
+                      onTaskDeleted={loadTasks}
+                    />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

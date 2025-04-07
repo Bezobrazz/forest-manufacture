@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "Облік Виробництва",
   description: "Created with v0",
   generator: "v0.dev",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
