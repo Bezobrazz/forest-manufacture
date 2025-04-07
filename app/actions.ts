@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase";
+import { createServerClient } from "@/lib/supabase/server";
 import type {
   Employee,
   Product,
@@ -1589,7 +1589,10 @@ export async function deleteTask(taskId: number) {
     return { success: true };
   } catch (error) {
     console.error("Error in deleteTask:", error);
-    return { success: false, error: "Сталася помилка при видаленні задачі" };
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при видаленні задачі",
+    };
   }
 }
 
@@ -1898,6 +1901,66 @@ export async function updateEmployee(formData: FormData) {
     return {
       success: false,
       error: "Сталася непередбачена помилка при оновленні працівника",
+    };
+  }
+}
+
+// Оновлення задачі
+export async function updateTask(
+  taskId: number,
+  data: {
+    title: string;
+    description: string | null;
+    priority: "low" | "medium" | "high";
+    due_date: string | null;
+    status: "pending" | "completed";
+  }
+) {
+  try {
+    console.log("Updating task:", { taskId, data });
+    const supabase = createServerClient();
+
+    // Спочатку отримаємо поточну задачу
+    const { data: currentTask, error: fetchError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching task:", fetchError);
+      return { success: false, error: fetchError.message };
+    }
+
+    console.log("Current task data:", currentTask);
+
+    const updateData = {
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      due_date: data.due_date,
+      status: data.status,
+      completed_at:
+        data.status === "completed" ? new Date().toISOString() : null,
+    };
+    console.log("Update data:", updateData);
+
+    const { error } = await supabase
+      .from("tasks")
+      .update(updateData)
+      .eq("id", taskId);
+
+    if (error) {
+      console.error("Error updating task:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateTask:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні задачі",
     };
   }
 }

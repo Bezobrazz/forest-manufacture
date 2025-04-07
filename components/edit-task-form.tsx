@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createTask } from "@/app/actions";
+import { updateTask } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,50 +23,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { Task } from "@/lib/types";
 
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-10 w-full" />
-      </div>
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Skeleton className="h-10 w-24" />
-      </div>
-    </div>
-  );
+interface EditTaskFormProps {
+  task: Task;
+  onTaskUpdated?: () => void;
 }
 
-interface CreateTaskFormProps {
-  onTaskCreated?: () => void;
-}
-
-export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
+export function EditTaskForm({ task, onTaskUpdated }: EditTaskFormProps) {
   const [isPending, setIsPending] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [dueDate, setDueDate] = useState("");
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || "");
+  const [priority, setPriority] = useState<"low" | "medium" | "high">(
+    task.priority
+  );
+  const [due_date, setDueDate] = useState(
+    task.due_date ? task.due_date.split("T")[0] : ""
+  );
+  const [status, setStatus] = useState<"pending" | "completed">(task.status);
 
   useEffect(() => {
     // Імітуємо завантаження даних
@@ -81,26 +60,22 @@ export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
     setIsPending(true);
 
     try {
-      const result = await createTask({
+      const result = await updateTask(task.id, {
         title,
         description: description || null,
         priority,
-        due_date: dueDate || null,
-        status: "pending",
+        due_date: due_date || null,
+        status,
       });
 
       if (result.success) {
         toast({
-          title: "Задачу створено",
-          description: "Задачу успішно створено",
+          title: "Задачу оновлено",
+          description: "Задачу успішно оновлено",
         });
-        setTitle("");
-        setDescription("");
-        setPriority("medium");
-        setDueDate("");
         setIsOpen(false);
         router.refresh();
-        onTaskCreated?.();
+        onTaskUpdated?.();
       } else {
         toast({
           title: "Помилка",
@@ -111,7 +86,7 @@ export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
     } catch (error) {
       toast({
         title: "Помилка",
-        description: "Сталася помилка при створенні задачі",
+        description: "Сталася помилка при оновленні задачі",
         variant: "destructive",
       });
     } finally {
@@ -122,20 +97,39 @@ export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          <span>Створити задачу</span>
+        <Button variant="outline" size="icon">
+          <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Створення нової задачі</DialogTitle>
-          <DialogDescription>
-            Заповніть форму для створення нової задачі
-          </DialogDescription>
+          <DialogTitle>Редагування задачі</DialogTitle>
+          <DialogDescription>Змініть дані задачі</DialogDescription>
         </DialogHeader>
         {isLoading ? (
-          <LoadingSkeleton />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -184,10 +178,28 @@ export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
                 <Input
                   id="dueDate"
                   type="date"
-                  value={dueDate}
+                  value={due_date}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Статус</Label>
+              <Select
+                value={status}
+                onValueChange={(value: "pending" | "completed") =>
+                  setStatus(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Виберіть статус" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Активна</SelectItem>
+                  <SelectItem value="completed">Виконана</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -199,7 +211,7 @@ export function CreateTaskForm({ onTaskCreated }: CreateTaskFormProps) {
                 Скасувати
               </Button>
               <Button type="submit" disabled={isPending}>
-                {isPending ? "Створення..." : "Створити задачу"}
+                {isPending ? "Збереження..." : "Зберегти зміни"}
               </Button>
             </div>
           </form>

@@ -7,11 +7,10 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatDate(dateString: string) {
   const date = new Date(dateString);
-  return date.toLocaleDateString("uk-UA", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const year = date.getFullYear().toString().slice(-2);
+  return `${day}.${month}.${year}`;
 }
 
 // Додамо нову функцію для форматування дати з часом
