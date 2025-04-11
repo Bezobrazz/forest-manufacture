@@ -156,9 +156,11 @@ export default function InventoryPage() {
 
   useEffect(() => {
     async function loadData() {
+      console.log("Loading inventory data...");
       const [inventoryData, transactionsData, productsData] = await Promise.all(
         [getInventory(), getInventoryTransactions(), getProducts()]
       );
+      console.log("Loaded transactions:", transactionsData);
       setInventory(inventoryData);
       setTransactions(transactionsData);
       setProducts(productsData);
@@ -180,6 +182,8 @@ export default function InventoryPage() {
 
   // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(inventoryByCategory).sort();
+
+  console.log("InventoryPage render", { transactions, isLoading });
 
   if (isLoading) {
     return <LoadingSkeleton />;

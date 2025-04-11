@@ -36,18 +36,27 @@ export function InventoryTransactionList({
 }: InventoryTransactionListProps) {
   const [isLoading, setIsLoading] = useState(true);
 
+  console.log("InventoryTransactionList rendered", { transactions, isLoading });
+
   useEffect(() => {
+    console.log("InventoryTransactionList useEffect", {
+      transactions,
+      isLoading,
+    });
     // Імітуємо завантаження даних
     const timer = setTimeout(() => {
       setIsLoading(false);
+      console.log("Loading finished", { transactions });
     }, 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [transactions]);
 
   if (isLoading) {
+    console.log("Rendering loading skeleton");
     return <LoadingSkeleton />;
   }
 
+  console.log("Rendering transactions list", { transactions });
   return (
     <div className="space-y-4">
       {transactions.map((transaction) => (

@@ -1022,14 +1022,143 @@ export async function deleteShift(shiftId: number) {
     }
 
     try {
-      const { error } = await supabase
+      // 1. Отримуємо інформацію про зміну
+      const { data: shiftData, error: shiftError } = await supabase
+        .from("shifts")
+        .select(
+          `
+          *,
+          employees:shift_employees(
+            employee:employees(*)
+          )
+        `
+        )
+        .eq("id", shiftId)
+        .single();
+
+      if (shiftError) {
+        console.error("Error fetching shift data:", shiftError);
+        return { success: false, error: shiftError.message };
+      }
+
+      // 2. Отримуємо інформацію про вироблену продукцію
+      const { data: productionData, error: productionError } = await supabase
+        .from("production")
+        .select(
+          `
+          quantity,
+          product:products (
+            id,
+            name
+          )
+        `
+        )
+        .eq("shift_id", shiftId);
+
+      if (productionError) {
+        console.error("Error fetching production data:", productionError);
+        return { success: false, error: productionError.message };
+      }
+
+      // 4. Оновлюємо кількість на складі для кожного продукту
+      for (const item of productionData || []) {
+        if (!item.product || !item.product.id) {
+          console.error("Invalid product data:", item);
+          continue;
+        }
+
+        const productId = item.product.id;
+
+        // 4.1 Отримуємо поточну кількість на складі
+        const { data: inventoryData, error: inventoryError } = await supabase
+          .from("inventory")
+          .select("id, quantity")
+          .eq("product_id", productId)
+          .single();
+
+        if (inventoryError) {
+          console.error("Error fetching inventory:", inventoryError);
+          continue;
+        }
+
+        if (!inventoryData) {
+          console.error("No inventory record found for product:", productId);
+          continue;
+        }
+
+        const currentQuantity = inventoryData.quantity;
+        const newQuantity = currentQuantity - item.quantity;
+
+        // 4.2 Оновлюємо кількість на складі
+        const { error: updateError } = await supabase
+          .from("inventory")
+          .update({
+            quantity: newQuantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", inventoryData.id);
+
+        if (updateError) {
+          console.error("Error updating inventory:", updateError);
+          continue;
+        }
+
+        // 4.3 Додаємо запис про транзакцію
+        const transactionData = {
+          product_id: productId,
+          quantity: -item.quantity,
+          transaction_type: "adjustment",
+          reference_id: shiftId,
+          notes: `Видалення зміни #${shiftId} (автоматичне віднімання при видаленні зміни)`,
+          created_at: new Date().toISOString(),
+        };
+
+        const { error: transactionError } = await supabase
+          .from("inventory_transactions")
+          .insert(transactionData);
+
+        if (transactionError) {
+          console.error(
+            "Error creating inventory transaction:",
+            transactionError
+          );
+        }
+      }
+
+      // 5. Видаляємо всі записи про виробництво для цієї зміни
+      const { error: deleteProductionError } = await supabase
+        .from("production")
+        .delete()
+        .eq("shift_id", shiftId);
+
+      if (deleteProductionError) {
+        console.error(
+          "Error deleting production records:",
+          deleteProductionError
+        );
+        return { success: false, error: deleteProductionError.message };
+      }
+
+      // 6. Видаляємо всі записи про працівників на зміні
+      const { error: deleteEmployeesError } = await supabase
+        .from("shift_employees")
+        .delete()
+        .eq("shift_id", shiftId);
+
+      if (deleteEmployeesError) {
+        console.error("Error deleting shift employees:", deleteEmployeesError);
+        return { success: false, error: deleteEmployeesError.message };
+      }
+
+      // 7. Видаляємо саму зміну
+      const { error: deleteShiftError } = await supabase
         .from("shifts")
         .delete()
         .eq("id", shiftId);
 
-      if (error) {
-        console.error("Error deleting shift:", error);
-        return { success: false, error: error.message };
+      if (deleteShiftError) {
+        console.error("Error deleting shift:", deleteShiftError);
+        return { success: false, error: deleteShiftError.message };
       }
 
       return { success: true };
