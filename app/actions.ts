@@ -256,10 +256,8 @@ export async function updateProduction(formData: FormData) {
       }
 
       let result;
-      let oldQuantity = 0;
 
       if (existingData) {
-        oldQuantity = existingData.quantity;
         // Оновлюємо існуючий запис
         result = await supabase
           .from("production")
@@ -286,76 +284,6 @@ export async function updateProduction(formData: FormData) {
       if (result.error) {
         console.error("Error updating production:", result.error);
         return { success: false, error: result.error.message };
-      }
-
-      // Оновлюємо кількість на складі
-      const quantityDifference = quantity - oldQuantity;
-
-      if (quantityDifference !== 0) {
-        // Отримуємо поточну кількість на складі
-        const { data: currentInventory, error: getError } = await supabase
-          .from("inventory")
-          .select("quantity, id")
-          .eq("product_id", productId)
-          .maybeSingle();
-
-        if (getError && getError.code !== "PGRST116") {
-          console.error("Error fetching current inventory:", getError);
-          // Продовжуємо виконання, навіть якщо не вдалося отримати поточну кількість
-        }
-
-        const currentQuantity = currentInventory?.quantity || 0;
-        const newQuantity = currentQuantity + quantityDifference;
-
-        // Оновлюємо кількість на складі
-        let updateError;
-
-        if (currentInventory) {
-          // Якщо запис існує, оновлюємо його
-          const updateResult = await supabase
-            .from("inventory")
-            .update({
-              quantity: newQuantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", currentInventory.id);
-
-          updateError = updateResult.error;
-        } else {
-          // Якщо запису немає, створюємо новий
-          const insertResult = await supabase.from("inventory").insert({
-            product_id: productId,
-            quantity: newQuantity,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
-          updateError = insertResult.error;
-        }
-
-        if (updateError) {
-          console.error("Error updating inventory:", updateError);
-          // Продовжуємо виконання, навіть якщо не вдалося оновити склад
-        }
-
-        // Додаємо запис про транзакцію
-        const { error: transactionError } = await supabase
-          .from("inventory_transactions")
-          .insert({
-            product_id: productId,
-            quantity: quantityDifference,
-            transaction_type: "production",
-            reference_id: shiftId,
-            notes: `Виробництво на зміні #${shiftId}`,
-          });
-
-        if (transactionError) {
-          console.error(
-            "Error creating inventory transaction:",
-            transactionError
-          );
-          // Продовжуємо виконання, навіть якщо не вдалося створити запис про транзакцію
-        }
       }
 
       return { success: true, data: result.data };
