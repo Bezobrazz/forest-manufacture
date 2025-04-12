@@ -64,72 +64,93 @@ export async function updateInventoryQuantity(
   quantity: number,
   notes = ""
 ) {
+  console.log(
+    `Початок оновлення інвентаря для продукту ${productId}, нова кількість: ${quantity}`
+  );
   try {
     const supabase = createServerClient();
 
-    try {
-      // Отримуємо поточну кількість на складі
-      const { data: currentInventory, error: getError } = await supabase
-        .from("inventory")
-        .select("quantity")
-        .eq("product_id", productId)
-        .single();
+    // Отримуємо поточну кількість на складі
+    const { data: currentInventory, error: getError } = await supabase
+      .from("inventory")
+      .select("quantity, id")
+      .eq("product_id", productId)
+      .maybeSingle();
 
-      if (getError && getError.code !== "PGRST116") {
-        console.error("Error fetching current inventory:", getError);
-        return { success: false, error: getError.message };
-      }
+    if (getError) {
+      console.error(
+        `Помилка отримання даних інвентаря для продукту ${productId}:`,
+        getError
+      );
+      return { success: false, error: getError.message };
+    }
 
-      const currentQuantity = currentInventory?.quantity || 0;
-      const adjustment = quantity - currentQuantity;
+    console.log(`Поточні дані інвентаря:`, currentInventory);
 
-      // Якщо немає змін, повертаємо успіх
-      if (adjustment === 0) {
-        return { success: true };
-      }
+    let adjustment = 0;
+    if (currentInventory) {
+      adjustment = quantity - currentInventory.quantity;
+      console.log(
+        `Зміна кількості: ${adjustment} (${currentInventory.quantity} -> ${quantity})`
+      );
+    } else {
+      adjustment = quantity;
+      console.log(`Новий продукт, початкова кількість: ${quantity}`);
+    }
 
-      // Починаємо транзакцію
-      // 1. Оновлюємо кількість на складі
-      const { error: updateError } = await supabase.from("inventory").upsert({
+    // Якщо немає змін, повертаємо успіх
+    if (adjustment === 0 && currentInventory) {
+      console.log(`Кількість не змінилася, пропускаємо оновлення`);
+      return { success: true };
+    }
+
+    // Оновлюємо інвентар, використовуючи upsert замість окремих операцій update/insert
+    console.log(`Використовуємо upsert для оновлення інвентаря`);
+    const { error: updateError } = await supabase.from("inventory").upsert(
+      {
         product_id: productId,
         quantity: quantity,
         updated_at: new Date().toISOString(),
-      });
-
-      if (updateError) {
-        console.error("Error updating inventory:", updateError);
-        return { success: false, error: updateError.message };
+      },
+      {
+        onConflict: "product_id",
+        ignoreDuplicates: false, // Оновити при конфлікті
       }
+    );
 
-      // 2. Додаємо запис про транзакцію
-      const { error: transactionError } = await supabase
-        .from("inventory_transactions")
-        .insert({
-          product_id: productId,
-          quantity: adjustment,
-          transaction_type: "adjustment",
-          notes: notes || "Ручне коригування кількості",
-        });
-
-      if (transactionError) {
-        console.error(
-          "Error creating inventory transaction:",
-          transactionError
-        );
-        return { success: false, error: transactionError.message };
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Unexpected error in updateInventoryQuantity:", error);
-      return {
-        success: false,
-        error:
-          "Сталася непередбачена помилка при оновленні кількості на складі",
-      };
+    if (updateError) {
+      console.error(`Помилка оновлення інвентаря:`, updateError);
+      return { success: false, error: updateError.message };
     }
+
+    console.log(`Інвентар успішно оновлено, додаємо запис про транзакцію`);
+
+    // Додаємо запис про транзакцію
+    const transactionData = {
+      product_id: productId,
+      quantity: adjustment,
+      transaction_type: "adjustment",
+      notes: notes || "Ручне коригування кількості",
+    };
+
+    console.log(`Дані транзакції:`, transactionData);
+
+    const { error: transactionError } = await supabase
+      .from("inventory_transactions")
+      .insert(transactionData);
+
+    if (transactionError) {
+      console.error(
+        `Помилка створення транзакції інвентаря:`,
+        transactionError
+      );
+      return { success: false, error: transactionError.message };
+    }
+
+    console.log(`Транзакція успішно створена, оновлення завершено`);
+    return { success: true };
   } catch (error) {
-    console.error("Error in updateInventoryQuantity:", error);
+    console.error(`Непередбачена помилка в updateInventoryQuantity:`, error);
     return {
       success: false,
       error: "Сталася непередбачена помилка при оновленні кількості на складі",
