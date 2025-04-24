@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Product } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 function LoadingSkeleton() {
   return (
@@ -44,6 +45,7 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const router = useRouter();
 
   useEffect(() => {
     // Імітуємо завантаження даних
@@ -109,6 +111,7 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
         setSelectedProduct("");
         setQuantity("");
         setNotes("");
+        router.refresh();
       } else {
         toast({
           title: "Помилка",
