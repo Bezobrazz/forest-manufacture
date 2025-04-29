@@ -348,7 +348,9 @@ export default function InventoryPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Відвантаження продукції</CardTitle>
+                <CardTitle className="text-lg text-green-500">
+                  Відвантаження продукції
+                </CardTitle>
                 <CardDescription>
                   Відвантаження продукції зі складу
                 </CardDescription>
@@ -370,7 +372,9 @@ export default function InventoryPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Коригування кількості</CardTitle>
+                <CardTitle className="text-lg text-red-500">
+                  Коригування кількості
+                </CardTitle>
                 <CardDescription>
                   Ручне коригування кількості продукції на складі
                 </CardDescription>
