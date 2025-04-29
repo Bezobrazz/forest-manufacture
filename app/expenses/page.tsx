@@ -737,7 +737,7 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center justify-between mb-8">
         <div>
           <Link
             href="/"
@@ -747,7 +747,7 @@ export default function ExpensesPage() {
             Назад
           </Link>
           <h1 className="text-3xl font-bold">Облік витрат</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mb-2">
             Управління витратами на виробництві
           </p>
         </div>
