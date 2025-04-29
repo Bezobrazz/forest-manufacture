@@ -209,10 +209,16 @@ export default function InventoryPage() {
       </div>
 
       <Tabs defaultValue="inventory" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="inventory">Поточні запаси</TabsTrigger>
-          <TabsTrigger value="transactions">Історія операцій</TabsTrigger>
-          <TabsTrigger value="management">Управління складом</TabsTrigger>
+        <TabsList className="flex py-4 flex-col gap-2 max-w-xs w-full bg-muted p-2 rounded-lg mx-auto my-4 shadow-sm sm:flex-row sm:w-full sm:max-w-none">
+          <TabsTrigger value="inventory" className="w-full">
+            Поточні запаси
+          </TabsTrigger>
+          <TabsTrigger value="transactions" className="w-full">
+            Історія операцій
+          </TabsTrigger>
+          <TabsTrigger value="management" className="w-full">
+            Управління складом
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-6">
