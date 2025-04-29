@@ -348,18 +348,6 @@ export default function InventoryPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Коригування кількості</CardTitle>
-                <CardDescription>
-                  Ручне коригування кількості продукції на складі
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <InventoryAdjustForm products={products} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
                 <CardTitle>Відвантаження продукції</CardTitle>
                 <CardDescription>
                   Відвантаження продукції зі складу
@@ -377,6 +365,18 @@ export default function InventoryPage() {
                     setTransactions(newTransactions);
                   }}
                 />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Коригування кількості</CardTitle>
+                <CardDescription>
+                  Ручне коригування кількості продукції на складі
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <InventoryAdjustForm products={products} />
               </CardContent>
             </Card>
           </div>
