@@ -414,7 +414,7 @@ export default function HomePage() {
           </CardFooter>
         </Card>
 
-        <Card>
+        {/* <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               <CheckSquare className="h-5 w-5 text-primary" />
@@ -433,7 +433,7 @@ export default function HomePage() {
               </Button>
             </Link>
           </CardFooter>
-        </Card>
+        </Card> */}
 
         <Card>
           <CardHeader className="pb-2">
@@ -454,6 +454,108 @@ export default function HomePage() {
               </Button>
             </Link>
           </CardFooter>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 mb-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckSquare className="h-5 w-5 text-primary" />
+                  <span>Активні задачі</span>
+                </CardTitle>
+                <CardDescription>Список активних задач</CardDescription>
+              </div>
+              <Link href="/tasks">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <span>Всі задачі</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {data.activeTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Немає активних задач
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {data.activeTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-start gap-4 p-4 border rounded-lg"
+                  >
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">{task.title}</h3>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            task.priority === "low"
+                              ? "bg-green-500"
+                              : task.priority === "medium"
+                              ? "bg-yellow-500"
+                              : "bg-red-500"
+                          }
+                        >
+                          {task.priority === "low"
+                            ? "Низький"
+                            : task.priority === "medium"
+                            ? "Середній"
+                            : "Високий"}
+                        </Badge>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground">
+                          {task.description}
+                        </p>
+                      )}
+                      {task.due_date && (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          <span>Термін: {formatDate(task.due_date)}</span>
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const result = await updateTaskStatus(
+                          task.id,
+                          "completed"
+                        );
+                        if (result.success) {
+                          // Оновлюємо список активних задач
+                          const newActiveTasks = await getActiveTasks();
+                          setData((prev) => ({
+                            ...prev,
+                            activeTasks: newActiveTasks,
+                          }));
+                          toast({
+                            title: "Успішно",
+                            description: "Задачу завершено",
+                          });
+                        } else {
+                          toast({
+                            title: "Помилка",
+                            description:
+                              result.error || "Не вдалося завершити задачу",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      Завершити
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
         </Card>
       </div>
 
@@ -643,108 +745,6 @@ export default function HomePage() {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckSquare className="h-5 w-5 text-primary" />
-                  <span>Активні задачі</span>
-                </CardTitle>
-                <CardDescription>Список активних задач</CardDescription>
-              </div>
-              <Link href="/tasks">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <span>Всі задачі</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {data.activeTasks.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                Немає активних задач
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {data.activeTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-start gap-4 p-4 border rounded-lg"
-                  >
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{task.title}</h3>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            task.priority === "low"
-                              ? "bg-green-500"
-                              : task.priority === "medium"
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
-                          }
-                        >
-                          {task.priority === "low"
-                            ? "Низький"
-                            : task.priority === "medium"
-                            ? "Середній"
-                            : "Високий"}
-                        </Badge>
-                      </div>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground">
-                          {task.description}
-                        </p>
-                      )}
-                      {task.due_date && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>Термін: {formatDate(task.due_date)}</span>
-                        </div>
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        const result = await updateTaskStatus(
-                          task.id,
-                          "completed"
-                        );
-                        if (result.success) {
-                          // Оновлюємо список активних задач
-                          const newActiveTasks = await getActiveTasks();
-                          setData((prev) => ({
-                            ...prev,
-                            activeTasks: newActiveTasks,
-                          }));
-                          toast({
-                            title: "Успішно",
-                            description: "Задачу завершено",
-                          });
-                        } else {
-                          toast({
-                            title: "Помилка",
-                            description:
-                              result.error || "Не вдалося завершити задачу",
-                            variant: "destructive",
-                          });
-                        }
-                      }}
-                    >
-                      Завершити
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
