@@ -162,6 +162,7 @@ export default function ExpensesPage() {
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
   const [newExpenseDescription, setNewExpenseDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [isAddExpenseDialogOpen, setIsAddExpenseDialogOpen] = useState(false);
   const { toast } = useToast();
 
   // Стани для пагінації
@@ -254,6 +255,7 @@ export default function ExpensesPage() {
         const currentDay = now.getDay();
         const diff = currentDay === 0 ? -6 : 1 - currentDay;
         const monday = new Date(now);
+        monday.setHours(0, 0, 0, 0);
         monday.setDate(now.getDate() + diff);
         return monday;
       case "day":
@@ -264,6 +266,14 @@ export default function ExpensesPage() {
   const filteredExpenses = expenses.filter((expense) => {
     const expenseDate = new Date(expense.date);
     const startDate = getStartDate(period);
+    console.log(
+      "Expense date:",
+      expenseDate,
+      "Start date:",
+      startDate,
+      "Period:",
+      period
+    );
     return expenseDate >= startDate;
   });
 
@@ -351,7 +361,14 @@ export default function ExpensesPage() {
   };
 
   const handleAddExpense = async () => {
+    console.log("Starting to add expense:", {
+      selectedCategory,
+      newExpenseAmount,
+      newExpenseDescription,
+    });
+
     if (!selectedCategory || !newExpenseAmount) {
+      console.log("Validation failed: missing category or amount");
       toast({
         title: "Помилка",
         description: "Необхідно вказати категорію та суму",
@@ -362,6 +379,7 @@ export default function ExpensesPage() {
 
     const amount = parseFloat(newExpenseAmount);
     if (isNaN(amount) || amount <= 0) {
+      console.log("Validation failed: invalid amount");
       toast({
         title: "Помилка",
         description: "Сума має бути більше нуля",
@@ -371,15 +389,25 @@ export default function ExpensesPage() {
     }
 
     try {
+      console.log("Creating expense with data:", {
+        category_id: parseInt(selectedCategory),
+        amount,
+        description: newExpenseDescription || "",
+      });
+
       const newExpense = await createExpense(
         parseInt(selectedCategory),
         amount,
         newExpenseDescription || ""
       );
+
+      console.log("Expense created successfully:", newExpense);
+
       setExpenses([...expenses, newExpense]);
       setNewExpenseAmount("");
       setNewExpenseDescription("");
       setSelectedCategory("");
+      setIsAddExpenseDialogOpen(false);
       toast({
         title: "Успіх",
         description: "Витрату додано",
@@ -793,7 +821,10 @@ export default function ExpensesPage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog>
+          <Dialog
+            open={isAddExpenseDialogOpen}
+            onOpenChange={setIsAddExpenseDialogOpen}
+          >
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
