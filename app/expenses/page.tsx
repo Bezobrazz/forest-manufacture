@@ -254,6 +254,7 @@ export default function ExpensesPage() {
         const currentDay = now.getDay();
         const diff = currentDay === 0 ? -6 : 1 - currentDay;
         const monday = new Date(now);
+        monday.setHours(0, 0, 0, 0);
         monday.setDate(now.getDate() + diff);
         return monday;
       case "day":
@@ -264,6 +265,14 @@ export default function ExpensesPage() {
   const filteredExpenses = expenses.filter((expense) => {
     const expenseDate = new Date(expense.date);
     const startDate = getStartDate(period);
+    console.log(
+      "Expense date:",
+      expenseDate,
+      "Start date:",
+      startDate,
+      "Period:",
+      period
+    );
     return expenseDate >= startDate;
   });
 
