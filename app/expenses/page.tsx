@@ -780,7 +780,7 @@ export default function ExpensesPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap flex-col w-full sm:flex-row sm:w-auto gap-2">
           <Dialog>
             <DialogTrigger asChild>
               <Button>
@@ -888,8 +888,8 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={period === "day" ? "default" : "outline"}
             onClick={() => setPeriod("day")}
