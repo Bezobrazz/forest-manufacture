@@ -233,6 +233,8 @@ export default function ExpensesPage() {
     to: undefined,
   });
 
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -301,13 +303,19 @@ export default function ExpensesPage() {
   const filteredExpenses = expenses.filter((expense) => {
     const expenseDate = new Date(expense.date);
 
-    if (dateRange.from && dateRange.to) {
-      return expenseDate >= dateRange.from && expenseDate <= dateRange.to;
-    }
+    // Фільтрація за датою
+    const dateFilter =
+      dateRange.from && dateRange.to
+        ? expenseDate >= dateRange.from && expenseDate <= dateRange.to
+        : expenseDate >= getStartDate(period) &&
+          expenseDate <= getEndDate(period);
 
-    const startDate = getStartDate(period);
-    const endDate = getEndDate(period);
-    return expenseDate >= startDate && expenseDate <= endDate;
+    // Фільтрація за категоріями
+    const categoryFilter =
+      selectedCategories.length === 0 ||
+      selectedCategories.includes(expense.category_id);
+
+    return dateFilter && categoryFilter;
   });
 
   // Розрахунок пагінації
@@ -980,7 +988,7 @@ export default function ExpensesPage() {
                     formatDate(dateRange.from.toISOString())
                   )
                 ) : (
-                  <span>Виберіть період</span>
+                  <span className="text-black">Виберіть період</span>
                 )}
               </Button>
             </PopoverTrigger>
@@ -1005,6 +1013,86 @@ export default function ExpensesPage() {
                 }}
                 numberOfMonths={2}
               />
+            </PopoverContent>
+          </Popover>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={selectedCategories.length > 0 ? "default" : "outline"}
+                className="justify-start text-left font-normal"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mr-2 h-4 w-4"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M7 12h10" />
+                  <path d="M10 18h4" />
+                </svg>
+                {selectedCategories.length > 0
+                  ? `Категорії (${selectedCategories.length})`
+                  : "Всі категорії"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-4" align="start">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Категорії</h4>
+                  {selectedCategories.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedCategories([])}
+                    >
+                      Скинути
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {categories.map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center space-x-2"
+                    >
+                      <input
+                        type="checkbox"
+                        id={`category-${category.id}`}
+                        checked={selectedCategories.includes(category.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCategories([
+                              ...selectedCategories,
+                              category.id,
+                            ]);
+                          } else {
+                            setSelectedCategories(
+                              selectedCategories.filter(
+                                (id) => id !== category.id
+                              )
+                            );
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label
+                        htmlFor={`category-${category.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        {category.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </PopoverContent>
           </Popover>
         </div>
