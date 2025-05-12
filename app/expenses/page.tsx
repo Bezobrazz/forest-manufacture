@@ -9,6 +9,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
 import {
   getShifts,
@@ -23,7 +24,7 @@ import {
 } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatDate } from "@/lib/utils";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -47,8 +48,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import type { ShiftWithDetails } from "@/lib/types";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
-type PeriodFilter = "year" | "month" | "week" | "day";
+type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
 interface ExpenseCategory {
   id: number;
@@ -217,6 +225,14 @@ export default function ExpensesPage() {
   const [editCategoryName, setEditCategoryName] = useState("");
   const [editCategoryDescription, setEditCategoryDescription] = useState("");
 
+  const [dateRange, setDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  });
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -244,7 +260,7 @@ export default function ExpensesPage() {
     loadData();
   }, []);
 
-  const getStartDate = (period: PeriodFilter) => {
+  const getStartDate = (period: PeriodFilter): Date => {
     const now = new Date();
     switch (period) {
       case "year":
@@ -252,29 +268,46 @@ export default function ExpensesPage() {
       case "month":
         return new Date(now.getFullYear(), now.getMonth(), 1);
       case "week":
-        const currentDay = now.getDay();
-        const diff = currentDay === 0 ? -6 : 1 - currentDay;
-        const monday = new Date(now);
-        monday.setHours(0, 0, 0, 0);
-        monday.setDate(now.getDate() + diff);
-        return monday;
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Понеділок
+        return new Date(now.getFullYear(), now.getMonth(), diff);
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      default:
+        return now;
+    }
+  };
+
+  const getEndDate = (period: PeriodFilter): Date => {
+    const now = new Date();
+    switch (period) {
+      case "year":
+        return new Date(now.getFullYear(), 11, 31);
+      case "month":
+        return new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      case "week":
+        const endDay = now.getDay();
+        const endDiff = endDay === 0 ? 0 : 7 - endDay;
+        const endDate = new Date(now);
+        endDate.setDate(now.getDate() + endDiff);
+        return endDate;
+      case "day":
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      default:
+        return now;
     }
   };
 
   const filteredExpenses = expenses.filter((expense) => {
     const expenseDate = new Date(expense.date);
+
+    if (dateRange.from && dateRange.to) {
+      return expenseDate >= dateRange.from && expenseDate <= dateRange.to;
+    }
+
     const startDate = getStartDate(period);
-    console.log(
-      "Expense date:",
-      expenseDate,
-      "Start date:",
-      startDate,
-      "Period:",
-      period
-    );
-    return expenseDate >= startDate;
+    const endDate = getEndDate(period);
+    return expenseDate >= startDate && expenseDate <= endDate;
   });
 
   // Розрахунок пагінації
@@ -889,31 +922,91 @@ export default function ExpensesPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={period === "day" ? "default" : "outline"}
-            onClick={() => setPeriod("day")}
+            onClick={() => {
+              setPeriod("day");
+              setDateRange({ from: undefined, to: undefined });
+            }}
           >
             День
           </Button>
           <Button
             variant={period === "week" ? "default" : "outline"}
-            onClick={() => setPeriod("week")}
+            onClick={() => {
+              setPeriod("week");
+              setDateRange({ from: undefined, to: undefined });
+            }}
           >
             Тиждень
           </Button>
           <Button
             variant={period === "month" ? "default" : "outline"}
-            onClick={() => setPeriod("month")}
+            onClick={() => {
+              setPeriod("month");
+              setDateRange({ from: undefined, to: undefined });
+            }}
           >
             Місяць
           </Button>
           <Button
             variant={period === "year" ? "default" : "outline"}
-            onClick={() => setPeriod("year")}
+            onClick={() => {
+              setPeriod("year");
+              setDateRange({ from: undefined, to: undefined });
+            }}
           >
             Рік
           </Button>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={dateRange.from ? "default" : "outline"}
+                className={cn(
+                  "justify-start text-left font-normal",
+                  !dateRange.from && "text-muted-foreground"
+                )}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                {dateRange.from ? (
+                  dateRange.to ? (
+                    <>
+                      {formatDate(dateRange.from.toISOString())} -{" "}
+                      {formatDate(dateRange.to.toISOString())}
+                    </>
+                  ) : (
+                    formatDate(dateRange.from.toISOString())
+                  )
+                ) : (
+                  <span>Виберіть період</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <CalendarComponent
+                initialFocus
+                mode="range"
+                defaultMonth={dateRange.from}
+                selected={dateRange}
+                onSelect={(range) => {
+                  if (range) {
+                    setDateRange({
+                      from: range.from,
+                      to: range.to || range.from,
+                    });
+                    if (range.from) {
+                      setPeriod("custom");
+                    }
+                  } else {
+                    setDateRange({ from: undefined, to: undefined });
+                  }
+                }}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="text-2xl font-bold">
           {totalExpenses.toLocaleString()} ₴
