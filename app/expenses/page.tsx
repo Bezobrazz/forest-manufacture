@@ -271,8 +271,12 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), now.getMonth(), 1);
       case "week":
         const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Понеділок
-        return new Date(now.getFullYear(), now.getMonth(), diff);
+        const diff = day === 6 ? 0 : day === 0 ? -6 : -day - 1;
+        return new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + diff
+        );
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
       default:
@@ -288,11 +292,13 @@ export default function ExpensesPage() {
       case "month":
         return new Date(now.getFullYear(), now.getMonth() + 1, 0);
       case "week":
-        const endDay = now.getDay();
-        const endDiff = endDay === 0 ? 0 : 7 - endDay;
-        const endDate = new Date(now);
-        endDate.setDate(now.getDate() + endDiff);
-        return endDate;
+        const day = now.getDay();
+        const diff = day === 5 ? 0 : day < 5 ? 5 - day : 12 - day;
+        return new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + diff
+        );
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
       default:
