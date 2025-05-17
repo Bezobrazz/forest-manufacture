@@ -55,6 +55,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
@@ -1018,6 +1019,8 @@ export default function ExpensesPage() {
                   }
                 }}
                 numberOfMonths={2}
+                locale={uk}
+                weekStartsOn={1}
               />
             </PopoverContent>
           </Popover>
