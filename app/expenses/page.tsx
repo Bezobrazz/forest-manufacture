@@ -272,12 +272,22 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), now.getMonth(), 1);
       case "week":
         const day = now.getDay();
-        const diff = day === 6 ? 0 : day === 0 ? -6 : -day - 1;
-        return new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + diff
-        );
+        // Розрахунок для початку тижня (субота)
+        // Якщо сьогодні субота (6), то початок тижня - сьогодні
+        // Якщо сьогодні неділя (0), то початок тижня - вчора (субота)
+        // Інакше - минула субота
+        let diff;
+        if (day === 6) {
+          diff = 0; // Сьогодні субота
+        } else if (day === 0) {
+          diff = -1; // Вчора була субота
+        } else {
+          diff = -(day + 1); // Дні до минулої суботи
+        }
+        const startDate = new Date(now);
+        startDate.setDate(now.getDate() + diff);
+        startDate.setHours(0, 0, 0, 0);
+        return startDate;
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
       default:
@@ -294,14 +304,30 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), now.getMonth() + 1, 0);
       case "week":
         const day = now.getDay();
-        const diff = day === 5 ? 0 : day < 5 ? 5 - day : 12 - day;
-        return new Date(
+        // Розрахунок для кінця тижня (п'ятниця)
+        // Якщо сьогодні п'ятниця (5), то кінець тижня - сьогодні
+        // Якщо сьогодні до п'ятниці, то кінець тижня - ця п'ятниця
+        // Якщо сьогодні після п'ятниці, то кінець тижня - наступна п'ятниця
+        let diff;
+        if (day === 5) {
+          diff = 0; // Сьогодні п'ятниця
+        } else if (day < 5) {
+          diff = 5 - day; // Дні до цієї п'ятниці
+        } else {
+          diff = 12 - day; // Дні до наступної п'ятниці
+        }
+        const endDate = new Date(now);
+        endDate.setDate(now.getDate() + diff);
+        endDate.setHours(23, 59, 59, 999);
+        return endDate;
+      case "day":
+        const dayEnd = new Date(
           now.getFullYear(),
           now.getMonth(),
-          now.getDate() + diff
+          now.getDate()
         );
-      case "day":
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        dayEnd.setHours(23, 59, 59, 999);
+        return dayEnd;
       default:
         return now;
     }
@@ -311,11 +337,40 @@ export default function ExpensesPage() {
     const expenseDate = new Date(expense.date);
 
     // Фільтрація за датою
-    const dateFilter =
-      dateRange.from && dateRange.to
-        ? expenseDate >= dateRange.from && expenseDate <= dateRange.to
-        : expenseDate >= getStartDate(period) &&
-          expenseDate <= getEndDate(period);
+    let dateFilter;
+    if (dateRange.from && dateRange.to) {
+      // Встановлюємо час для початкової дати на початок дня (00:00:00)
+      const startDate = new Date(dateRange.from);
+      startDate.setHours(0, 0, 0, 0);
+
+      // Встановлюємо час для кінцевої дати на кінець дня (23:59:59)
+      const endDate = new Date(dateRange.to);
+      endDate.setHours(23, 59, 59, 999);
+
+      dateFilter = expenseDate >= startDate && expenseDate <= endDate;
+
+      // Логування для діагностики
+      console.log("Date range filter:", {
+        expenseDate: expenseDate.toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        isInRange: dateFilter,
+      });
+    } else {
+      const startDate = getStartDate(period);
+      const endDate = getEndDate(period);
+      dateFilter = expenseDate >= startDate && expenseDate <= endDate;
+
+      // Логування для діагностики
+      if (period === "week") {
+        console.log("Week filter:", {
+          expenseDate: expenseDate.toISOString(),
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          isInRange: dateFilter,
+        });
+      }
+    }
 
     // Фільтрація за категоріями
     const categoryFilter =
