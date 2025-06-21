@@ -287,6 +287,15 @@ export default function ExpensesPage() {
         const startDate = new Date(now);
         startDate.setDate(now.getDate() + diff);
         startDate.setHours(0, 0, 0, 0);
+
+        // Діагностика для тижня
+        console.log("Week start calculation:", {
+          currentDay: day,
+          diff,
+          startDate: startDate.toISOString(),
+          currentDate: now.toISOString(),
+        });
+
         return startDate;
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -319,6 +328,15 @@ export default function ExpensesPage() {
         const endDate = new Date(now);
         endDate.setDate(now.getDate() + diff);
         endDate.setHours(23, 59, 59, 999);
+
+        // Діагностика для тижня
+        console.log("Week end calculation:", {
+          currentDay: day,
+          diff,
+          endDate: endDate.toISOString(),
+          currentDate: now.toISOString(),
+        });
+
         return endDate;
       case "day":
         const dayEnd = new Date(
@@ -363,11 +381,15 @@ export default function ExpensesPage() {
 
       // Логування для діагностики
       if (period === "week") {
-        console.log("Week filter:", {
+        console.log("Week filter for expense:", {
+          expenseId: expense.id,
           expenseDate: expenseDate.toISOString(),
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           isInRange: dateFilter,
+          expenseDateMs: expenseDate.getTime(),
+          startDateMs: startDate.getTime(),
+          endDateMs: endDate.getTime(),
         });
       }
     }
