@@ -33,13 +33,13 @@ export default async function ShiftsPage() {
   const getDayOfWeek = (dateString: string) => {
     const date = new Date(dateString);
     const days = [
+      "Неділя",
       "Понеділок",
       "Вівторок",
       "Середа",
       "Четвер",
       "П'ятниця",
       "Субота",
-      "Неділя",
     ];
     return days[date.getDay()];
   };
