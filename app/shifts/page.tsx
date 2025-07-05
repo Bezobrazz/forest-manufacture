@@ -9,7 +9,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatDateTime, getWeekNumber } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { formatDate, getWeekNumber } from "@/lib/utils";
+
 import {
   ArrowLeft,
   Calendar,
@@ -26,7 +34,7 @@ export const revalidate = 0;
 export default async function ShiftsPage({
   searchParams,
 }: {
-  searchParams: { week?: string };
+  searchParams: { week?: string; startDate?: string; endDate?: string };
 }) {
   const shifts = await getShifts();
 
@@ -36,6 +44,13 @@ export default async function ShiftsPage({
     ? parseInt(searchParams.week)
     : getWeekNumber(currentDate);
   const currentYear = currentDate.getFullYear();
+
+  // Перевіряємо, чи використовується діапазон дат
+  const useDateRange = searchParams.startDate && searchParams.endDate;
+  const startDate = searchParams.startDate
+    ? new Date(searchParams.startDate)
+    : null;
+  const endDate = searchParams.endDate ? new Date(searchParams.endDate) : null;
 
   // Отримуємо детальну інформацію про завершені зміни для розрахунку заробітної плати
   const completedShifts = shifts.filter(
@@ -63,12 +78,19 @@ export default async function ShiftsPage({
     return days[date.getDay()];
   };
 
-  // Фільтруємо зміни за поточний тиждень
-  const shiftsForCurrentWeek = shifts.filter((shift) => {
+  // Фільтруємо зміни за поточний тиждень або діапазон дат
+  const filteredShifts = shifts.filter((shift) => {
     const shiftDate = new Date(shift.shift_date);
-    const shiftWeek = getWeekNumber(shiftDate);
-    const shiftYear = shiftDate.getFullYear();
-    return shiftWeek === currentWeek && shiftYear === currentYear;
+
+    if (useDateRange && startDate && endDate) {
+      // Використовуємо діапазон дат
+      return shiftDate >= startDate && shiftDate <= endDate;
+    } else {
+      // Використовуємо тиждень
+      const shiftWeek = getWeekNumber(shiftDate);
+      const shiftYear = shiftDate.getFullYear();
+      return shiftWeek === currentWeek && shiftYear === currentYear;
+    }
   });
 
   // Групуємо зміни за днями тижня і розраховуємо заробітну плату
@@ -91,14 +113,22 @@ export default async function ShiftsPage({
 
     const shiftDate = new Date(shift.shift_date);
     const dayOfWeek = getDayOfWeek(shift.shift_date);
-    const weekNumber = getWeekNumber(shiftDate);
-    const year = shiftDate.getFullYear();
 
-    // Перевіряємо, чи зміна належить до поточного тижня
-    const isCurrentWeek = weekNumber === currentWeek && year === currentYear;
+    // Перевіряємо, чи зміна належить до фільтрованого діапазону
+    let isInRange = false;
 
-    // Якщо не поточний тиждень, пропускаємо
-    if (!isCurrentWeek) return;
+    if (useDateRange && startDate && endDate) {
+      // Використовуємо діапазон дат
+      isInRange = shiftDate >= startDate && shiftDate <= endDate;
+    } else {
+      // Використовуємо тиждень
+      const weekNumber = getWeekNumber(shiftDate);
+      const year = shiftDate.getFullYear();
+      isInRange = weekNumber === currentWeek && year === currentYear;
+    }
+
+    // Якщо не в діапазоні, пропускаємо
+    if (!isInRange) return;
 
     // Розраховуємо заробітну плату для зміни
     let shiftWages = 0;
@@ -167,25 +197,35 @@ export default async function ShiftsPage({
         </Link>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Зміни за тиждень {currentWeek}</h1>
+      <div className="flex flex-wrap items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center gap-4 mb-4 sm:mb-0">
+          <h1 className="text-2xl font-bold">
+            {useDateRange
+              ? `Зміни з ${formatDate(
+                  startDate!.toISOString()
+                )} по ${formatDate(endDate!.toISOString())}`
+              : `Зміни за тиждень ${currentWeek}`}
+          </h1>
           <div className="flex items-center gap-2">
-            <Link href={getPreviousWeek()}>
-              <Button variant="outline" size="sm">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href={getCurrentWeekUrl()}>
-              <Button variant="outline" size="sm">
-                Поточний тиждень
-              </Button>
-            </Link>
-            <Link href={getNextWeek()}>
-              <Button variant="outline" size="sm">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </Link>
+            {!useDateRange && (
+              <>
+                <Link href={getPreviousWeek()}>
+                  <Button variant="outline" size="sm">
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href={getCurrentWeekUrl()}>
+                  <Button variant="outline" size="sm">
+                    Поточний тиждень
+                  </Button>
+                </Link>
+                <Link href={getNextWeek()}>
+                  <Button variant="outline" size="sm">
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <Link href="/shifts/new">
@@ -201,10 +241,20 @@ export default async function ShiftsPage({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary" />
-            <span>Заробітна плата за тиждень {currentWeek}</span>
+            <span>
+              {useDateRange
+                ? `Заробітна плата з ${formatDate(
+                    startDate!.toISOString()
+                  )} по ${formatDate(endDate!.toISOString())}`
+                : `Заробітна плата за тиждень ${currentWeek}`}
+            </span>
           </CardTitle>
           <CardDescription>
-            Підсумок заробітної плати за завершеними змінами тижня {currentWeek}
+            {useDateRange
+              ? `Підсумок заробітної плати за завершеними змінами з ${formatDate(
+                  startDate!.toISOString()
+                )} по ${formatDate(endDate!.toISOString())}`
+              : `Підсумок заробітної плати за завершеними змінами тижня ${currentWeek}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -223,7 +273,7 @@ export default async function ShiftsPage({
                   Кількість змін
                 </div>
                 <div className="text-2xl font-bold">
-                  {shiftsForCurrentWeek.length}
+                  {filteredShifts.length}
                 </div>
               </div>
             </div>
@@ -255,19 +305,27 @@ export default async function ShiftsPage({
               </div>
             ) : (
               <div className="text-center py-4 text-muted-foreground">
-                Немає завершених змін за тиждень {currentWeek}
+                {useDateRange
+                  ? `Немає завершених змін з ${formatDate(
+                      startDate!.toISOString()
+                    )} по ${formatDate(endDate!.toISOString())}`
+                  : `Немає завершених змін за тиждень ${currentWeek}`}
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {shiftsForCurrentWeek.length === 0 ? (
+      {filteredShifts.length === 0 ? (
         <Card>
           <CardContent className="py-8">
             <div className="text-center">
               <p className="text-muted-foreground mb-4">
-                Немає змін за тиждень {currentWeek}
+                {useDateRange
+                  ? `Немає змін з ${formatDate(
+                      startDate!.toISOString()
+                    )} по ${formatDate(endDate!.toISOString())}`
+                  : `Немає змін за тиждень ${currentWeek}`}
               </p>
               <Link href="/shifts/new">
                 <Button>
@@ -280,7 +338,7 @@ export default async function ShiftsPage({
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
-          {shiftsForCurrentWeek.map((shift) => (
+          {filteredShifts.map((shift) => (
             <Link key={shift.id} href={`/shifts/${shift.id}`}>
               <Card className="h-full hover:bg-muted/50 transition-colors">
                 <CardHeader className="pb-2">
