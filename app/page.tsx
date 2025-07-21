@@ -334,7 +334,7 @@ export default function HomePage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-primary" />
-              <span>Активні зміни</span>
+              <span>Зміни</span>
             </CardTitle>
             <CardDescription>Кількість активних змін</CardDescription>
           </CardHeader>
@@ -455,6 +455,143 @@ export default function HomePage() {
             </Link>
           </CardFooter>
         </Card>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Останні зміни</h2>
+          <Link href="/shifts">
+            <Button variant="ghost" size="sm" className="gap-1">
+              <span>Всі зміни</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+
+        {recentShifts.length === 0 ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="text-center">
+                <p className="text-muted-foreground mb-4">
+                  Немає зареєстрованих змін
+                </p>
+                <Link href="/shifts/new">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    <span>Створити зміну</span>
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            {recentShifts.map((shift) => (
+              <Link key={shift.id} href={`/shifts/${shift.id}`}>
+                <Card className="h-full hover:bg-muted/50 transition-colors">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">
+                        Зміна #{shift.id}
+                      </CardTitle>
+                      {shift.production &&
+                        shift.production.length > 0 &&
+                        (() => {
+                          // Підрахунок загальної кількості виробленої продукції
+                          let totalShiftProduction = 0;
+                          shift.production.forEach((item) => {
+                            totalShiftProduction += item.quantity;
+                          });
+
+                          return (
+                            <Badge className="ml-2 text-sm font-normal flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              <span>{totalShiftProduction} шт</span>
+                            </Badge>
+                          );
+                        })()}
+                    </div>
+                    <CardDescription className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {formatDateTime(shift.created_at || shift.shift_date)}
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col gap-2">
+                      <Badge
+                        variant={
+                          shift.status === "active" ? "default" : "secondary"
+                        }
+                      >
+                        {shift.status === "active" ? "Активна" : "Завершена"}
+                      </Badge>
+
+                      {shift.status === "completed" && shift.completed_at && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>
+                            Завершено: {formatDateTime(shift.completed_at)}
+                          </span>
+                        </div>
+                      )}
+
+                      {shift.production && shift.production.length > 0 && (
+                        <div className="mt-1">
+                          {(() => {
+                            // Підрахунок загальної кількості виробленої продукції по категоріям
+                            const productionByCategory: Record<string, number> =
+                              {};
+                            let totalProduction = 0;
+
+                            shift.production.forEach((item) => {
+                              const categoryName =
+                                item.product?.category?.name || "Без категорії";
+                              if (!productionByCategory[categoryName]) {
+                                productionByCategory[categoryName] = 0;
+                              }
+                              productionByCategory[categoryName] +=
+                                item.quantity;
+                              totalProduction += item.quantity;
+                            });
+
+                            return (
+                              <>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {Object.entries(productionByCategory).map(
+                                    ([category, total]) => (
+                                      <Badge
+                                        key={category}
+                                        variant="secondary"
+                                        className="flex items-center gap-1 text-xs"
+                                      >
+                                        <Package className="h-2 w-2" />
+                                        <span>
+                                          {category}: {total} шт
+                                        </span>
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {shift.notes && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {shift.notes}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 mb-4">
@@ -608,143 +745,6 @@ export default function HomePage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Останні зміни</h2>
-          <Link href="/shifts">
-            <Button variant="ghost" size="sm" className="gap-1">
-              <span>Всі зміни</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-
-        {recentShifts.length === 0 ? (
-          <Card>
-            <CardContent className="py-8">
-              <div className="text-center">
-                <p className="text-muted-foreground mb-4">
-                  Немає зареєстрованих змін
-                </p>
-                <Link href="/shifts/new">
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span>Створити зміну</span>
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-3">
-            {recentShifts.map((shift) => (
-              <Link key={shift.id} href={`/shifts/${shift.id}`}>
-                <Card className="h-full hover:bg-muted/50 transition-colors">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
-                        Зміна #{shift.id}
-                      </CardTitle>
-                      {shift.production &&
-                        shift.production.length > 0 &&
-                        (() => {
-                          // Підрахунок загальної кількості виробленої продукції
-                          let totalShiftProduction = 0;
-                          shift.production.forEach((item) => {
-                            totalShiftProduction += item.quantity;
-                          });
-
-                          return (
-                            <Badge className="ml-2 text-sm font-normal flex items-center gap-1">
-                              <Package className="h-3 w-3" />
-                              <span>{totalShiftProduction} шт</span>
-                            </Badge>
-                          );
-                        })()}
-                    </div>
-                    <CardDescription className="flex items-center gap-2">
-                      <Calendar className="h-3 w-3" />
-                      <span>
-                        {formatDateTime(shift.created_at || shift.shift_date)}
-                      </span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-2">
-                      <Badge
-                        variant={
-                          shift.status === "active" ? "default" : "secondary"
-                        }
-                      >
-                        {shift.status === "active" ? "Активна" : "Завершена"}
-                      </Badge>
-
-                      {shift.status === "completed" && shift.completed_at && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span>
-                            Завершено: {formatDateTime(shift.completed_at)}
-                          </span>
-                        </div>
-                      )}
-
-                      {shift.production && shift.production.length > 0 && (
-                        <div className="mt-1">
-                          {(() => {
-                            // Підрахунок загальної кількості виробленої продукції по категоріям
-                            const productionByCategory: Record<string, number> =
-                              {};
-                            let totalProduction = 0;
-
-                            shift.production.forEach((item) => {
-                              const categoryName =
-                                item.product?.category?.name || "Без категорії";
-                              if (!productionByCategory[categoryName]) {
-                                productionByCategory[categoryName] = 0;
-                              }
-                              productionByCategory[categoryName] +=
-                                item.quantity;
-                              totalProduction += item.quantity;
-                            });
-
-                            return (
-                              <>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {Object.entries(productionByCategory).map(
-                                    ([category, total]) => (
-                                      <Badge
-                                        key={category}
-                                        variant="secondary"
-                                        className="flex items-center gap-1 text-xs"
-                                      >
-                                        <Package className="h-2 w-2" />
-                                        <span>
-                                          {category}: {total} шт
-                                        </span>
-                                      </Badge>
-                                    )
-                                  )}
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      )}
-
-                      {shift.notes && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {shift.notes}
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
