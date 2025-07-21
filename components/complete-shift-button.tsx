@@ -39,6 +39,7 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
           title: "Зміну завершено",
           description: "Зміну успішно завершено",
         });
+        setIsPending(false);
         setOpen(false);
         router.refresh();
       } else {
@@ -47,6 +48,7 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
           description: result.error,
           variant: "destructive",
         });
+        setIsPending(false);
       }
     } catch (error) {
       toast({
@@ -54,7 +56,6 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
         description: "Сталася помилка при завершенні зміни",
         variant: "destructive",
       });
-    } finally {
       setIsPending(false);
     }
   }

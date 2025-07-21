@@ -138,6 +138,17 @@ export function ProductionItemsForm({
     }));
   }
 
+  // Функція для отримання номера фракції з опису продукту
+  function getFractionNumber(productDescription?: string): number {
+    if (!productDescription) return 999;
+    // Ловить: 1 фракція, 2 фракц, 3 фр, 4 фр., 5 фракцiя
+    const match = productDescription.match(/(\d)\s*(фракц(ія)?|фр\.?)/i);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    return 999; // Якщо не знайдено, ставимо в кінець
+  }
+
   // Групуємо продукти за категоріями
   const productsByCategory: Record<string, Product[]> = {};
 
@@ -163,56 +174,71 @@ export function ProductionItemsForm({
               <CardContent className="p-4">
                 <h3 className="font-bold text-lg mb-2">{categoryName}</h3>
                 <div className="grid gap-4">
-                  {categoryProducts.map((product) => {
-                    // Використовуємо локальний стан для перевірки існуючих елементів
-                    const existingItem = localProduction.find(
-                      (p) => p.product_id === product.id
-                    );
-                    const isPending = pendingProducts.has(product.id);
+                  {categoryProducts
+                    .slice()
+                    .sort((a, b) => {
+                      const isBarkA = a.name.toLowerCase().includes("кора");
+                      const isBarkB = b.name.toLowerCase().includes("кора");
+                      if (isBarkA && isBarkB) {
+                        return (
+                          getFractionNumber(a.description ?? undefined) -
+                          getFractionNumber(b.description ?? undefined)
+                        );
+                      }
+                      if (isBarkA) return -1;
+                      if (isBarkB) return 1;
+                      return 0;
+                    })
+                    .map((product) => {
+                      // Використовуємо локальний стан для перевірки існуючих елементів
+                      const existingItem = localProduction.find(
+                        (p) => p.product_id === product.id
+                      );
+                      const isPending = pendingProducts.has(product.id);
 
-                    return (
-                      <div
-                        key={product.id}
-                        className="flex items-center justify-between gap-4 py-2 border-b last:border-0"
-                      >
-                        <div className="flex-1">
-                          <div className="font-medium">{product.name}</div>
-                          {product.description && (
-                            <div className="text-sm text-muted-foreground">
-                              {product.description}
-                            </div>
-                          )}
+                      return (
+                        <div
+                          key={product.id}
+                          className="flex items-center justify-between gap-4 py-2 border-b last:border-0"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">{product.name}</div>
+                            {product.description && (
+                              <div className="text-sm text-muted-foreground">
+                                {product.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 w-48">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={quantities[product.id] || ""}
+                              onChange={(e) =>
+                                handleQuantityChange(product.id, e.target.value)
+                              }
+                              placeholder="Кількість"
+                              disabled={isPending || shift.status !== "active"}
+                              className="w-24"
+                            />
+                            {shift.status === "active" && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleUpdateQuantity(product.id)}
+                                disabled={isPending || !quantities[product.id]}
+                              >
+                                {isPending
+                                  ? "Оновлення..."
+                                  : existingItem
+                                  ? "Оновити"
+                                  : "Додати"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 w-48">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={quantities[product.id] || ""}
-                            onChange={(e) =>
-                              handleQuantityChange(product.id, e.target.value)
-                            }
-                            placeholder="Кількість"
-                            disabled={isPending || shift.status !== "active"}
-                            className="w-24"
-                          />
-                          {shift.status === "active" && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateQuantity(product.id)}
-                              disabled={isPending || !quantities[product.id]}
-                            >
-                              {isPending
-                                ? "Оновлення..."
-                                : existingItem
-                                ? "Оновити"
-                                : "Додати"}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               </CardContent>
             </Card>

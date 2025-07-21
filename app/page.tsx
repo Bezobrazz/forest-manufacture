@@ -58,6 +58,14 @@ import type {
 } from "@/lib/types";
 import { toast } from "@/components/ui/use-toast";
 
+type DefaultCards = {
+  shifts: boolean;
+  employees: boolean;
+  products: boolean;
+  inventory: boolean;
+  expenses: boolean;
+};
+
 function LoadingSkeleton() {
   return (
     <div className="container py-6 space-y-8">
@@ -191,16 +199,34 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
 
-  // Додаємо стан для видимості кожної карточки
-  const [visibleCards, setVisibleCards] = useState({
+  const defaultCards: DefaultCards = {
     shifts: true,
     employees: true,
     products: true,
     inventory: true,
     expenses: true,
+  };
+  // Ініціалізація стану з localStorage
+  const [visibleCards, setVisibleCards] = useState<DefaultCards>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("visibleCards");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          return defaultCards;
+        }
+      }
+    }
+    return defaultCards;
   });
 
-  const toggleCard = (card: keyof typeof visibleCards) => {
+  // Оновлення localStorage при зміні стану
+  useEffect(() => {
+    localStorage.setItem("visibleCards", JSON.stringify(visibleCards));
+  }, [visibleCards]);
+
+  const toggleCard = (card: keyof DefaultCards) => {
     setVisibleCards((prev) => ({ ...prev, [card]: !prev[card] }));
   };
 
