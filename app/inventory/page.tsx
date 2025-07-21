@@ -183,6 +183,16 @@ export default function InventoryPage() {
   // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(inventoryByCategory).sort();
 
+  // Функція для отримання номера фракції з опису продукту
+  function getFractionNumber(productDescription?: string): number {
+    if (!productDescription) return 999;
+    const match = productDescription.match(/(\d)\s*фракц/i);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    return 999; // Якщо не знайдено, ставимо в кінець
+  }
+
   console.log("InventoryPage render", { transactions, isLoading });
 
   if (isLoading) {
@@ -243,34 +253,43 @@ export default function InventoryPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {inventoryByCategory[category].map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between py-2 border-b last:border-0"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Package className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">
-                              {item.product?.name}
-                            </div>
-                            {item.product?.description && (
-                              <div className="text-sm text-muted-foreground">
-                                {item.product.description}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <Badge
-                          variant={
-                            item.quantity > 0 ? "default" : "destructive"
-                          }
-                          className="ml-2"
+                    {inventoryByCategory[category]
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          getFractionNumber(
+                            a.product?.description ?? undefined
+                          ) -
+                          getFractionNumber(b.product?.description ?? undefined)
+                      )
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between py-2 border-b last:border-0"
                         >
-                          {item.quantity} шт
-                        </Badge>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2">
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium">
+                                {item.product?.name}
+                              </div>
+                              {item.product?.description && (
+                                <div className="text-sm text-muted-foreground">
+                                  {item.product.description}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <Badge
+                            variant={
+                              item.quantity > 0 ? "default" : "destructive"
+                            }
+                            className="ml-2"
+                          >
+                            {item.quantity} шт
+                          </Badge>
+                        </div>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
