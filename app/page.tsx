@@ -282,7 +282,7 @@ export default function HomePage() {
 
   return (
     <div className="container py-6">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center gap-4 justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Облік виробництва</h1>
           <p className="text-muted-foreground">
