@@ -38,6 +38,8 @@ import {
   Boxes,
   CheckSquare,
   DollarSign,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -189,6 +191,19 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
 
+  // Додаємо стан для видимості кожної карточки
+  const [visibleCards, setVisibleCards] = useState({
+    shifts: true,
+    employees: true,
+    products: true,
+    inventory: true,
+    expenses: true,
+  });
+
+  const toggleCard = (card: keyof typeof visibleCards) => {
+    setVisibleCards((prev) => ({ ...prev, [card]: !prev[card] }));
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     setDatabaseError(false);
@@ -329,132 +344,197 @@ export default function HomePage() {
         </DropdownMenu>
       </div>
 
+      {/* Кнопка "Показати приховані" */}
+      {Object.values(visibleCards).some((v) => !v) && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            variant="secondary"
+            onClick={() =>
+              setVisibleCards({
+                shifts: true,
+                employees: true,
+                products: true,
+                inventory: true,
+                expenses: true,
+              })
+            }
+          >
+            Показати приховані
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <span>Зміни</span>
-            </CardTitle>
-            <CardDescription>Кількість активних змін</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{activeShiftsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/shifts" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути зміни</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <span>Працівники</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість працівників</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{employeesCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/employees" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Керувати працівниками</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <span>Продукція</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість продуктів</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{productsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/products" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Керувати продукцією</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Boxes className="h-5 w-5 text-primary" />
-              <span>Склад</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість на складі</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{totalInventory} шт</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/inventory" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Управління складом</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-
-        {/* <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <CheckSquare className="h-5 w-5 text-primary" />
-              <span>Задачі</span>
-            </CardTitle>
-            <CardDescription>Кількість активних задач</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{data.activeTasks.length}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/tasks" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути задачі</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card> */}
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />
-              <span>Облік витрат</span>
-            </CardTitle>
-            <CardDescription>Кількість витрат за тиждень</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{activeShiftsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/expenses" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути витрати</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+        {visibleCards.shifts && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("shifts")}
+                aria-label={visibleCards.shifts ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.shifts ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                <span>Зміни</span>
+              </CardTitle>
+              <CardDescription>Кількість активних змін</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/shifts" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Переглянути зміни</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.employees && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("employees")}
+                aria-label={visibleCards.employees ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.employees ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <span>Працівники</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість працівників</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{employeesCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/employees" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Керувати працівниками</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.products && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("products")}
+                aria-label={visibleCards.products ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.products ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                <span>Продукція</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість продуктів</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{productsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/products" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Керувати продукцією</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.inventory && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("inventory")}
+                aria-label={visibleCards.inventory ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.inventory ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Boxes className="h-5 w-5 text-primary" />
+                <span>Склад</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість на складі</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{totalInventory} шт</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/inventory" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Управління складом</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.expenses && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("expenses")}
+                aria-label={visibleCards.expenses ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.expenses ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <span>Облік витрат</span>
+              </CardTitle>
+              <CardDescription>Кількість витрат за тиждень</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/expenses" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Переглянути витрати</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
       </div>
 
       <div className="mb-8">
