@@ -38,6 +38,8 @@ import {
   Boxes,
   CheckSquare,
   DollarSign,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -189,6 +191,19 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
 
+  // Додаємо стан для видимості кожної карточки
+  const [visibleCards, setVisibleCards] = useState({
+    shifts: true,
+    employees: true,
+    products: true,
+    inventory: true,
+    expenses: true,
+  });
+
+  const toggleCard = (card: keyof typeof visibleCards) => {
+    setVisibleCards((prev) => ({ ...prev, [card]: !prev[card] }));
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     setDatabaseError(false);
@@ -267,7 +282,7 @@ export default function HomePage() {
 
   return (
     <div className="container py-6">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center gap-4 justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Облік виробництва</h1>
           <p className="text-muted-foreground">
@@ -329,132 +344,334 @@ export default function HomePage() {
         </DropdownMenu>
       </div>
 
+      {/* Кнопка "Показати приховані" */}
+      {Object.values(visibleCards).some((v) => !v) && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            variant="secondary"
+            onClick={() =>
+              setVisibleCards({
+                shifts: true,
+                employees: true,
+                products: true,
+                inventory: true,
+                expenses: true,
+              })
+            }
+          >
+            Показати приховані
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <span>Активні зміни</span>
-            </CardTitle>
-            <CardDescription>Кількість активних змін</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{activeShiftsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/shifts" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути зміни</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+        {visibleCards.shifts && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("shifts")}
+                aria-label={visibleCards.shifts ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.shifts ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                <span>Зміни</span>
+              </CardTitle>
+              <CardDescription>Кількість активних змін</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/shifts" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Переглянути зміни</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.employees && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("employees")}
+                aria-label={visibleCards.employees ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.employees ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <span>Працівники</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість працівників</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{employeesCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/employees" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Керувати працівниками</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.products && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("products")}
+                aria-label={visibleCards.products ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.products ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                <span>Продукція</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість продуктів</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{productsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/products" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Керувати продукцією</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.inventory && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("inventory")}
+                aria-label={visibleCards.inventory ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.inventory ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Boxes className="h-5 w-5 text-primary" />
+                <span>Склад</span>
+              </CardTitle>
+              <CardDescription>Загальна кількість на складі</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{totalInventory} шт</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/inventory" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Управління складом</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.expenses && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("expenses")}
+                aria-label={visibleCards.expenses ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.expenses ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <span>Облік витрат</span>
+              </CardTitle>
+              <CardDescription>Кількість витрат за тиждень</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+            </CardContent>
+            <CardFooter>
+              <Link href="/expenses" className="w-full">
+                <Button variant="outline" className="w-full">
+                  <span>Переглянути витрати</span>
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        )}
+      </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <span>Працівники</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість працівників</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{employeesCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/employees" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Керувати працівниками</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Останні зміни</h2>
+          <Link href="/shifts">
+            <Button variant="ghost" size="sm" className="gap-1">
+              <span>Всі зміни</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <span>Продукція</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість продуктів</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{productsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/products" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Керувати продукцією</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+        {recentShifts.length === 0 ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="text-center">
+                <p className="text-muted-foreground mb-4">
+                  Немає зареєстрованих змін
+                </p>
+                <Link href="/shifts/new">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    <span>Створити зміну</span>
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            {recentShifts.map((shift) => (
+              <Link key={shift.id} href={`/shifts/${shift.id}`}>
+                <Card className="h-full hover:bg-muted/50 transition-colors">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">
+                        Зміна #{shift.id}
+                      </CardTitle>
+                      {shift.production &&
+                        shift.production.length > 0 &&
+                        (() => {
+                          // Підрахунок загальної кількості виробленої продукції
+                          let totalShiftProduction = 0;
+                          shift.production.forEach((item) => {
+                            totalShiftProduction += item.quantity;
+                          });
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Boxes className="h-5 w-5 text-primary" />
-              <span>Склад</span>
-            </CardTitle>
-            <CardDescription>Загальна кількість на складі</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{totalInventory} шт</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/inventory" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Управління складом</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+                          return (
+                            <Badge className="ml-2 text-sm font-normal flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              <span>{totalShiftProduction} шт</span>
+                            </Badge>
+                          );
+                        })()}
+                    </div>
+                    <CardDescription className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {formatDateTime(shift.created_at || shift.shift_date)}
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col gap-2">
+                      <Badge
+                        variant={
+                          shift.status === "active" ? "default" : "secondary"
+                        }
+                      >
+                        {shift.status === "active" ? "Активна" : "Завершена"}
+                      </Badge>
 
-        {/* <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <CheckSquare className="h-5 w-5 text-primary" />
-              <span>Задачі</span>
-            </CardTitle>
-            <CardDescription>Кількість активних задач</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{data.activeTasks.length}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/tasks" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути задачі</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card> */}
+                      {shift.status === "completed" && shift.completed_at && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>
+                            Завершено: {formatDateTime(shift.completed_at)}
+                          </span>
+                        </div>
+                      )}
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />
-              <span>Облік витрат</span>
-            </CardTitle>
-            <CardDescription>Кількість витрат за тиждень</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{activeShiftsCount}</div>
-          </CardContent>
-          <CardFooter>
-            <Link href="/expenses" className="w-full">
-              <Button variant="outline" className="w-full">
-                <span>Переглянути витрати</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+                      {shift.production && shift.production.length > 0 && (
+                        <div className="mt-1">
+                          {(() => {
+                            // Підрахунок загальної кількості виробленої продукції по категоріям
+                            const productionByCategory: Record<string, number> =
+                              {};
+                            let totalProduction = 0;
+
+                            shift.production.forEach((item) => {
+                              const categoryName =
+                                item.product?.category?.name || "Без категорії";
+                              if (!productionByCategory[categoryName]) {
+                                productionByCategory[categoryName] = 0;
+                              }
+                              productionByCategory[categoryName] +=
+                                item.quantity;
+                              totalProduction += item.quantity;
+                            });
+
+                            return (
+                              <>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {Object.entries(productionByCategory).map(
+                                    ([category, total]) => (
+                                      <Badge
+                                        key={category}
+                                        variant="secondary"
+                                        className="flex items-center gap-1 text-xs"
+                                      >
+                                        <Package className="h-2 w-2" />
+                                        <span>
+                                          {category}: {total} шт
+                                        </span>
+                                      </Badge>
+                                    )
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {shift.notes && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {shift.notes}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 mb-4">
@@ -608,143 +825,6 @@ export default function HomePage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Останні зміни</h2>
-          <Link href="/shifts">
-            <Button variant="ghost" size="sm" className="gap-1">
-              <span>Всі зміни</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-
-        {recentShifts.length === 0 ? (
-          <Card>
-            <CardContent className="py-8">
-              <div className="text-center">
-                <p className="text-muted-foreground mb-4">
-                  Немає зареєстрованих змін
-                </p>
-                <Link href="/shifts/new">
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span>Створити зміну</span>
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-3">
-            {recentShifts.map((shift) => (
-              <Link key={shift.id} href={`/shifts/${shift.id}`}>
-                <Card className="h-full hover:bg-muted/50 transition-colors">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
-                        Зміна #{shift.id}
-                      </CardTitle>
-                      {shift.production &&
-                        shift.production.length > 0 &&
-                        (() => {
-                          // Підрахунок загальної кількості виробленої продукції
-                          let totalShiftProduction = 0;
-                          shift.production.forEach((item) => {
-                            totalShiftProduction += item.quantity;
-                          });
-
-                          return (
-                            <Badge className="ml-2 text-sm font-normal flex items-center gap-1">
-                              <Package className="h-3 w-3" />
-                              <span>{totalShiftProduction} шт</span>
-                            </Badge>
-                          );
-                        })()}
-                    </div>
-                    <CardDescription className="flex items-center gap-2">
-                      <Calendar className="h-3 w-3" />
-                      <span>
-                        {formatDateTime(shift.created_at || shift.shift_date)}
-                      </span>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-2">
-                      <Badge
-                        variant={
-                          shift.status === "active" ? "default" : "secondary"
-                        }
-                      >
-                        {shift.status === "active" ? "Активна" : "Завершена"}
-                      </Badge>
-
-                      {shift.status === "completed" && shift.completed_at && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span>
-                            Завершено: {formatDateTime(shift.completed_at)}
-                          </span>
-                        </div>
-                      )}
-
-                      {shift.production && shift.production.length > 0 && (
-                        <div className="mt-1">
-                          {(() => {
-                            // Підрахунок загальної кількості виробленої продукції по категоріям
-                            const productionByCategory: Record<string, number> =
-                              {};
-                            let totalProduction = 0;
-
-                            shift.production.forEach((item) => {
-                              const categoryName =
-                                item.product?.category?.name || "Без категорії";
-                              if (!productionByCategory[categoryName]) {
-                                productionByCategory[categoryName] = 0;
-                              }
-                              productionByCategory[categoryName] +=
-                                item.quantity;
-                              totalProduction += item.quantity;
-                            });
-
-                            return (
-                              <>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {Object.entries(productionByCategory).map(
-                                    ([category, total]) => (
-                                      <Badge
-                                        key={category}
-                                        variant="secondary"
-                                        className="flex items-center gap-1 text-xs"
-                                      >
-                                        <Package className="h-2 w-2" />
-                                        <span>
-                                          {category}: {total} шт
-                                        </span>
-                                      </Badge>
-                                    )
-                                  )}
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      )}
-
-                      {shift.notes && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {shift.notes}
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
