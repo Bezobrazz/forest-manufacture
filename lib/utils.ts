@@ -57,7 +57,7 @@ export function formatDateTime(dateString: string): string {
 }
 
 /**
- * Отримує номер тижня з дати, де тиждень починається з понеділка
+ * Отримує номер тижня з дати, де тиждень починається з суботи і закінчується п'ятницею
  * @param date Дата
  * @returns Номер тижня
  */
@@ -65,20 +65,20 @@ export function getWeekNumber(date: Date): number {
   // Встановлюємо початок року
   const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
 
-  // Визначаємо понеділок першого тижня року
-  const firstMonday = new Date(firstDayOfYear);
+  // Визначаємо першу суботу року
+  const firstSaturday = new Date(firstDayOfYear);
   const dayOfWeek = firstDayOfYear.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Якщо неділя (0), відступаємо на 6 днів назад
-  firstMonday.setDate(firstDayOfYear.getDate() + diff);
+  const diff = dayOfWeek === 6 ? 0 : 6 - dayOfWeek; // Якщо субота (6), не зміщуємо, інакше до наступної суботи
+  firstSaturday.setDate(firstDayOfYear.getDate() + diff);
 
-  // Якщо дата раніше першого понеділка року, повертаємо 1
-  if (date < firstMonday) {
+  // Якщо дата раніше першої суботи року, повертаємо 1
+  if (date < firstSaturday) {
     return 1;
   }
 
-  // Розраховуємо кількість тижнів від першого понеділка
+  // Розраховуємо кількість тижнів від першої суботи
   const pastDays = Math.floor(
-    (date.getTime() - firstMonday.getTime()) / (24 * 60 * 60 * 1000)
+    (date.getTime() - firstSaturday.getTime()) / (24 * 60 * 60 * 1000)
   );
   return Math.floor(pastDays / 7) + 1;
 }
