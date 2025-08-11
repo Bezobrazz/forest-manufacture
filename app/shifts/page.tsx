@@ -67,15 +67,18 @@ export default async function ShiftsPage({
   const getDayOfWeek = (dateString: string) => {
     const date = new Date(dateString);
     const days = [
-      "Неділя",
-      "Понеділок",
-      "Вівторок",
-      "Середа",
-      "Четвер",
-      "П'ятниця",
-      "Субота",
+      "Субота", // 0 (буде використовуватись для getDay() === 6)
+      "Неділя", // 1
+      "Понеділок", // 2
+      "Вівторок", // 3
+      "Середа", // 4
+      "Четвер", // 5
+      "П'ятниця", // 6
     ];
-    return days[date.getDay()];
+    // Для getDay(): 0 — неділя, 1 — понеділок, ..., 5 — п'ятниця, 6 — субота
+    // Але для відображення тижня — субота перша, п'ятниця остання
+    // Тому для getDay() використовуємо days[(date.getDay() + 1) % 7]
+    return days[(date.getDay() + 1) % 7];
   };
 
   // Фільтруємо зміни за поточний тиждень або діапазон дат
@@ -106,6 +109,8 @@ export default async function ShiftsPage({
 
   // Загальна сума за тиждень
   let weeklyTotalWages = 0;
+  // Додаємо підрахунок загальної кількості продукції за тиждень
+  let weeklyTotalProduction = 0;
 
   // Обробляємо кожну зміну
   detailedShifts.forEach((shift) => {
@@ -142,6 +147,13 @@ export default async function ShiftsPage({
 
     // Додаємо до загальної суми за тиждень
     weeklyTotalWages += shiftWages;
+
+    // Додаємо підрахунок продукції
+    if (shift.production && shift.production.length > 0) {
+      shift.production.forEach((item) => {
+        weeklyTotalProduction += item.quantity;
+      });
+    }
 
     // Додаємо до групи за днем тижня
     const dateKey = shiftDate.toISOString().split("T")[0]; // Формат YYYY-MM-DD
@@ -259,7 +271,7 @@ export default async function ShiftsPage({
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-muted p-4 rounded-lg">
                 <div className="text-sm text-muted-foreground mb-1">
                   Загальна сума за тиждень
@@ -274,6 +286,14 @@ export default async function ShiftsPage({
                 </div>
                 <div className="text-2xl font-bold">
                   {filteredShifts.length}
+                </div>
+              </div>
+              <div className="bg-muted p-4 rounded-lg">
+                <div className="text-sm text-muted-foreground mb-1">
+                  Виготовлено продукції
+                </div>
+                <div className="text-2xl font-bold">
+                  {weeklyTotalProduction} шт
                 </div>
               </div>
             </div>
