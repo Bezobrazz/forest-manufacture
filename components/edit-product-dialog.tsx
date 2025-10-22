@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -103,8 +103,7 @@ export function EditProductDialog({ product, categories = [], onProductUpdated }
 
       if (result.success) {
         setOpen(false)
-        toast({
-          title: "Продукт оновлено",
+        toast.success("Продукт оновлено", {
           description: "Інформацію про продукт та винагороду успішно оновлено",
         })
 
@@ -118,18 +117,14 @@ export function EditProductDialog({ product, categories = [], onProductUpdated }
           }
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося оновити продукт",
-          variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Помилка при оновленні продукту:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при оновленні продукту",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

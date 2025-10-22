@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -65,8 +65,7 @@ export function ShiftForm() {
       const result = await createShift(formData);
 
       if (result.success) {
-        toast({
-          title: "Зміну створено",
+        toast.success("Зміну створено", {
           description: "Зміну успішно створено",
         });
         setShiftDate("");
@@ -74,17 +73,13 @@ export function ShiftForm() {
         setIsOpen(false);
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при створенні зміни",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);

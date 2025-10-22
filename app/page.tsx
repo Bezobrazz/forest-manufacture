@@ -56,7 +56,7 @@ import type {
   Inventory,
   Task,
 } from "@/lib/types";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 type DefaultCards = {
   shifts: boolean;
@@ -778,16 +778,13 @@ export default function HomePage() {
                             ...prev,
                             activeTasks: newActiveTasks,
                           }));
-                          toast({
-                            title: "Успішно",
+                          toast.success("Успішно", {
                             description: "Задачу завершено",
                           });
                         } else {
-                          toast({
-                            title: "Помилка",
+                          toast.error("Помилка", {
                             description:
                               result.error || "Не вдалося завершити задачу",
-                            variant: "destructive",
                           });
                         }
                       }}

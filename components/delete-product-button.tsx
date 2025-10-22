@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { deleteProduct } from "@/app/actions"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -34,8 +34,7 @@ export function DeleteProductButton({ productId, onProductDeleted }: DeleteProdu
       console.log("Результат видалення продукту:", result)
 
       if (result.success) {
-        toast({
-          title: "Продукт видалено",
+        toast.success("Продукт видалено", {
           description: "Продукт успішно видалено з системи",
         })
 
@@ -52,18 +51,15 @@ export function DeleteProductButton({ productId, onProductDeleted }: DeleteProdu
           }
         }
       } else {
-        toast({
-          title: "Помилка",
-          description: result.error || "Неможливо видалити продукт. Можливо, він використовується у виробництві.",
-          variant: "destructive",
+        toast.error("Помилка", {
+          description:
+            result.error || "Неможливо видалити продукт. Можливо, він використовується у виробництві.",
         })
       }
     } catch (error) {
       console.error("Помилка видалення продукту:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні продукту",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

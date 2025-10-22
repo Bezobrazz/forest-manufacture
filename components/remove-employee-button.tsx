@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { removeEmployeeFromShift } from "@/app/actions"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { X } from "lucide-react"
 
 interface RemoveEmployeeButtonProps {
@@ -21,22 +21,17 @@ export function RemoveEmployeeButton({ shiftId, employeeId }: RemoveEmployeeButt
       const result = await removeEmployeeFromShift(shiftId, employeeId)
 
       if (result.success) {
-        toast({
-          title: "Працівника видалено",
+        toast.success("Працівника видалено", {
           description: "Працівника успішно видалено зі зміни",
         })
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         })
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні працівника",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

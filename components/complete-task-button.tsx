@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateTask } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { CheckSquare } from "lucide-react";
 import type { Task } from "@/lib/types";
 
@@ -33,24 +33,19 @@ export function CompleteTaskButton({
       });
 
       if (result.success) {
-        toast({
-          title: "Задачу виконано",
+        toast.success("Задачу виконано", {
           description: "Задачу успішно позначено як виконану",
         });
         router.refresh();
         onTaskCompleted?.();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при оновленні статусу задачі",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);

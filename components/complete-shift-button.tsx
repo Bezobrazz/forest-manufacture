@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { completeShift } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,26 +35,21 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
       const result = await completeShift(shift.id);
 
       if (result.success) {
-        toast({
-          title: "Зміну завершено",
+        toast.success("Зміну завершено", {
           description: "Зміну успішно завершено",
         });
         setIsPending(false);
         setOpen(false);
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
         setIsPending(false);
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при завершенні зміни",
-        variant: "destructive",
       });
       setIsPending(false);
     }

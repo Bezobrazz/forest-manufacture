@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { deleteShift } from "@/app/actions"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -39,26 +39,21 @@ export function DeleteShiftButton({ shift }: DeleteShiftButtonProps) {
       const result = await deleteShift(shift.id)
 
       if (result.success) {
-        toast({
-          title: "Зміну видалено",
+        toast.success("Зміну видалено", {
           description: "Зміну успішно видалено з системи",
         })
         setOpen(false)
         // Перенаправляємо на головну сторінку
         router.push("/shifts")
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Неможливо видалити зміну",
-          variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Помилка видалення зміни:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні зміни",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)
