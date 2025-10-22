@@ -700,7 +700,7 @@ export default function HomePage() {
         )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 mb-4">
+      {/* <div className="grid gap-6 md:grid-cols-2 mb-4">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -797,7 +797,7 @@ export default function HomePage() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       <div className="mb-8">
         <h2 className="text-xl font-bold mb-4">Статистика виробництва</h2>
