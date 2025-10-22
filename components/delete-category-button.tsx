@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { deleteProductCategory } from "@/app/actions"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -44,8 +44,7 @@ export function DeleteCategoryButton({
           message += `. ${result.updatedProducts} продуктів переміщено в "без категорії"`
         }
 
-        toast({
-          title: "Категорію видалено",
+        toast.success("Категорію видалено", {
           description: message,
         })
         setOpen(false)
@@ -60,18 +59,14 @@ export function DeleteCategoryButton({
           }
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Неможливо видалити категорію",
-          variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Помилка видалення категорії:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні категорії",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

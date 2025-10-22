@@ -45,8 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Toaster } from "@/components/ui/toaster";
+import { toast } from "sonner";
 import type { ShiftWithDetails } from "@/lib/types";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
@@ -172,7 +171,6 @@ export default function ExpensesPage() {
   const [newExpenseDescription, setNewExpenseDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [isAddExpenseDialogOpen, setIsAddExpenseDialogOpen] = useState(false);
-  const { toast } = useToast();
 
   // Стани для пагінації
   const [currentPage, setCurrentPage] = useState(1);
@@ -455,10 +453,8 @@ export default function ExpensesPage() {
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Назва категорії не може бути порожньою",
-        variant: "destructive",
       });
       return;
     }
@@ -471,16 +467,13 @@ export default function ExpensesPage() {
       setCategories([...categories, newCategory]);
       setNewCategoryName("");
       setNewCategoryDescription("");
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Категорію додано",
       });
     } catch (error) {
       console.error("Помилка при додаванні категорії:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося додати категорію",
-        variant: "destructive",
       });
     }
   };
@@ -494,10 +487,8 @@ export default function ExpensesPage() {
 
     if (!selectedCategory || !newExpenseAmount) {
       console.log("Validation failed: missing category or amount");
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Необхідно вказати категорію та суму",
-        variant: "destructive",
       });
       return;
     }
@@ -505,10 +496,8 @@ export default function ExpensesPage() {
     const amount = parseFloat(newExpenseAmount);
     if (isNaN(amount) || amount <= 0) {
       console.log("Validation failed: invalid amount");
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сума має бути більше нуля",
-        variant: "destructive",
       });
       return;
     }
@@ -533,16 +522,13 @@ export default function ExpensesPage() {
       setNewExpenseDescription("");
       setSelectedCategory("");
       setIsAddExpenseDialogOpen(false);
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Витрату додано",
       });
     } catch (error) {
       console.error("Помилка при додаванні витрати:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося додати витрату",
-        variant: "destructive",
       });
     }
   };
@@ -576,16 +562,13 @@ export default function ExpensesPage() {
         categoryId: null,
         categoryName: "",
       });
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Категорію видалено",
       });
     } catch (error) {
       console.error("Помилка при видаленні категорії:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося видалити категорію",
-        variant: "destructive",
       });
     }
   };
@@ -611,16 +594,13 @@ export default function ExpensesPage() {
         expenseId: null,
         expenseAmount: 0,
       });
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Витрату видалено",
       });
     } catch (error) {
       console.error("Помилка при видаленні витрати:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося видалити витрату",
-        variant: "destructive",
       });
     }
   };
@@ -639,20 +619,16 @@ export default function ExpensesPage() {
     if (!editExpenseDialog.expense) return;
 
     if (!editSelectedCategory || !editExpenseAmount) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Необхідно вказати категорію та суму",
-        variant: "destructive",
       });
       return;
     }
 
     const amount = parseFloat(editExpenseAmount);
     if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сума має бути більше нуля",
-        variant: "destructive",
       });
       return;
     }
@@ -668,16 +644,13 @@ export default function ExpensesPage() {
         expenses.map((e) => (e.id === updatedExpense.id ? updatedExpense : e))
       );
       setEditExpenseDialog({ isOpen: false, expense: null });
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Витрату оновлено",
       });
     } catch (error) {
       console.error("Помилка при оновленні витрати:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося оновити витрату",
-        variant: "destructive",
       });
     }
   };
@@ -695,10 +668,8 @@ export default function ExpensesPage() {
     if (!editCategoryDialog.category) return;
 
     if (!editCategoryName.trim()) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Назва категорії не може бути порожньою",
-        variant: "destructive",
       });
       return;
     }
@@ -715,16 +686,13 @@ export default function ExpensesPage() {
         )
       );
       setEditCategoryDialog({ isOpen: false, category: null });
-      toast({
-        title: "Успіх",
+      toast.success("Успіх", {
         description: "Категорію оновлено",
       });
     } catch (error) {
       console.error("Помилка при оновленні категорії:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Не вдалося оновити категорію",
-        variant: "destructive",
       });
     }
   };
@@ -1359,8 +1327,6 @@ export default function ExpensesPage() {
         )}
       </div>
 
-      {/* Компонент для відображення тостів */}
-      <Toaster />
     </div>
   );
 }

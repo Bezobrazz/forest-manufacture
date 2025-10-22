@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -75,10 +75,8 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
 
     try {
       if (!selectedProduct || !quantity) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: "Виберіть продукт та вкажіть кількість",
-          variant: "destructive",
         });
         return;
       }
@@ -87,10 +85,8 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
       const quantityValue = Number.parseFloat(quantity);
 
       if (isNaN(quantityValue)) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: "Кількість повинна бути числом",
-          variant: "destructive",
         });
         return;
       }
@@ -102,8 +98,7 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
       );
 
       if (result.success) {
-        toast({
-          title: "Успішно",
+        toast.success("Успішно", {
           description: "Кількість на складі успішно оновлено",
         });
 
@@ -113,17 +108,13 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
         setNotes("");
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося оновити кількість на складі",
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при оновленні кількості на складі",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);

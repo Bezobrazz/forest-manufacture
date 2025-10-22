@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -90,10 +90,8 @@ export function InventoryShipForm({
 
     try {
       if (!selectedProduct || !quantity) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: "Виберіть продукт та вкажіть кількість",
-          variant: "destructive",
         });
         setIsPending(false);
         return;
@@ -102,20 +100,16 @@ export function InventoryShipForm({
       const quantityValue = Number.parseFloat(quantity);
 
       if (isNaN(quantityValue) || quantityValue <= 0) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: "Кількість повинна бути додатнім числом",
-          variant: "destructive",
         });
         setIsPending(false);
         return;
       }
 
       if (quantityValue > maxQuantity) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: `Недостатньо продукції на складі. Доступно: ${maxQuantity}`,
-          variant: "destructive",
         });
         setIsPending(false);
         return;
@@ -135,8 +129,7 @@ export function InventoryShipForm({
         setNotes("");
 
         // Показуємо тост
-        toast({
-          title: "Успішно",
+        toast.success("Успішно", {
           description: "Продукцію успішно відвантажено зі складу",
         });
 
@@ -150,17 +143,13 @@ export function InventoryShipForm({
           }
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося відвантажити продукцію",
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при відвантаженні продукції",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);

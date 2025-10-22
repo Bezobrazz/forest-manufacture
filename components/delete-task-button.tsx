@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteTask } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,24 +39,19 @@ export function DeleteTaskButton({
       const result = await deleteTask(taskId);
 
       if (result.success) {
-        toast({
-          title: "Задачу видалено",
+        toast.success("Задачу видалено", {
           description: "Задачу успішно видалено",
         });
         router.refresh();
         onTaskDeleted?.();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні задачі",
-        variant: "destructive",
       });
     } finally {
       setIsPending(false);

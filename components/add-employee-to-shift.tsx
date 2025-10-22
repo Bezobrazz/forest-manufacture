@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { addEmployeeToShift } from "@/app/actions"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Employee, Shift } from "@/lib/types"
 
@@ -22,10 +22,8 @@ export function AddEmployeeToShift({ shift, employees, existingEmployeeIds }: Ad
 
   async function handleAddEmployee() {
     if (!selectedEmployeeId) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Виберіть працівника",
-        variant: "destructive",
       })
       return
     }
@@ -40,23 +38,18 @@ export function AddEmployeeToShift({ shift, employees, existingEmployeeIds }: Ad
       const result = await addEmployeeToShift(formData)
 
       if (result.success) {
-        toast({
-          title: "Працівника додано",
+        toast.success("Працівника додано", {
           description: "Працівника успішно додано до зміни",
         })
         setSelectedEmployeeId("")
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         })
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при додаванні працівника",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

@@ -5,7 +5,7 @@ import type { Product, Production, Shift } from "@/lib/types";
 import { updateProduction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 
@@ -53,10 +53,8 @@ export function ProductionItemsForm({
 
     const numericQuantity = Number.parseFloat(quantity);
     if (isNaN(numericQuantity)) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Введіть коректне числове значення",
-        variant: "destructive",
       });
       return;
     }
@@ -99,8 +97,7 @@ export function ProductionItemsForm({
           onProductionUpdated(updatedProduction);
         }
 
-        toast({
-          title: "Дані оновлено",
+        toast.success("Дані оновлено", {
           description: "Кількість продукції успішно оновлено",
         });
         // Примусово оновлюємо сторінку
@@ -108,18 +105,14 @@ export function ProductionItemsForm({
           router.refresh();
         }, 1000); // Затримка в 1 секунду
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося оновити кількість продукції",
-          variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Error updating production:", error);
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при оновленні кількості продукції",
-        variant: "destructive",
       });
     } finally {
       setPendingProducts((prev) => {

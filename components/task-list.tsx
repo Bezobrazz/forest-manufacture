@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateTaskStatus, deleteTask } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Calendar } from "lucide-react";
 import { formatDate } from "@/lib/utils";
@@ -68,25 +68,20 @@ export function TaskList({ tasks }: TaskListProps) {
       );
 
       if (result.success) {
-        toast({
-          title: "Успіх",
+        toast.success("Успіх", {
           description: `Задачу позначено як ${
             currentStatus === "completed" ? "виконану" : "невиконану"
           }`,
         });
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при оновленні статусу",
-        variant: "destructive",
       });
     } finally {
       setIsPending(null);
@@ -99,23 +94,18 @@ export function TaskList({ tasks }: TaskListProps) {
       const result = await deleteTask(taskId);
 
       if (result.success) {
-        toast({
-          title: "Задачу видалено",
+        toast.success("Задачу видалено", {
           description: "Задачу успішно видалено",
         });
         router.refresh();
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при видаленні задачі",
-        variant: "destructive",
       });
     } finally {
       setIsPending(null);

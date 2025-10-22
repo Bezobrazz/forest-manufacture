@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ProductCategory } from "@/lib/types"
 
@@ -45,10 +45,8 @@ export function ProductForm({ categories = [], onProductAdded }: ProductFormProp
     try {
       // Перевіряємо, що винагорода є числом, якщо вона вказана
       if (formData.reward && isNaN(Number(formData.reward))) {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: "Винагорода повинна бути числом",
-          variant: "destructive",
         })
         setIsPending(false)
         return
@@ -80,8 +78,7 @@ export function ProductForm({ categories = [], onProductAdded }: ProductFormProp
       const result = await createProduct(submitFormData)
 
       if (result.success) {
-        toast({
-          title: "Продукт додано",
+        toast.success("Продукт додано", {
           description: "Новий продукт успішно додано до системи",
         })
 
@@ -103,18 +100,14 @@ export function ProductForm({ categories = [], onProductAdded }: ProductFormProp
           }
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося додати продукт",
-          variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Помилка при додаванні продукту:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при додаванні продукту",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

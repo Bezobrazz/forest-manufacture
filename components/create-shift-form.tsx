@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { Employee } from "@/lib/types"
 
@@ -44,8 +44,7 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
       }
 
       if (result.success) {
-        toast({
-          title: "Зміну створено",
+        toast.success("Зміну створено", {
           description: "Нову зміну успішно створено",
         })
 
@@ -56,17 +55,13 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
           router.push("/")
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error,
-          variant: "destructive",
         })
       }
     } catch (error) {
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при створенні зміни",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)

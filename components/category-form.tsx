@@ -7,7 +7,7 @@ import { createProductCategory } from "@/app/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 
 interface CategoryFormProps {
   onCategoryAdded?: () => Promise<void>
@@ -28,8 +28,7 @@ export function CategoryForm({ onCategoryAdded }: CategoryFormProps) {
       const result = await createProductCategory(formData)
 
       if (result.success) {
-        toast({
-          title: "Категорію додано",
+        toast.success("Категорію додано", {
           description: "Нову категорію продуктів успішно додано",
         })
 
@@ -46,18 +45,14 @@ export function CategoryForm({ onCategoryAdded }: CategoryFormProps) {
           }
         }
       } else {
-        toast({
-          title: "Помилка",
+        toast.error("Помилка", {
           description: result.error || "Не вдалося додати категорію",
-          variant: "destructive",
         })
       }
     } catch (error) {
       console.error("Помилка при додаванні категорії:", error)
-      toast({
-        title: "Помилка",
+      toast.error("Помилка", {
         description: "Сталася помилка при додаванні категорії",
-        variant: "destructive",
       })
     } finally {
       setIsPending(false)
