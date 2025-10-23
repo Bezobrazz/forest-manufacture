@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { deleteProductCategory } from "@/app/actions"
-import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
+import { useState } from "react";
+import { deleteProductCategory } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -13,13 +13,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Trash2 } from "lucide-react"
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 
 interface DeleteCategoryButtonProps {
-  categoryId: number
-  categoryName?: string
-  onCategoryDeleted?: () => Promise<void>
+  categoryId: number;
+  categoryName?: string;
+  onCategoryDeleted?: () => Promise<void>;
 }
 
 export function DeleteCategoryButton({
@@ -27,49 +27,52 @@ export function DeleteCategoryButton({
   categoryName = "цю категорію",
   onCategoryDeleted,
 }: DeleteCategoryButtonProps) {
-  const [isPending, setIsPending] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [isPending, setIsPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
   async function handleDelete() {
-    console.log("Починаємо видалення категорії:", categoryId, categoryName)
-    setIsPending(true)
+    console.log("Починаємо видалення категорії:", categoryId, categoryName);
+    setIsPending(true);
 
     try {
-      const result = await deleteProductCategory(categoryId)
-      console.log("Результат видалення категорії:", result)
+      const result = await deleteProductCategory(categoryId);
+      console.log("Результат видалення категорії:", result);
 
       if (result.success) {
-        let message = `Категорію "${categoryName}" успішно видалено з системи`
-        if (result.updatedProducts > 0) {
-          message += `. ${result.updatedProducts} продуктів переміщено в "без категорії"`
+        let message = `Категорію "${categoryName}" успішно видалено з системи`;
+        if (result.updatedProducts && result.updatedProducts > 0) {
+          message += `. ${result.updatedProducts} продуктів переміщено в "без категорії"`;
         }
 
         toast.success("Категорію видалено", {
           description: message,
-        })
-        setOpen(false)
+        });
+        setOpen(false);
 
         // Оновлюємо список категорій без перезавантаження сторінки
         if (onCategoryDeleted) {
           try {
-            await onCategoryDeleted()
+            await onCategoryDeleted();
           } catch (refreshError) {
-            console.error("Помилка при оновленні списку категорій:", refreshError)
+            console.error(
+              "Помилка при оновленні списку категорій:",
+              refreshError
+            );
             // Не показуємо помилку користувачу, оскільки основна операція успішна
           }
         }
       } else {
         toast.error("Помилка", {
           description: result.error || "Неможливо видалити категорію",
-        })
+        });
       }
     } catch (error) {
-      console.error("Помилка видалення категорії:", error)
+      console.error("Помилка видалення категорії:", error);
       toast.error("Помилка", {
         description: "Сталася помилка при видаленні категорії",
-      })
+      });
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
   }
 
@@ -92,12 +95,16 @@ export function DeleteCategoryButton({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Видалити категорію "{categoryName}"?</AlertDialogTitle>
+          <AlertDialogTitle>
+            Видалити категорію "{categoryName}"?
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            Ви впевнені, що хочете видалити цю категорію? Цю дію неможливо скасувати.
+            Ви впевнені, що хочете видалити цю категорію? Цю дію неможливо
+            скасувати.
             <br />
             <br />
-            Якщо в цій категорії є продукти, вони будуть автоматично переміщені в "без категорії".
+            Якщо в цій категорії є продукти, вони будуть автоматично переміщені
+            в "без категорії".
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -114,6 +121,5 @@ export function DeleteCategoryButton({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 }
-

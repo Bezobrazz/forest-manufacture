@@ -489,21 +489,16 @@ export async function getProductionStats(
       let totalProduction = 0;
       const productionByCategory: Record<string, number> = {};
 
-      productionData.forEach(
-        (item: {
-          quantity: number;
-          product?: { category_id: number | null };
-        }) => {
-          totalProduction += item.quantity;
+      productionData.forEach((item: any) => {
+        totalProduction += item.quantity;
 
-          const categoryName = item.product?.category_id
-            ? (item.product as any)?.product_categories?.name || "Без категорії"
-            : "Без категорії";
+        const categoryName = item.product?.category_id
+          ? item.product?.product_categories?.name || "Без категорії"
+          : "Без категорії";
 
-          productionByCategory[categoryName] =
-            (productionByCategory[categoryName] || 0) + item.quantity;
-        }
-      );
+        productionByCategory[categoryName] =
+          (productionByCategory[categoryName] || 0) + item.quantity;
+      });
 
       return { totalProduction, productionByCategory };
     } catch (error) {
@@ -1083,12 +1078,12 @@ export async function deleteShift(shiftId: number) {
 
       // 4. Оновлюємо кількість на складі для кожного продукту
       for (const item of productionData || []) {
-        if (!item.product || !item.product.id) {
+        if (!item.product || !(item.product as any).id) {
           console.error("Invalid product data:", item);
           continue;
         }
 
-        const productId = item.product.id;
+        const productId = (item.product as any).id;
 
         // 4.1 Отримуємо поточну кількість на складі
         const { data: inventoryData, error: inventoryError } = await supabase
@@ -1214,6 +1209,8 @@ export async function updateProduct(formData: FormData) {
         : Number(formData.get("category_id"));
     const reward =
       formData.get("reward") === "" ? null : Number(formData.get("reward"));
+    const cost =
+      formData.get("cost") === "" ? null : Number(formData.get("cost"));
 
     // Логуємо отримані дані
     console.log("updateProduct отримав такі дані:");
@@ -1222,6 +1219,7 @@ export async function updateProduct(formData: FormData) {
     console.log("Опис:", description);
     console.log("Категорія ID:", category_id);
     console.log("Винагорода:", reward, "Тип:", typeof reward);
+    console.log("Вартість:", cost, "Тип:", typeof cost);
 
     if (!id || !name) {
       return {
@@ -1237,6 +1235,7 @@ export async function updateProduct(formData: FormData) {
         description: description,
         category_id: category_id,
         reward: reward,
+        cost: cost,
       };
 
       console.log("Дані для оновлення:", updateData);
@@ -1320,10 +1319,12 @@ export async function createProduct(formData: FormData) {
     const description = formData.get("description") as string;
     const category_id_raw = formData.get("category_id") as string;
     const reward_raw = formData.get("reward") as string;
+    const cost_raw = formData.get("cost") as string;
 
     // Обробка значень
     const category_id = category_id_raw === "" ? null : Number(category_id_raw);
     const reward = reward_raw === "" ? null : Number(reward_raw);
+    const cost = cost_raw === "" ? null : Number(cost_raw);
 
     // Логування для відлагодження
     console.log("createProduct отримав такі дані:");
@@ -1331,6 +1332,7 @@ export async function createProduct(formData: FormData) {
     console.log("Опис:", description);
     console.log("Категорія ID:", category_id);
     console.log("Винагорода:", reward, "Тип:", typeof reward);
+    console.log("Вартість:", cost, "Тип:", typeof cost);
 
     if (!name) {
       return { success: false, error: "Необхідно вказати назву продукту" };
@@ -1339,7 +1341,7 @@ export async function createProduct(formData: FormData) {
     try {
       const { data, error } = await supabase
         .from("products")
-        .insert([{ name, description, category_id, reward }])
+        .insert([{ name, description, category_id, reward, cost }])
         .select();
 
       if (error) {
