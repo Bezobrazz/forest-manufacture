@@ -30,9 +30,12 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
 
   async function handleComplete() {
     setIsPending(true);
+    console.log("Starting shift completion for shift ID:", shift.id);
 
     try {
       const result = await completeShift(shift.id);
+
+      console.log("Shift completion result:", result);
 
       if (result.success) {
         toast.success("Зміну завершено", {
@@ -60,11 +63,27 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(newOpen) => {
+        if (!isPending) {
+          setOpen(newOpen);
+        }
+      }}
+    >
       <AlertDialogTrigger asChild>
-        <Button className="gap-2">
-          <CheckCircle className="h-4 w-4" />
-          <span>Завершити зміну</span>
+        <Button className="gap-2" disabled={isPending}>
+          {isPending ? (
+            <>
+              <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+              <span>Завершення...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle className="h-4 w-4" />
+              <span>Завершити зміну</span>
+            </>
+          )}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -77,7 +96,7 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Скасувати</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>Скасувати</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleComplete}
             disabled={isPending}
