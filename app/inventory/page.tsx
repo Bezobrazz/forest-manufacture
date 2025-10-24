@@ -183,6 +183,13 @@ export default function InventoryPage() {
   // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(inventoryByCategory).sort();
 
+  // Розраховуємо загальну вартість інвентаря
+  const totalInventoryValue = inventory.reduce((total, item) => {
+    const productCost = item.product?.cost || 0;
+    const quantity = item.quantity || 0;
+    return total + productCost * quantity;
+  }, 0);
+
   // Функція для отримання номера фракції з опису продукту
   function getFractionNumber(productDescription?: string): number {
     if (!productDescription) return 999;
@@ -215,6 +222,10 @@ export default function InventoryPage() {
         <h1 className="text-3xl font-bold mb-2">Управління складом</h1>
         <p className="text-muted-foreground">
           Перегляд та управління запасами продукції на складі
+        </p>
+        <p className="text-muted-foreground">
+          Вартість поточних запасів:{" "}
+          {totalInventoryValue.toLocaleString("uk-UA")} грн
         </p>
       </div>
 
