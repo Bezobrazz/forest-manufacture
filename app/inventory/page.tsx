@@ -282,15 +282,18 @@ export default function InventoryPage() {
       </div>
 
       <Tabs defaultValue="inventory" className="space-y-6">
-        <TabsList className="flex py-4 flex-col gap-2 max-w-xs w-full bg-muted p-2 rounded-lg mx-auto my-4 shadow-sm sm:flex-row sm:w-full sm:max-w-none">
-          <TabsTrigger value="inventory" className="w-full">
-            Поточні запаси
+        <TabsList className="grid w-full grid-cols-3 bg-muted p-1 rounded-lg">
+          <TabsTrigger value="inventory" className="text-sm">
+            <span className="hidden sm:inline">Поточні запаси</span>
+            <span className="sm:hidden">Запаси</span>
           </TabsTrigger>
-          <TabsTrigger value="transactions" className="w-full">
-            Історія операцій
+          <TabsTrigger value="transactions" className="text-sm">
+            <span className="hidden sm:inline">Історія операцій</span>
+            <span className="sm:hidden">Іст. опер.</span>
           </TabsTrigger>
-          <TabsTrigger value="management" className="w-full">
-            Управління складом
+          <TabsTrigger value="management" className="text-sm">
+            <span className="hidden sm:inline">Управління складом</span>
+            <span className="sm:hidden">Упр. склад.</span>
           </TabsTrigger>
         </TabsList>
 
