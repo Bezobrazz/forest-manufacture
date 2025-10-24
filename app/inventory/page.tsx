@@ -15,7 +15,15 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Package, ArrowUp, ArrowDown, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Package,
+  ArrowUp,
+  ArrowDown,
+  Settings,
+  DollarSign,
+  Coins,
+} from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
@@ -220,13 +228,57 @@ export default function InventoryPage() {
 
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Управління складом</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground mb-6">
           Перегляд та управління запасами продукції на складі
         </p>
-        <p className="text-muted-foreground">
-          Вартість поточних запасів:{" "}
-          {totalInventoryValue.toLocaleString("uk-UA")} грн
-        </p>
+
+        {/* Статистична панель з метриками */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Coins className="h-5 w-5 text-green-600 mr-2" />
+                <h3 className="text-sm text-muted-foreground">
+                  Загальна вартість запасів
+                </h3>
+              </div>
+              <p className="text-2xl font-bold text-green-700">
+                {totalInventoryValue.toLocaleString("uk-UA")} грн
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Package className="h-5 w-5 text-blue-600 mr-2" />
+                <h3 className="text-sm text-muted-foreground">
+                  Кількість позицій
+                </h3>
+              </div>
+              <p className="text-2xl font-bold text-blue-700">
+                {inventory.length}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Package className="h-5 w-5 text-orange-600 mr-2" />
+                <h3 className="text-sm text-muted-foreground">
+                  Загальна кількість
+                </h3>
+              </div>
+              <p className="text-2xl font-bold text-orange-700">
+                {inventory
+                  .reduce((total, item) => total + (item.quantity || 0), 0)
+                  .toLocaleString("uk-UA")}{" "}
+                шт
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <Tabs defaultValue="inventory" className="space-y-6">
