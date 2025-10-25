@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   getActiveShifts,
   getShifts,
@@ -176,6 +177,8 @@ function LoadingSkeleton() {
 }
 
 export default function HomePage() {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [data, setData] = useState<{
     shifts: ShiftWithDetails[];
     activeShifts: ShiftWithDetails[];
@@ -416,12 +419,19 @@ export default function HomePage() {
               <div className="text-3xl font-bold">{activeShiftsCount}</div>
             </CardContent>
             <CardFooter>
-              <Link href="/shifts" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <span>Переглянути зміни</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/shifts");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span>Переглянути зміни</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
             </CardFooter>
           </Card>
         )}
@@ -450,12 +460,19 @@ export default function HomePage() {
               <div className="text-3xl font-bold">{employeesCount}</div>
             </CardContent>
             <CardFooter>
-              <Link href="/employees" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <span>Керувати працівниками</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/employees");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span>Керувати працівниками</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
             </CardFooter>
           </Card>
         )}
@@ -484,12 +501,19 @@ export default function HomePage() {
               <div className="text-3xl font-bold">{productsCount}</div>
             </CardContent>
             <CardFooter>
-              <Link href="/products" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <span>Керувати продукцією</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/products");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span>Керувати продукцією</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
             </CardFooter>
           </Card>
         )}
@@ -518,12 +542,19 @@ export default function HomePage() {
               <div className="text-3xl font-bold">{totalInventory} шт</div>
             </CardContent>
             <CardFooter>
-              <Link href="/inventory" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <span>Управління складом</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/inventory");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span>Управління складом</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
             </CardFooter>
           </Card>
         )}
@@ -552,12 +583,19 @@ export default function HomePage() {
               <div className="text-3xl font-bold">{activeShiftsCount}</div>
             </CardContent>
             <CardFooter>
-              <Link href="/expenses" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <span>Переглянути витрати</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/expenses");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span>Переглянути витрати</span>
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
             </CardFooter>
           </Card>
         )}
@@ -836,16 +874,20 @@ export default function HomePage() {
                 </div>
               )}
             </div>
-            <Link href="/statistics">
-              <Button
-                variant="outline"
-                className="w-full flex items-center justify-center gap-2"
-              >
-                <PieChart className="h-4 w-4" />
-                <span>Детальна статистика</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              className="w-full flex items-center justify-center gap-2"
+              onClick={() => {
+                startTransition(() => {
+                  router.push("/statistics");
+                });
+              }}
+              disabled={isPending}
+            >
+              <PieChart className="h-4 w-4" />
+              <span>Детальна статистика</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </CardContent>
         </Card>
       </div>

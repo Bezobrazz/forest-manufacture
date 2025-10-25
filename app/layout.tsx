@@ -5,8 +5,8 @@ import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Облік Виробництва",
-  description: "Created with v0",
-  generator: "v0.dev",
+  description: "ERP для виробництва Форест Україна",
+  generator: "My ERP",
   icons: {
     icon: "/favicon.png",
   },
