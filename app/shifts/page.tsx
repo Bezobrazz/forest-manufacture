@@ -16,6 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { NavigationButton } from "@/components/navigation-button";
 import { formatDate, getWeekNumber } from "@/lib/utils";
 
 import {
@@ -221,21 +222,19 @@ export default async function ShiftsPage({
           <div className="flex items-center gap-2">
             {!useDateRange && (
               <>
-                <Link href={getPreviousWeek()}>
-                  <Button variant="outline" size="sm">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href={getCurrentWeekUrl()}>
-                  <Button variant="outline" size="sm">
-                    Поточний тиждень
-                  </Button>
-                </Link>
-                <Link href={getNextWeek()}>
-                  <Button variant="outline" size="sm">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <NavigationButton href={getPreviousWeek()}>
+                  <ChevronLeft className="h-4 w-4" />
+                </NavigationButton>
+                <NavigationButton
+                  href={getCurrentWeekUrl()}
+                  isCurrentWeek={currentWeek === getWeekNumber(new Date())}
+                  currentWeekMessage="Ви вже переглядаєте поточний тиждень"
+                >
+                  Поточний тиждень
+                </NavigationButton>
+                <NavigationButton href={getNextWeek()}>
+                  <ChevronRight className="h-4 w-4" />
+                </NavigationButton>
               </>
             )}
           </div>
