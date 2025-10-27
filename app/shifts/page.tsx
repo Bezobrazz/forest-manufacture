@@ -17,7 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { NavigationButton } from "@/components/navigation-button";
-import { formatDate, getWeekNumber } from "@/lib/utils";
+import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 
 import {
   ArrowLeft,
@@ -276,7 +276,9 @@ export default async function ShiftsPage({
                   Загальна сума за тиждень
                 </div>
                 <div className="text-2xl font-bold">
-                  {weeklyTotalWages.toFixed(2)} грн
+                  {formatNumberWithUnit(weeklyTotalWages, "грн", {
+                    maximumFractionDigits: 2,
+                  })}
                 </div>
               </div>
               <div className="bg-muted p-4 rounded-lg">
@@ -315,7 +317,9 @@ export default async function ShiftsPage({
                           </div>
                         </div>
                         <div className="font-medium">
-                          {dayData.totalWages.toFixed(2)} грн
+                          {formatNumberWithUnit(dayData.totalWages, "грн", {
+                            maximumFractionDigits: 2,
+                          })}
                         </div>
                       </div>
                     );
@@ -412,7 +416,9 @@ export default async function ShiftsPage({
                             <div className="flex items-center gap-1 text-xs mt-1">
                               <DollarSign className="h-3 w-3 text-primary" />
                               <span className="font-medium">
-                                {shiftWages.toFixed(2)} грн
+                                {formatNumberWithUnit(shiftWages, "грн", {
+                                  maximumFractionDigits: 2,
+                                })}
                               </span>
                             </div>
                           );

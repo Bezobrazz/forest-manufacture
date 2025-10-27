@@ -25,6 +25,11 @@ import {
 } from "lucide-react";
 import type { ShiftWithDetails, Product, ProductCategory } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import {
+  formatNumber,
+  formatNumberWithUnit,
+  formatPercentage,
+} from "@/lib/utils";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -183,7 +188,9 @@ export default function StatisticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">{totalProduction} шт</div>
+            <div className="text-4xl font-bold">
+              {formatNumberWithUnit(totalProduction, "шт")}
+            </div>
           </CardContent>
         </Card>
 
@@ -198,7 +205,9 @@ export default function StatisticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">{shiftsWithProduction}</div>
+            <div className="text-4xl font-bold">
+              {formatNumber(shiftsWithProduction)}
+            </div>
           </CardContent>
         </Card>
 
@@ -214,7 +223,9 @@ export default function StatisticsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold">
-              {averageProductionPerShift.toFixed(1)} шт
+              {formatNumberWithUnit(averageProductionPerShift, "шт", {
+                maximumFractionDigits: 1,
+              })}
             </div>
           </CardContent>
         </Card>
@@ -253,9 +264,10 @@ export default function StatisticsPage() {
                           backgroundColor: color,
                           transition: "width 1s ease-in-out",
                         }}
-                        title={`${category}: ${amount} шт (${percentage.toFixed(
-                          1
-                        )}%)`}
+                        title={`${category}: ${formatNumberWithUnit(
+                          amount,
+                          "шт"
+                        )} (${formatPercentage(percentage, 1)})`}
                       ></div>
                     );
                   })}
@@ -276,7 +288,8 @@ export default function StatisticsPage() {
                         <div className="flex-1 flex justify-between items-center">
                           <span className="font-medium">{category}</span>
                           <span className="text-sm text-muted-foreground">
-                            {amount} шт ({percentage.toFixed(1)}%)
+                            {formatNumberWithUnit(amount, "шт")} (
+                            {formatPercentage(percentage, 1)})
                           </span>
                         </div>
                       </div>
@@ -313,7 +326,9 @@ export default function StatisticsPage() {
                     <div key={category} className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="font-medium">{category}</span>
-                        <span className="text-sm font-medium">{amount} шт</span>
+                        <span className="text-sm font-medium">
+                          {formatNumberWithUnit(amount, "шт")}
+                        </span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
                         <div
@@ -425,9 +440,9 @@ export default function StatisticsPage() {
                                   {product.name}
                                 </span>
                                 <span className="text-sm font-medium">
-                                  {total} шт{" "}
+                                  {formatNumberWithUnit(total, "шт")}{" "}
                                   <span className="text-muted-foreground">
-                                    ({percentage.toFixed(1)}%)
+                                    ({formatPercentage(percentage, 1)})
                                   </span>
                                 </span>
                               </div>
@@ -445,9 +460,9 @@ export default function StatisticsPage() {
                                   }}
                                 >
                                   <span className="text-xs font-medium text-white whitespace-nowrap overflow-hidden text-ellipsis">
-                                    {total}{" "}
+                                    {formatNumber(total)}{" "}
                                     <span className="opacity-80">
-                                      ({percentage.toFixed(1)}%)
+                                      ({formatPercentage(percentage, 1)})
                                     </span>
                                   </span>
                                 </div>

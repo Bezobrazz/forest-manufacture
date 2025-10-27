@@ -24,7 +24,7 @@ import {
   DollarSign,
   Coins,
 } from "lucide-react";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatNumberWithUnit } from "@/lib/utils";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
 import { useEffect, useState } from "react";
@@ -425,7 +425,7 @@ export default function InventoryPage() {
                         className="ml-2 whitespace-nowrap"
                       >
                         {transaction.quantity > 0 ? "+" : ""}
-                        {transaction.quantity} шт
+                        {formatNumberWithUnit(transaction.quantity, "шт")}
                       </Badge>
                     </div>
                   ))}

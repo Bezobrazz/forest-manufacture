@@ -25,7 +25,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDateTime, formatDate } from "@/lib/utils";
+import {
+  formatDateTime,
+  formatDate,
+  formatNumber,
+  formatNumberWithUnit,
+} from "@/lib/utils";
 import {
   Calendar,
   Clock,
@@ -416,7 +421,9 @@ export default function HomePage() {
               <CardDescription>Кількість активних змін</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+              <div className="text-3xl font-bold">
+                {formatNumber(activeShiftsCount)}
+              </div>
             </CardContent>
             <CardFooter>
               <Button
@@ -457,7 +464,9 @@ export default function HomePage() {
               <CardDescription>Загальна кількість працівників</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{employeesCount}</div>
+              <div className="text-3xl font-bold">
+                {formatNumber(employeesCount)}
+              </div>
             </CardContent>
             <CardFooter>
               <Button
@@ -498,7 +507,9 @@ export default function HomePage() {
               <CardDescription>Загальна кількість продуктів</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{productsCount}</div>
+              <div className="text-3xl font-bold">
+                {formatNumber(productsCount)}
+              </div>
             </CardContent>
             <CardFooter>
               <Button
@@ -539,7 +550,9 @@ export default function HomePage() {
               <CardDescription>Загальна кількість на складі</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{totalInventory} шт</div>
+              <div className="text-3xl font-bold">
+                {formatNumberWithUnit(totalInventory, "шт")}
+              </div>
             </CardContent>
             <CardFooter>
               <Button
@@ -580,7 +593,9 @@ export default function HomePage() {
               <CardDescription>Кількість витрат за тиждень</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activeShiftsCount}</div>
+              <div className="text-3xl font-bold">
+                {formatNumber(activeShiftsCount)}
+              </div>
             </CardContent>
             <CardFooter>
               <Button

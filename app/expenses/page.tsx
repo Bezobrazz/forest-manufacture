@@ -24,7 +24,7 @@ import {
 } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, formatDate } from "@/lib/utils";
+import { formatDateTime, formatDate, formatNumberWithUnit } from "@/lib/utils";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -737,7 +737,10 @@ export default function ExpensesPage() {
         }
         onConfirm={confirmDeleteExpense}
         title="Видалити витрату"
-        description={`Ви впевнені, що хочете видалити витрату на суму ${deleteExpenseDialog.expenseAmount.toLocaleString()} ₴?`}
+        description={`Ви впевнені, що хочете видалити витрату на суму ${formatNumberWithUnit(
+          deleteExpenseDialog.expenseAmount,
+          "₴"
+        )}?`}
       />
 
       {/* Модальне вікно редагування категорії */}
@@ -1151,7 +1154,7 @@ export default function ExpensesPage() {
           </Popover>
         </div>
         <div className="text-2xl font-bold">
-          {totalExpenses.toLocaleString()} ₴
+          {formatNumberWithUnit(totalExpenses, "₴")}
         </div>
       </div>
 
@@ -1203,7 +1206,7 @@ export default function ExpensesPage() {
             <CardContent>
               <div className="space-y-2">
                 <div className="text-2xl font-bold">
-                  {category.total.toLocaleString()} ₴
+                  {formatNumberWithUnit(category.total, "₴")}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {category.count} витрат
@@ -1237,7 +1240,7 @@ export default function ExpensesPage() {
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <div className="text-lg font-bold">
-                        {expense.amount.toLocaleString()} ₴
+                        {formatNumberWithUnit(expense.amount, "₴")}
                       </div>
                       <Button
                         variant="ghost"
@@ -1326,7 +1329,6 @@ export default function ExpensesPage() {
           </>
         )}
       </div>
-
     </div>
   );
 }

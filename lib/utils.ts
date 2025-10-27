@@ -82,3 +82,68 @@ export function getWeekNumber(date: Date): number {
   );
   return Math.floor(pastDays / 7) + 1;
 }
+
+/**
+ * Форматує число з українською локалізацією
+ * @param value Число для форматування
+ * @param options Опції форматування
+ * @returns Відформатоване число
+ */
+export function formatNumber(
+  value: number,
+  options: {
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+    useGrouping?: boolean;
+  } = {}
+): string {
+  const {
+    minimumFractionDigits = 0,
+    maximumFractionDigits = 2,
+    useGrouping = true,
+  } = options;
+
+  return new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits,
+    maximumFractionDigits,
+    useGrouping,
+  }).format(value);
+}
+
+/**
+ * Форматує число з одиницями вимірювання
+ * @param value Число для форматування
+ * @param unit Одиниця вимірювання
+ * @param options Опції форматування
+ * @returns Відформатоване число з одиницею
+ */
+export function formatNumberWithUnit(
+  value: number,
+  unit: string,
+  options: {
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+    useGrouping?: boolean;
+  } = {}
+): string {
+  const formattedNumber = formatNumber(value, options);
+  return `${formattedNumber} ${unit}`;
+}
+
+/**
+ * Форматує відсотки з українською локалізацією
+ * @param value Значення відсотка (0-100)
+ * @param decimalPlaces Кількість знаків після коми
+ * @returns Відформатований відсоток
+ */
+export function formatPercentage(
+  value: number,
+  decimalPlaces: number = 1
+): string {
+  return (
+    new Intl.NumberFormat("uk-UA", {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces,
+    }).format(value) + "%"
+  );
+}
