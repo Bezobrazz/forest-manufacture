@@ -864,7 +864,10 @@ export default function HomePage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4 mb-4">
-              <div className="text-4xl font-bold">{totalProduction} шт</div>
+              <div className="text-4xl font-bold">
+                {" "}
+                {formatNumberWithUnit(totalProduction, "шт")}
+              </div>
               {totalProduction > 0 && (
                 <div className="flex-1">
                   <div className="text-sm font-medium mb-2">
@@ -880,7 +883,7 @@ export default function HomePage() {
                         >
                           <Package className="h-3 w-3" />
                           <span>
-                            {category}: {total} шт
+                            {category}: {formatNumberWithUnit(total, "шт")}
                           </span>
                         </Badge>
                       )
