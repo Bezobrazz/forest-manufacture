@@ -63,6 +63,7 @@ import type {
   Task,
 } from "@/lib/types";
 import { toast } from "sonner";
+import { LogoutButton } from "@/components/auth/logout-button";
 
 type DefaultCards = {
   shifts: boolean;
@@ -324,58 +325,61 @@ export default function HomePage() {
           </p>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Menu className="h-4 w-4" />
-              <span>Швидкі дії</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <Link href="/shifts/new" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <Plus className="h-4 w-4 mr-2" />
-                <span>Створити нову зміну</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/employees" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <Users className="h-4 w-4 mr-2" />
-                <span>Керувати працівниками</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/products" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <Package className="h-4 w-4 mr-2" />
-                <span>Керувати продукцією</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/inventory" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <Boxes className="h-4 w-4 mr-2" />
-                <span>Управління складом</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/tasks" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <CheckSquare className="h-4 w-4 mr-2" />
-                <span>Задачі</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/statistics" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <PieChart className="h-4 w-4 mr-2" />
-                <span>Статистика виробництва</span>
-              </DropdownMenuItem>
-            </Link>
-            <Link href="/expenses" className="w-full">
-              <DropdownMenuItem className="cursor-pointer">
-                <DollarSign className="h-4 w-4 mr-2" />
-                <span>Облік витрат</span>
-              </DropdownMenuItem>
-            </Link>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <LogoutButton />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Menu className="h-4 w-4" />
+                <span>Швидкі дії</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <Link href="/shifts/new" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span>Створити нову зміну</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/employees" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Users className="h-4 w-4 mr-2" />
+                  <span>Керувати працівниками</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/products" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Package className="h-4 w-4 mr-2" />
+                  <span>Керувати продукцією</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/inventory" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Boxes className="h-4 w-4 mr-2" />
+                  <span>Управління складом</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/tasks" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <CheckSquare className="h-4 w-4 mr-2" />
+                  <span>Задачі</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/statistics" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <PieChart className="h-4 w-4 mr-2" />
+                  <span>Статистика виробництва</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/expenses" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  <span>Облік витрат</span>
+                </DropdownMenuItem>
+              </Link>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Кнопка "Показати приховані" */}
