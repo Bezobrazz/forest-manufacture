@@ -4,3 +4,4 @@ export function getSupabaseClient() {
   return createBrowserClient();
 }
 
+

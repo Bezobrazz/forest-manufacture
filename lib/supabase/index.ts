@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient as createSSRBrowserClient } from "@supabase/ssr"
 
 // Створюємо клієнт Supabase для серверного використання з кращою обробкою помилок
 export function createServerClient() {
@@ -60,12 +61,9 @@ export function createServerClient() {
   }
 }
 
-// Створюємо клієнт Supabase для клієнтського використання
-let clientSingleton: ReturnType<typeof createClient> | null = null
-
+// Створюємо клієнт Supabase для клієнтського використання з підтримкою cookies
+// Використовуємо @supabase/ssr для правильної роботи з cookies та middleware
 export function createBrowserClient() {
-  if (clientSingleton) return clientSingleton
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -78,7 +76,7 @@ export function createBrowserClient() {
     throw new Error("Supabase client credentials are missing")
   }
 
-  clientSingleton = createClient(supabaseUrl, supabaseKey)
-  return clientSingleton
+  // Використовуємо createBrowserClient з @supabase/ssr для правильної роботи з cookies
+  return createSSRBrowserClient(supabaseUrl, supabaseKey)
 }
 

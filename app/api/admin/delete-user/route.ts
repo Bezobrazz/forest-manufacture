@@ -1,11 +1,36 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server-auth";
+import { getUserRole } from "@/lib/auth/get-user-role";
 
 // ⚠️ ЦЕ ТИМЧАСОВИЙ API ROUTE ДЛЯ ВИДАЛЕННЯ КОРИСТУВАЧА
 // Після використання ВИДАЛІТЬ цей файл!
 
 export async function POST(request: Request) {
   try {
+    // Перевірка авторизації та ролі
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    // Перевірка, чи користувач має роль owner або admin
+    const userRole = await getUserRole(user.id);
+    if (!userRole || (userRole !== 'owner' && userRole !== 'admin')) {
+      return NextResponse.json(
+        { error: "Forbidden: Only owners and admins can delete users" },
+        { status: 403 }
+      );
+    }
+
     const { userId } = await request.json();
 
     if (!userId) {

@@ -22,3 +22,4 @@ WHERE recovery_token IS NULL;
 -- 2. Or contact Supabase support
 -- 3. Or use the Supabase Dashboard to manually fix the issue
 
+

@@ -137,3 +137,4 @@ supabase migration list
 2. Перевірте, що `.env.local` існує і має правильні значення
 3. Переконайтеся, що Supabase CLI встановлено: `supabase --version`
 
+

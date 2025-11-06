@@ -15,7 +15,6 @@ import {
   getTasks,
   updateTaskStatus,
 } from "@/app/actions";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   Card,
   CardContent,
@@ -289,75 +288,6 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
-    // Викликаємо getUserWithRole при завантаженні дашборду
-    const fetchUserWithRole = async () => {
-      try {
-        // Отримуємо користувача через клієнтський Supabase клієнт
-        const supabase = getSupabaseClient();
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        console.log("getUserWithRole - client getUser:", {
-          hasUser: !!user,
-          userId: user?.id,
-          userEmail: user?.email,
-          userError: userError?.message,
-        });
-
-        if (userError || !user) {
-          console.log("getUserWithRole - no user from client");
-          return;
-        }
-
-        // Отримуємо роль напряму з бази даних через клієнтський клієнт
-        const { data: userData, error: roleError } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        console.log("getUserWithRole - role query:", {
-          hasUserData: !!userData,
-          role: userData?.role,
-          roleError: roleError?.message,
-        });
-
-        let role = userData?.role || null;
-
-        // Якщо ролі немає, створюємо запис з роллю за замовчуванням
-        if (!role) {
-          const defaultRole = "worker";
-          const { error: upsertError } = await supabase
-            .from("users")
-            .upsert(
-              {
-                id: user.id,
-                email: user.email || "",
-                role: defaultRole,
-              },
-              {
-                onConflict: "id",
-              }
-            );
-
-          if (!upsertError) {
-            role = defaultRole;
-            console.log(`Created/updated user record with role: ${defaultRole}`);
-          } else {
-            console.error("Error creating/updating user record:", upsertError);
-          }
-        }
-
-        const result = { user, role };
-        console.log("getUserWithRole", result);
-      } catch (error) {
-        console.error("Помилка при отриманні користувача з роллю:", error);
-      }
-    };
-
-    fetchUserWithRole();
   }, []);
 
   // Обмежуємо кількість елементів для відображення на головній сторінці

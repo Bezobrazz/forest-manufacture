@@ -5,7 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -29,14 +36,15 @@ export default function LoginPage() {
 
       if (user) {
         const redirectTo = searchParams.get("redirectedFrom") || "/";
-        router.push(redirectTo);
+        // Використовуємо window.location для уникнення конфліктів
+        window.location.href = redirectTo;
       } else {
         setIsChecking(false);
       }
     };
 
     checkAuth();
-  }, [router, searchParams]);
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,19 +59,36 @@ export default function LoginPage() {
 
       if (error) {
         toast.error("Помилка авторизації", {
-          description: error.message === "Invalid login credentials" 
-            ? "Невірний email або пароль" 
-            : error.message,
+          description:
+            error.message === "Invalid login credentials"
+              ? "Невірний email або пароль"
+              : error.message,
         });
         return;
       }
 
       if (data.user) {
+        // Очікуємо, поки сесія збережеться в cookies
+        // Перевіряємо, що сесія дійсно збережена
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        // Перевіряємо, що сесія збережена
+        const {
+          data: { session: checkSession },
+        } = await supabase.auth.getSession();
+        if (!checkSession) {
+          // Якщо сесія не збережена, чекаємо ще трохи
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+
+        const redirectTo = searchParams.get("redirectedFrom") || "/";
+
+        // Показуємо повідомлення перед перенаправленням
         toast.success("Успішний вхід", {
           description: "Ви успішно авторизувалися",
         });
 
-        const redirectTo = searchParams.get("redirectedFrom") || "/";
+        // Використовуємо router.push з refresh для оновлення сесії
         router.push(redirectTo);
         router.refresh();
       }
@@ -148,4 +173,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

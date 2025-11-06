@@ -10,8 +10,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ArrowLeft, User } from "lucide-react";
+import { requireRole } from "@/lib/auth/require-role";
 
 export default async function EmployeesPage() {
+  // Перевірка прав доступу - дозволено для всіх авторизованих користувачів
+  await requireRole(["owner", "admin", "worker"]);
+
   const employees = await getEmployees();
 
   return (
