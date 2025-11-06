@@ -188,9 +188,12 @@ export default function StatisticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">
+            <div className="text-4xl font-bold mb-4">
               {formatNumberWithUnit(totalProduction, "шт")}
             </div>
+            <Button variant="outline" className="w-full">
+              Детальніше
+            </Button>
           </CardContent>
         </Card>
 
@@ -222,11 +225,14 @@ export default function StatisticsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold">
+            <div className="text-4xl font-bold mb-4">
               {formatNumberWithUnit(averageProductionPerShift, "шт", {
                 maximumFractionDigits: 1,
               })}
             </div>
+            <Button variant="outline" className="w-full">
+              Детальніше
+            </Button>
           </CardContent>
         </Card>
       </div>
