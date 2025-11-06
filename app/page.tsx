@@ -510,8 +510,8 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span>Переглянути зміни</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span className="flex-1 min-w-0 truncate">Переглянути зміни</span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
           </Card>
@@ -553,8 +553,8 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span>Керувати працівниками</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span className="flex-1 min-w-0 truncate">Керувати працівниками</span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
           </Card>
@@ -596,8 +596,8 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span>Керувати продукцією</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span className="flex-1 min-w-0 truncate">Керувати продукцією</span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
           </Card>
@@ -639,8 +639,8 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span>Управління складом</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span className="flex-1 min-w-0 truncate">Управління складом</span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
           </Card>
@@ -682,8 +682,8 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span>Переглянути витрати</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span className="flex-1 min-w-0 truncate">Переглянути витрати</span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
           </Card>
