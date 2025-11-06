@@ -33,7 +33,7 @@ export function LogoutButton() {
 
   return (
     <Button
-      variant="outline"
+      variant="destructive"
       size="sm"
       onClick={handleLogout}
       className="gap-2"
@@ -43,5 +43,3 @@ export function LogoutButton() {
     </Button>
   );
 }
-
-
