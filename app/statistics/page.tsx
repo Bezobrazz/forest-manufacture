@@ -30,7 +30,15 @@ import {
   formatNumberWithUnit,
   formatPercentage,
 } from "@/lib/utils";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -145,7 +153,7 @@ export default function StatisticsPage() {
   // Обчислення помісячних даних виробництва
   const monthlyProductionData = useMemo(() => {
     const monthlyData: Record<string, number> = {};
-    
+
     // Ініціалізуємо всі місяці поточного року нулями
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -189,8 +197,9 @@ export default function StatisticsPage() {
 
   // Обчислення середнього виробництва по місяцях
   const monthlyAverageProductionData = useMemo(() => {
-    const monthlyData: Record<string, { total: number; shiftsCount: number }> = {};
-    
+    const monthlyData: Record<string, { total: number; shiftsCount: number }> =
+      {};
+
     // Ініціалізуємо всі місяці поточного року нулями
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -214,8 +223,10 @@ export default function StatisticsPage() {
         });
 
         if (year === currentYear) {
-          monthlyData[monthKey].total = (monthlyData[monthKey].total || 0) + shiftTotal;
-          monthlyData[monthKey].shiftsCount = (monthlyData[monthKey].shiftsCount || 0) + 1;
+          monthlyData[monthKey].total =
+            (monthlyData[monthKey].total || 0) + shiftTotal;
+          monthlyData[monthKey].shiftsCount =
+            (monthlyData[monthKey].shiftsCount || 0) + 1;
         }
       }
     });
@@ -224,7 +235,8 @@ export default function StatisticsPage() {
     return Object.entries(monthlyData)
       .map(([key, data]) => {
         const [year, month] = key.split("-");
-        const average = data.shiftsCount > 0 ? data.total / data.shiftsCount : 0;
+        const average =
+          data.shiftsCount > 0 ? data.total / data.shiftsCount : 0;
         return {
           month: getMonthName(parseInt(month) - 1),
           average: average,
@@ -305,8 +317,8 @@ export default function StatisticsPage() {
             <div className="text-4xl font-bold mb-4">
               {formatNumberWithUnit(totalProduction, "шт")}
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => setShowMonthlyChart(!showMonthlyChart)}
             >
@@ -348,8 +360,8 @@ export default function StatisticsPage() {
                 maximumFractionDigits: 1,
               })}
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => setShowAverageChart(!showAverageChart)}
             >
@@ -380,27 +392,30 @@ export default function StatisticsPage() {
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={monthlyProductionData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="month" 
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis
                     tick={{ fontSize: 12 }}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }}
-                    label={{ value: "Кількість (шт)", angle: -90, position: "insideLeft" }}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => formatNumberWithUnit(value, "шт")}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    contentStyle={{ 
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "6px"
+                    label={{
+                      value: "Кількість (шт)",
+                      angle: -90,
+                      position: "insideLeft",
                     }}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="production" 
-                    stroke="hsl(var(--primary))" 
+                  <Tooltip
+                    formatter={(value: number) =>
+                      formatNumberWithUnit(value, "шт")
+                    }
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--background))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "6px",
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="production"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     dot={{ fill: "hsl(var(--primary))", r: 4 }}
                     activeDot={{ r: 6 }}
@@ -421,7 +436,8 @@ export default function StatisticsPage() {
               <span>Помісячний графік середнього виробництва</span>
             </CardTitle>
             <CardDescription>
-              Динаміка середньої кількості продукції на зміну по місяцях поточного року
+              Динаміка середньої кількості продукції на зміну по місяцях
+              поточного року
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -433,29 +449,32 @@ export default function StatisticsPage() {
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={monthlyAverageProductionData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="month" 
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis
                     tick={{ fontSize: 12 }}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }}
-                    label={{ value: "Середнє (шт/зміну)", angle: -90, position: "insideLeft" }}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => formatNumberWithUnit(value, "шт", {
-                      maximumFractionDigits: 1,
-                    })}
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    contentStyle={{ 
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "6px"
+                    label={{
+                      value: "Середнє (шт/зміну)",
+                      angle: -90,
+                      position: "insideLeft",
                     }}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="average" 
-                    stroke="hsl(var(--primary))" 
+                  <Tooltip
+                    formatter={(value: number) =>
+                      formatNumberWithUnit(value, "шт", {
+                        maximumFractionDigits: 1,
+                      })
+                    }
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--background))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "6px",
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="average"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     dot={{ fill: "hsl(var(--primary))", r: 4 }}
                     activeDot={{ r: 6 }}
