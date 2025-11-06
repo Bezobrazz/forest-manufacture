@@ -399,7 +399,7 @@ export default function HomePage() {
           <LogoutButton />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2">
                 <Menu className="h-4 w-4" />
                 <span>Швидкі дії</span>
               </Button>
