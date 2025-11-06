@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
-import { Footer } from "@/components/footer";
+import { ConditionalFooter } from "@/components/conditional-footer";
 import { RuntimeErrorHandler } from "@/components/runtime-error-handler";
 
 export const metadata: Metadata = {
@@ -23,10 +23,8 @@ export default function RootLayout({
     <html lang="uk">
       <body className="flex flex-col min-h-screen">
         <RuntimeErrorHandler />
-        <main className="flex-1">
-          {children}
-        </main>
-        <Footer />
+        <main className="flex-1">{children}</main>
+        <ConditionalFooter />
         <Toaster />
       </body>
     </html>

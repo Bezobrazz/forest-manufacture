@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const toastShownRef = useRef(false);
 
   useEffect(() => {
+    // Перевіряємо, чи користувач прийшов зі signup
+    const fromSignup = searchParams.get("fromSignup");
+    if (fromSignup === "true" && !toastShownRef.current) {
+      // Показуємо тост з повідомленням тільки один раз
+      toastShownRef.current = true;
+      toast.error("Реєстрація не можлива", {
+        description: "Зверніться до адміністратора для надання доступу",
+      });
+
+      // Видаляємо параметр з URL, щоб тост не показувався повторно
+      const newSearchParams = new URLSearchParams(searchParams.toString());
+      newSearchParams.delete("fromSignup");
+      const newUrl = newSearchParams.toString()
+        ? `/auth/login?${newSearchParams.toString()}`
+        : "/auth/login";
+      router.replace(newUrl);
+    }
+
     // Перевіряємо, чи користувач вже авторизований
     const checkAuth = async () => {
       const supabase = getSupabaseClient();
@@ -44,7 +63,7 @@ export default function LoginPage() {
     };
 
     checkAuth();
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,13 +178,13 @@ export default function LoginPage() {
               )}
             </Button>
             <div className="text-sm text-center text-muted-foreground">
-              Немає облікового запису?{" "}
-              <Link
+              Для отримання доступу, зверніться до адміністратора{" "}
+              {/* <Link
                 href="/auth/signup"
                 className="text-primary hover:underline font-medium"
               >
                 Зареєструватися
-              </Link>
+              </Link> */}
             </div>
           </CardFooter>
         </form>
