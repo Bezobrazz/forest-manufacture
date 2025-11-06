@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   getProductionStats,
@@ -30,6 +30,7 @@ import {
   formatNumberWithUnit,
   formatPercentage,
 } from "@/lib/utils";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -46,6 +47,7 @@ export default function StatisticsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showMonthlyChart, setShowMonthlyChart] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -120,6 +122,70 @@ export default function StatisticsPage() {
   const averageProductionPerShift =
     shiftsWithProduction > 0 ? totalProduction / shiftsWithProduction : 0;
 
+  // Функція для отримання назв місяців українською
+  const getMonthName = (monthIndex: number): string => {
+    const months = [
+      "Січень",
+      "Лютий",
+      "Березень",
+      "Квітень",
+      "Травень",
+      "Червень",
+      "Липень",
+      "Серпень",
+      "Вересень",
+      "Жовтень",
+      "Листопад",
+      "Грудень",
+    ];
+    return months[monthIndex];
+  };
+
+  // Обчислення помісячних даних виробництва
+  const monthlyProductionData = useMemo(() => {
+    const monthlyData: Record<string, number> = {};
+    
+    // Ініціалізуємо всі місяці поточного року нулями
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    for (let month = 0; month < 12; month++) {
+      const monthKey = `${currentYear}-${String(month + 1).padStart(2, "0")}`;
+      monthlyData[monthKey] = 0;
+    }
+
+    // Підраховуємо виробництво по місяцях
+    shifts.forEach((shift) => {
+      if (shift.status === "completed" && shift.production) {
+        const shiftDate = new Date(shift.shift_date);
+        const year = shiftDate.getFullYear();
+        const month = shiftDate.getMonth() + 1;
+        const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+
+        // Підраховуємо загальну кількість продукції за зміну
+        let shiftTotal = 0;
+        shift.production.forEach((item) => {
+          shiftTotal += item.quantity;
+        });
+
+        if (year === currentYear) {
+          monthlyData[monthKey] = (monthlyData[monthKey] || 0) + shiftTotal;
+        }
+      }
+    });
+
+    // Конвертуємо в масив для графіка
+    return Object.entries(monthlyData)
+      .map(([key, value]) => {
+        const [year, month] = key.split("-");
+        return {
+          month: getMonthName(parseInt(month) - 1),
+          production: value,
+          monthIndex: parseInt(month) - 1,
+        };
+      })
+      .sort((a, b) => a.monthIndex - b.monthIndex);
+  }, [shifts]);
+
   if (isLoading) {
     return (
       <div className="container py-6">
@@ -191,7 +257,11 @@ export default function StatisticsPage() {
             <div className="text-4xl font-bold mb-4">
               {formatNumberWithUnit(totalProduction, "шт")}
             </div>
-            <Button variant="outline" className="w-full">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setShowMonthlyChart(!showMonthlyChart)}
+            >
               Детальніше
             </Button>
           </CardContent>
@@ -236,6 +306,59 @@ export default function StatisticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Картка з помісячним графіком */}
+      {showMonthlyChart && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <span>Помісячний графік виробництва</span>
+            </CardTitle>
+            <CardDescription>
+              Динаміка виробленої продукції по місяцях поточного року
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {monthlyProductionData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Немає даних про виробництво
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={monthlyProductionData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    label={{ value: "Кількість (шт)", angle: -90, position: "insideLeft" }}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => formatNumberWithUnit(value, "шт")}
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    contentStyle={{ 
+                      backgroundColor: "hsl(var(--background))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "6px"
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="production" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
         <Card className="md:col-span-1">
