@@ -69,6 +69,7 @@ export async function middleware(request: NextRequest) {
     "/tasks": ["owner", "admin", "worker"],
     "/statistics": ["owner", "admin", "worker"],
     "/expenses": ["owner", "admin", "worker"],
+    "/user": ["owner", "admin", "worker"],
   };
 
   // Захищені маршрути - потребують авторизації

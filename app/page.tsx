@@ -47,6 +47,7 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  User,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -396,6 +397,12 @@ export default function HomePage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/user">
+            <Button variant="outline" size="sm" className="gap-2">
+              <User className="h-4 w-4" />
+              <span>Профіль</span>
+            </Button>
+          </Link>
           <LogoutButton />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -445,6 +452,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <DollarSign className="h-4 w-4 mr-2" />
                   <span>Облік витрат</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/user" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <User className="h-4 w-4 mr-2" />
+                  <span>Мій профіль</span>
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuContent>
