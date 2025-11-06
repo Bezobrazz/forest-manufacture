@@ -47,6 +47,12 @@ FIX_*.sql
 scripts/fix-*.sql
 scripts/check-*.sql
 
+# Administrative/operational SQL scripts (not part of codebase)
+scripts/change-user-role.sql
+scripts/update-user-role.sql
+scripts/delete-user*.sql
+scripts/delete-user*.ts
+
 # Keep important documentation and setup files
 # SETUP.md, QUICK_START.md, README.md should be committed
 # Keep migration files in supabase/migrations/ - they should be committed
