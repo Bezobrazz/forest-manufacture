@@ -17,6 +17,7 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -132,6 +133,16 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-muted/50">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="flex justify-center mb-4">
+            <Image
+              src="/main-logo.png"
+              alt="Логотип"
+              width={150}
+              height={150}
+              className="object-contain"
+              priority
+            />
+          </div>
           <CardTitle className="text-2xl font-bold text-center">
             Вхід в систему
           </CardTitle>
