@@ -61,9 +61,26 @@ export function createServerClient() {
   }
 }
 
-// Створюємо клієнт Supabase для клієнтського використання з підтримкою cookies
-// Використовуємо @supabase/ssr для правильної роботи з cookies та middleware
+// Singleton для клієнтського клієнта Supabase
+// Використовуємо звичайний createClient для клієнтських компонентів,
+// оскільки він має вбудовану логіку для уникнення множинних екземплярів через localStorage
+let browserClientInstance: ReturnType<typeof createClient> | null = null
+
+// Створюємо клієнт Supabase для клієнтського використання
+// Використовуємо singleton pattern, щоб уникнути множинних екземплярів GoTrueClient
+// Для клієнтських компонентів використовуємо звичайний createClient,
+// який автоматично керує екземплярами через localStorage
 export function createBrowserClient() {
+  // Перевіряємо, чи ми в браузерному середовищі
+  if (typeof window === "undefined") {
+    throw new Error("createBrowserClient can only be used in browser environment")
+  }
+
+  // Якщо клієнт вже створений, повертаємо існуючий екземпляр
+  if (browserClientInstance) {
+    return browserClientInstance
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -76,7 +93,17 @@ export function createBrowserClient() {
     throw new Error("Supabase client credentials are missing")
   }
 
-  // Використовуємо createBrowserClient з @supabase/ssr для правильної роботи з cookies
-  return createSSRBrowserClient(supabaseUrl, supabaseKey)
+  // Створюємо новий екземпляр тільки один раз
+  // Використовуємо звичайний createClient, який має вбудовану логіку
+  // для уникнення множинних екземплярів через localStorage
+  browserClientInstance = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      storage: typeof window !== "undefined" ? window.localStorage : undefined,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  })
+  return browserClientInstance
 }
 

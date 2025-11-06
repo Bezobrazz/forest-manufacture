@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
 import { Footer } from "@/components/footer";
+import { RuntimeErrorHandler } from "@/components/runtime-error-handler";
 
 export const metadata: Metadata = {
   title: "Облік Виробництва",
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="uk">
       <body className="flex flex-col min-h-screen">
+        <RuntimeErrorHandler />
         <main className="flex-1">
           {children}
         </main>
