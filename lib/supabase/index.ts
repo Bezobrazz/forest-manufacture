@@ -62,14 +62,12 @@ export function createServerClient() {
 }
 
 // Singleton для клієнтського клієнта Supabase
-// Використовуємо звичайний createClient для клієнтських компонентів,
-// оскільки він має вбудовану логіку для уникнення множинних екземплярів через localStorage
-let browserClientInstance: ReturnType<typeof createClient> | null = null
+// Використовуємо @supabase/ssr для уніфікованого підходу з middleware
+let browserClientInstance: ReturnType<typeof createSSRBrowserClient> | null = null
 
 // Створюємо клієнт Supabase для клієнтського використання
-// Використовуємо singleton pattern, щоб уникнути множинних екземплярів GoTrueClient
-// Для клієнтських компонентів використовуємо звичайний createClient,
-// який автоматично керує екземплярами через localStorage
+// ВАЖЛИВО: Використовуємо @supabase/ssr для сумісності з middleware
+// Це дозволяє зберігати сесію в cookies, які доступні як на клієнті, так і на сервері
 export function createBrowserClient() {
   // Перевіряємо, чи ми в браузерному середовищі
   if (typeof window === "undefined") {
@@ -93,15 +91,53 @@ export function createBrowserClient() {
     throw new Error("Supabase client credentials are missing")
   }
 
-  // Створюємо новий екземпляр тільки один раз
-  // Використовуємо звичайний createClient, який має вбудовану логіку
-  // для уникнення множинних екземплярів через localStorage
-  browserClientInstance = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      storage: typeof window !== "undefined" ? window.localStorage : undefined,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
+  // Використовуємо @supabase/ssr для роботи з cookies
+  // Це забезпечує сумісність між клієнтом і сервером (middleware)
+  browserClientInstance = createSSRBrowserClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      get(name: string) {
+        // Отримуємо cookie з document.cookie
+        const value = document.cookie
+          .split('; ')
+          .find(row => row.startsWith(`${name}=`))
+          ?.split('=')[1];
+        return value || null;
+      },
+      set(name: string, value: string, options: any) {
+        // Встановлюємо cookie через document.cookie
+        let cookie = `${name}=${value}`;
+        
+        if (options?.maxAge) {
+          cookie += `; max-age=${options.maxAge}`;
+        }
+        if (options?.path) {
+          cookie += `; path=${options.path}`;
+        }
+        if (options?.domain) {
+          cookie += `; domain=${options.domain}`;
+        }
+        if (options?.sameSite) {
+          cookie += `; samesite=${options.sameSite}`;
+        }
+        if (options?.secure) {
+          cookie += '; secure';
+        }
+        
+        document.cookie = cookie;
+      },
+      remove(name: string, options: any) {
+        // Видаляємо cookie шляхом встановлення maxAge в 0
+        let cookie = `${name}=; max-age=0`;
+        
+        if (options?.path) {
+          cookie += `; path=${options.path}`;
+        }
+        if (options?.domain) {
+          cookie += `; domain=${options.domain}`;
+        }
+        
+        document.cookie = cookie;
+      },
     },
   })
   return browserClientInstance
