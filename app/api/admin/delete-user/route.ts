@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     }
 
     // Створюємо клієнт з Service Role Key
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     });
 
     // Видаляємо користувача через Admin API
-    const { data, error } = await supabase.auth.admin.deleteUser(userId);
+    const { data, error } = await adminSupabase.auth.admin.deleteUser(userId);
 
     if (error) {
       console.error("Error deleting user:", error);
