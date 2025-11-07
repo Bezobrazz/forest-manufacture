@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
+import { ConditionalFooter } from "@/components/conditional-footer";
+import { RuntimeErrorHandler } from "@/components/runtime-error-handler";
 
 export const metadata: Metadata = {
   title: "Облік Виробництва",
@@ -18,9 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
-        {children}
+    <html lang="uk">
+      <body className="flex flex-col min-h-screen">
+        <RuntimeErrorHandler />
+        <main className="flex-1">{children}</main>
+        <ConditionalFooter />
         <Toaster />
       </body>
     </html>

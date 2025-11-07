@@ -15,7 +15,6 @@ import {
   getTasks,
   updateTaskStatus,
 } from "@/app/actions";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   Card,
   CardContent,
@@ -47,7 +46,6 @@ import {
   DollarSign,
   Eye,
   EyeOff,
-  User,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -290,75 +288,6 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
-    // Викликаємо getUserWithRole при завантаженні дашборду
-    const fetchUserWithRole = async () => {
-      try {
-        // Отримуємо користувача через клієнтський Supabase клієнт
-        const supabase = getSupabaseClient();
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        console.log("getUserWithRole - client getUser:", {
-          hasUser: !!user,
-          userId: user?.id,
-          userEmail: user?.email,
-          userError: userError?.message,
-        });
-
-        if (userError || !user) {
-          console.log("getUserWithRole - no user from client");
-          return;
-        }
-
-        // Отримуємо роль напряму з бази даних через клієнтський клієнт
-        const { data: userData, error: roleError } = await supabase
-          .from("users")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        console.log("getUserWithRole - role query:", {
-          hasUserData: !!userData,
-          role: userData?.role,
-          roleError: roleError?.message,
-        });
-
-        let role = userData?.role || null;
-
-        // Якщо ролі немає, створюємо запис з роллю за замовчуванням
-        if (!role) {
-          const defaultRole = "worker";
-          const { error: upsertError } = await supabase.from("users").upsert(
-            {
-              id: user.id,
-              email: user.email || "",
-              role: defaultRole,
-            },
-            {
-              onConflict: "id",
-            }
-          );
-
-          if (!upsertError) {
-            role = defaultRole;
-            console.log(
-              `Created/updated user record with role: ${defaultRole}`
-            );
-          } else {
-            console.error("Error creating/updating user record:", upsertError);
-          }
-        }
-
-        const result = { user, role };
-        console.log("getUserWithRole", result);
-      } catch (error) {
-        console.error("Помилка при отриманні користувача з роллю:", error);
-      }
-    };
-
-    fetchUserWithRole();
   }, []);
 
   // Обмежуємо кількість елементів для відображення на головній сторінці
@@ -396,13 +325,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/user">
-            <Button variant="outline" size="sm" className="gap-2">
-              <User className="h-4 w-4" />
-              <span>Профіль</span>
-            </Button>
-          </Link>
+        <div className="flex items-center gap-2">
           <LogoutButton />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -454,12 +377,6 @@ export default function HomePage() {
                   <span>Облік витрат</span>
                 </DropdownMenuItem>
               </Link>
-              <Link href="/user" className="w-full">
-                <DropdownMenuItem className="cursor-pointer">
-                  <User className="h-4 w-4 mr-2" />
-                  <span>Мій профіль</span>
-                </DropdownMenuItem>
-              </Link>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -505,9 +422,7 @@ export default function HomePage() {
                 <Clock className="h-5 w-5 text-primary" />
                 <span>Зміни</span>
               </CardTitle>
-              <CardDescription className="truncate">
-                Кількість активних змін
-              </CardDescription>
+              <CardDescription className="truncate">Кількість активних змін</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -525,9 +440,7 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span className="flex-1 min-w-0 truncate">
-                  Переглянути зміни
-                </span>
+                <span className="flex-1 min-w-0 truncate">Переглянути зміни</span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
@@ -552,9 +465,7 @@ export default function HomePage() {
                 <Users className="h-5 w-5 text-primary" />
                 <span>Працівники</span>
               </CardTitle>
-              <CardDescription className="truncate">
-                Загальна кількість працівників
-              </CardDescription>
+              <CardDescription className="truncate">Загальна кількість працівників</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -572,9 +483,7 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span className="flex-1 min-w-0 truncate">
-                  Керувати працівниками
-                </span>
+                <span className="flex-1 min-w-0 truncate">Керувати працівниками</span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
@@ -599,9 +508,7 @@ export default function HomePage() {
                 <Package className="h-5 w-5 text-primary" />
                 <span>Продукція</span>
               </CardTitle>
-              <CardDescription className="truncate">
-                Загальна кількість продуктів
-              </CardDescription>
+              <CardDescription className="truncate">Загальна кількість продуктів</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -619,9 +526,7 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span className="flex-1 min-w-0 truncate">
-                  Керувати продукцією
-                </span>
+                <span className="flex-1 min-w-0 truncate">Керувати продукцією</span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
@@ -646,9 +551,7 @@ export default function HomePage() {
                 <Boxes className="h-5 w-5 text-primary" />
                 <span>Склад</span>
               </CardTitle>
-              <CardDescription className="truncate">
-                Загальна кількість на складі
-              </CardDescription>
+              <CardDescription className="truncate">Загальна кількість на складі</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -666,9 +569,7 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span className="flex-1 min-w-0 truncate">
-                  Управління складом
-                </span>
+                <span className="flex-1 min-w-0 truncate">Управління складом</span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
@@ -693,9 +594,7 @@ export default function HomePage() {
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span>Облік витрат</span>
               </CardTitle>
-              <CardDescription className="truncate">
-                Кількість витрат за тиждень
-              </CardDescription>
+              <CardDescription className="truncate">Кількість витрат за тиждень</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
@@ -713,9 +612,7 @@ export default function HomePage() {
                 }}
                 disabled={isPending}
               >
-                <span className="flex-1 min-w-0 truncate">
-                  Переглянути витрати
-                </span>
+                <span className="flex-1 min-w-0 truncate">Переглянути витрати</span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
             </CardFooter>
