@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 
-export function SupplierForm() {
+interface SupplierFormProps {
+  onSupplierAdded?: () => Promise<void>;
+}
+
+export function SupplierForm({ onSupplierAdded }: SupplierFormProps) {
   const [isPending, setIsPending] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -32,8 +34,18 @@ export function SupplierForm() {
         // Очищаємо форму
         form.reset();
 
-        // Оновлюємо сторінку
-        router.refresh();
+        // Оновлюємо список постачальників без перезавантаження сторінки
+        if (onSupplierAdded) {
+          try {
+            await onSupplierAdded();
+          } catch (refreshError) {
+            console.error(
+              "Помилка при оновленні списку постачальників:",
+              refreshError
+            );
+            // Не показуємо помилку користувачу, оскільки основна операція успішна
+          }
+        }
       } else {
         toast.error("Помилка", {
           description: result.error,

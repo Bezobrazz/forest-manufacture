@@ -183,7 +183,7 @@ export default function SuppliersPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SupplierForm />
+              <SupplierForm onSupplierAdded={refreshSuppliers} />
             </CardContent>
           </Card>
         </div>
