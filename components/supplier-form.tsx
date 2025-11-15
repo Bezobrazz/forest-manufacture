@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type React from "react";
 import { createSupplier } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,12 @@ export function SupplierForm() {
   const [isPending, setIsPending] = useState(false);
   const router = useRouter();
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setIsPending(true);
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     try {
       const result = await createSupplier(formData);
@@ -25,9 +30,6 @@ export function SupplierForm() {
         });
 
         // Очищаємо форму
-        const form = document.getElementById(
-          "supplier-form"
-        ) as HTMLFormElement;
         form.reset();
 
         // Оновлюємо сторінку
@@ -47,7 +49,7 @@ export function SupplierForm() {
   }
 
   return (
-    <form id="supplier-form" action={handleSubmit} className="space-y-4">
+    <form id="supplier-form" onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="name">Назва постачальника *</Label>
         <Input id="name" name="name" required />
@@ -65,8 +67,15 @@ export function SupplierForm() {
           placeholder="Додаткова інформація про постачальника"
         />
       </div>
-      <Button type="submit" disabled={isPending}>
-        {isPending ? "Додавання..." : "Додати постачальника"}
+      <Button type="submit" disabled={isPending} className="gap-2">
+        {isPending ? (
+          <>
+            <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+            <span>Додавання...</span>
+          </>
+        ) : (
+          "Додати постачальника"
+        )}
       </Button>
     </form>
   );
