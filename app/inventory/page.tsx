@@ -258,11 +258,17 @@ export default function InventoryPage() {
           className="mb-6"
         >
           <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted p-1 rounded-lg">
-            <TabsTrigger value="finished" className="text-sm">
-              Готова продукція
+            <TabsTrigger
+              value="finished"
+              className="text-sm min-w-0 overflow-hidden"
+            >
+              <span className="truncate block w-full">Готова продукція</span>
             </TabsTrigger>
-            <TabsTrigger value="materials" className="text-sm">
-              Виробничі матеріали
+            <TabsTrigger
+              value="materials"
+              className="text-sm min-w-0 overflow-hidden"
+            >
+              <span className="truncate block w-full">Виробничі матеріали</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
