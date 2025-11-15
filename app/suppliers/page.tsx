@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getSuppliers } from "@/app/actions";
-import { SupplierForm } from "@/components/supplier-form";
 import {
   Card,
   CardContent,
@@ -11,55 +10,47 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Truck, Search } from "lucide-react";
-import { SupplierList } from "@/components/supplier-list";
+import { ArrowLeft, Truck, Search, Users } from "lucide-react";
+import { SuppliersTable } from "@/components/suppliers-table";
+import { AddSupplierDialog } from "@/components/add-supplier-dialog";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import type { Supplier } from "@/lib/types";
 
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-48 mt-2" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-4" />
-                    <div>
-                      <Skeleton className="h-4 w-32 mb-2" />
-                      <Skeleton className="h-3 w-24" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-8 w-16" />
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-5 w-48" />
+        </div>
+        <Skeleton className="h-10 w-48" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48 mt-2" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 py-3 border-b">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-64" />
+                  <Skeleton className="h-8 w-20 ml-auto" />
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-4 w-52 mt-2" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -70,6 +61,7 @@ export default function SuppliersPage() {
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "date">("name");
 
   // Функція для завантаження даних
   const loadData = async () => {
@@ -113,29 +105,88 @@ export default function SuppliersPage() {
     }
   };
 
-  // Фільтрація постачальників за пошуковим запитом
-  const filteredSuppliers = suppliers.filter((supplier) => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
+  // Фільтрація та сортування постачальників
+  const filteredAndSortedSuppliers = useMemo(() => {
+    let filtered = suppliers.filter((supplier) => {
+      const query = searchQuery.toLowerCase().trim();
+      if (!query) return true;
 
-    const nameMatch = supplier.name.toLowerCase().includes(query);
-    const phoneMatch = supplier.phone?.toLowerCase().includes(query) || false;
-    const notesMatch = supplier.notes?.toLowerCase().includes(query) || false;
+      const nameMatch = supplier.name.toLowerCase().includes(query);
+      const phoneMatch = supplier.phone?.toLowerCase().includes(query) || false;
+      const notesMatch = supplier.notes?.toLowerCase().includes(query) || false;
 
-    return nameMatch || phoneMatch || notesMatch;
-  });
+      return nameMatch || phoneMatch || notesMatch;
+    });
+
+    // Сортування
+    filtered = [...filtered].sort((a, b) => {
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name, "uk");
+      } else {
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      }
+    });
+
+    return filtered;
+  }, [suppliers, searchQuery, sortBy]);
+
+  // Статистика
+  const totalSuppliers = suppliers.length;
+  const suppliersWithPhone = suppliers.filter((s) => s.phone).length;
+  const suppliersWithNotes = suppliers.filter((s) => s.notes).length;
 
   return (
-    <div className="container py-6">
-      <div className="mb-6">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад</span>
-        </Link>
+    <div className="container py-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Link
+            href="/"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Назад</span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Truck className="h-6 w-6" />
+              <h1 className="text-3xl font-bold">Постачальники</h1>
+            </div>
+            <Badge variant="secondary" className="text-sm">
+              {totalSuppliers} {totalSuppliers === 1 ? "постачальник" : totalSuppliers < 5 ? "постачальники" : "постачальників"}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground mt-1">
+            Управління постачальниками та їх контактною інформацією
+          </p>
+        </div>
+        <AddSupplierDialog onSupplierAdded={refreshSuppliers} />
       </div>
+
+      {/* Статистика */}
+      {!isLoading && !databaseError && totalSuppliers > 0 && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription>Всього постачальників</CardDescription>
+              <CardTitle className="text-2xl">{totalSuppliers}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription>З номером телефону</CardDescription>
+              <CardTitle className="text-2xl">{suppliersWithPhone}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardDescription>З примітками</CardDescription>
+              <CardTitle className="text-2xl">{suppliersWithNotes}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
 
       {databaseError ? (
         <div className="py-8">
@@ -144,18 +195,33 @@ export default function SuppliersPage() {
       ) : isLoading ? (
         <LoadingSkeleton />
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Truck className="h-5 w-5" />
-                Постачальники
-              </CardTitle>
-              <CardDescription>
-                Список всіх постачальників у системі
-              </CardDescription>
-            </CardHeader>
-            <div className="px-6 pb-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Список постачальників</CardTitle>
+                <CardDescription>
+                  {filteredAndSortedSuppliers.length === totalSuppliers
+                    ? `Показано всіх ${totalSuppliers} постачальників`
+                    : `Показано ${filteredAndSortedSuppliers.length} з ${totalSuppliers} постачальників`}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(e.target.value as "name" | "date")
+                  }
+                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                >
+                  <option value="name">Сортувати за назвою</option>
+                  <option value="date">Сортувати за датою</option>
+                </select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -167,28 +233,13 @@ export default function SuppliersPage() {
                 />
               </div>
             </div>
-            <CardContent>
-              <SupplierList
-                initialSuppliers={filteredSuppliers}
-                onRefresh={refreshSuppliers}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Додати постачальника</CardTitle>
-              <CardDescription>
-                Додайте нового постачальника до системи
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SupplierForm onSupplierAdded={refreshSuppliers} />
-            </CardContent>
-          </Card>
-        </div>
+            <SuppliersTable
+              suppliers={filteredAndSortedSuppliers}
+              onRefresh={refreshSuppliers}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
 }
-
