@@ -23,3 +23,6 @@ WHERE recovery_token IS NULL;
 -- 3. Or use the Supabase Dashboard to manually fix the issue
 
 
+
+
+
