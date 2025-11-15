@@ -10,13 +10,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Truck, Search, Users } from "lucide-react";
+import { ArrowLeft, Truck, Search } from "lucide-react";
 import { SuppliersTable } from "@/components/suppliers-table";
 import { AddSupplierDialog } from "@/components/add-supplier-dialog";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Supplier } from "@/lib/types";
 
 function LoadingSkeleton() {
@@ -62,6 +78,8 @@ export default function SuppliersPage() {
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Функція для завантаження даних
   const loadData = async () => {
@@ -132,6 +150,39 @@ export default function SuppliersPage() {
     return filtered;
   }, [suppliers, searchQuery, sortBy]);
 
+  // Розрахунок пагінації
+  const totalPages = Math.ceil(
+    filteredAndSortedSuppliers.length / itemsPerPage
+  );
+  const paginatedSuppliers = filteredAndSortedSuppliers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Функції для керування пагінацією
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToPage = (pageNumber: number) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
+    }
+  };
+
+  // Скидання пагінації при зміні пошуку або сортування
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortBy]);
+
   // Статистика
   const totalSuppliers = suppliers.length;
   const suppliersWithPhone = suppliers.filter((s) => s.phone).length;
@@ -197,26 +248,49 @@ export default function SuppliersPage() {
       ) : (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <CardTitle>Список постачальників</CardTitle>
                 <CardDescription>
                   {filteredAndSortedSuppliers.length === totalSuppliers
                     ? `Показано всіх ${totalSuppliers} постачальників`
                     : `Показано ${filteredAndSortedSuppliers.length} з ${totalSuppliers} постачальників`}
+                  {totalPages > 1 &&
+                    ` • Сторінка ${currentPage} з ${totalPages}`}
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2">
-                <select
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select
                   value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(e.target.value as "name" | "date")
+                  onValueChange={(value) =>
+                    setSortBy(value as "name" | "date")
                   }
-                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                 >
-                  <option value="name">Сортувати за назвою</option>
-                  <option value="date">Сортувати за датою</option>
-                </select>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Сортувати за назвою</SelectItem>
+                    <SelectItem value="date">Сортувати за датою</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => {
+                    setItemsPerPage(Number(value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 на сторінці</SelectItem>
+                    <SelectItem value="10">10 на сторінці</SelectItem>
+                    <SelectItem value="20">20 на сторінці</SelectItem>
+                    <SelectItem value="50">50 на сторінці</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>
@@ -234,9 +308,86 @@ export default function SuppliersPage() {
               </div>
             </div>
             <SuppliersTable
-              suppliers={filteredAndSortedSuppliers}
+              suppliers={paginatedSuppliers}
               onRefresh={refreshSuppliers}
             />
+            {totalPages > 1 && (
+              <div className="mt-6">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={(e) => {
+                          e.preventDefault();
+                          goToPreviousPage();
+                        }}
+                        href="#"
+                        className={
+                          currentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                      (page) => {
+                        // Показуємо першу, останню, поточну та сусідні сторінки
+                        const showPage =
+                          page === 1 ||
+                          page === totalPages ||
+                          (page >= currentPage - 1 && page <= currentPage + 1);
+
+                        if (!showPage) {
+                          // Показуємо ellipsis
+                          if (
+                            (page === currentPage - 2 && currentPage > 3) ||
+                            (page === currentPage + 2 &&
+                              currentPage < totalPages - 2)
+                          ) {
+                            return (
+                              <PaginationItem key={page}>
+                                <PaginationEllipsis />
+                              </PaginationItem>
+                            );
+                          }
+                          return null;
+                        }
+
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              onClick={(e) => {
+                                e.preventDefault();
+                                goToPage(page);
+                              }}
+                              href="#"
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      }
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={(e) => {
+                          e.preventDefault();
+                          goToNextPage();
+                        }}
+                        href="#"
+                        className={
+                          currentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
