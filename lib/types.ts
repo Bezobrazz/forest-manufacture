@@ -83,3 +83,11 @@ export interface Task {
   completed_at: string | null;
   due_date: string | null;
 }
+
+export interface Supplier {
+  id: number;
+  name: string;
+  phone: string | null;
+  notes: string | null;
+  created_at: string;
+}

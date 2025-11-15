@@ -48,6 +48,7 @@ import {
   Eye,
   EyeOff,
   User,
+  Truck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -452,6 +453,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <DollarSign className="h-4 w-4 mr-2" />
                   <span>Облік витрат</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/suppliers" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Truck className="h-4 w-4 mr-2" />
+                  <span>Постачальники</span>
                 </DropdownMenuItem>
               </Link>
               <Link href="/user" className="w-full">
