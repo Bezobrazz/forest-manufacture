@@ -46,7 +46,7 @@ export function SupplierList({
       {initialSuppliers.length === 0 ? (
         <div className="text-center py-6">
           <p className="text-muted-foreground">
-            Немає зареєстрованих постачальників
+            Немає постачальників, які відповідають критеріям пошуку
           </p>
         </div>
       ) : (

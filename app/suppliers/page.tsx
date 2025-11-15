@@ -11,10 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Truck } from "lucide-react";
+import { ArrowLeft, Truck, Search } from "lucide-react";
 import { SupplierList } from "@/components/supplier-list";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import type { Supplier } from "@/lib/types";
 
 function LoadingSkeleton() {
@@ -68,6 +69,7 @@ export default function SuppliersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Функція для завантаження даних
   const loadData = async () => {
@@ -111,6 +113,18 @@ export default function SuppliersPage() {
     }
   };
 
+  // Фільтрація постачальників за пошуковим запитом
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+
+    const nameMatch = supplier.name.toLowerCase().includes(query);
+    const phoneMatch = supplier.phone?.toLowerCase().includes(query) || false;
+    const notesMatch = supplier.notes?.toLowerCase().includes(query) || false;
+
+    return nameMatch || phoneMatch || notesMatch;
+  });
+
   return (
     <div className="container py-6">
       <div className="mb-6">
@@ -141,9 +155,21 @@ export default function SuppliersPage() {
                 Список всіх постачальників у системі
               </CardDescription>
             </CardHeader>
+            <div className="px-6 pb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Пошук по назві, телефону або примітках..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
             <CardContent>
               <SupplierList
-                initialSuppliers={suppliers}
+                initialSuppliers={filteredSuppliers}
                 onRefresh={refreshSuppliers}
               />
             </CardContent>
