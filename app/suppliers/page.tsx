@@ -13,6 +13,7 @@ import {
 import { ArrowLeft, Truck, Search } from "lucide-react";
 import { SuppliersTable } from "@/components/suppliers-table";
 import { AddSupplierDialog } from "@/components/add-supplier-dialog";
+import { BulkImportSuppliersDialog } from "@/components/bulk-import-suppliers-dialog";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -212,8 +213,11 @@ export default function SuppliersPage() {
             Управління постачальниками та їх контактною інформацією
           </p>
         </div>
-        <AddSupplierDialog onSupplierAdded={refreshSuppliers} />
-      </div>
+          <div className="flex items-center gap-2">
+            <AddSupplierDialog onSupplierAdded={refreshSuppliers} />
+            <BulkImportSuppliersDialog onSuppliersImported={refreshSuppliers} />
+          </div>
+        </div>
 
       {/* Статистика */}
       {!isLoading && !databaseError && totalSuppliers > 0 && (

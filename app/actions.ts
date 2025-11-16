@@ -2182,3 +2182,62 @@ export async function deleteSupplier(supplierId: number) {
     };
   }
 }
+
+// Масове додавання постачальників
+export async function createSuppliersBatch(
+  suppliers: Array<{
+    name: string;
+    phone?: string | null;
+    notes?: string | null;
+  }>
+) {
+  try {
+    const supabase = createServerClient();
+
+    if (!suppliers || suppliers.length === 0) {
+      return {
+        success: false,
+        error: "Список постачальників не може бути порожнім",
+      };
+    }
+
+    // Валідація та очищення даних
+    const validSuppliers = suppliers
+      .map((supplier) => ({
+        name: (supplier.name || "").trim(),
+        phone: supplier.phone ? supplier.phone.trim() || null : null,
+        notes: supplier.notes ? supplier.notes.trim() || null : null,
+      }))
+      .filter((supplier) => supplier.name.length > 0);
+
+    if (validSuppliers.length === 0) {
+      return {
+        success: false,
+        error: "Немає валідних постачальників для додавання",
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .insert(validSuppliers)
+      .select();
+
+    if (error) {
+      console.error("Error creating suppliers batch:", error);
+      return { success: false, error: error.message };
+    }
+
+    return {
+      success: true,
+      data,
+      created: data.length,
+      total: suppliers.length,
+    };
+  } catch (error) {
+    console.error("Error in createSuppliersBatch:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при масовому додаванні постачальників",
+    };
+  }
+}
