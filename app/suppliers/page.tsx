@@ -191,8 +191,8 @@ export default function SuppliersPage() {
 
   return (
     <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex-1">
           <Link
             href="/"
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -200,24 +200,24 @@ export default function SuppliersPage() {
             <ArrowLeft className="h-4 w-4" />
             <span>Назад</span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <Truck className="h-6 w-6" />
-              <h1 className="text-3xl font-bold">Постачальники</h1>
+              <Truck className="h-5 w-5 sm:h-6 sm:w-6" />
+              <h1 className="text-2xl sm:text-3xl font-bold">Постачальники</h1>
             </div>
-            <Badge variant="secondary" className="text-sm">
+            <Badge variant="secondary" className="text-sm w-fit">
               {totalSuppliers} {totalSuppliers === 1 ? "постачальник" : totalSuppliers < 5 ? "постачальники" : "постачальників"}
             </Badge>
           </div>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base hidden sm:block">
             Управління постачальниками та їх контактною інформацією
           </p>
         </div>
-          <div className="flex items-center gap-2">
-            <AddSupplierDialog onSupplierAdded={refreshSuppliers} />
-            <BulkImportSuppliersDialog onSuppliersImported={refreshSuppliers} />
-          </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <AddSupplierDialog onSupplierAdded={refreshSuppliers} />
+          <BulkImportSuppliersDialog onSuppliersImported={refreshSuppliers} />
         </div>
+      </div>
 
       {/* Статистика */}
       {!isLoading && !databaseError && totalSuppliers > 0 && (
@@ -252,25 +252,29 @@ export default function SuppliersPage() {
       ) : (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <CardTitle>Список постачальників</CardTitle>
-                <CardDescription>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-lg sm:text-xl">Список постачальників</CardTitle>
+                <CardDescription className="text-xs sm:text-sm mt-1">
                   {filteredAndSortedSuppliers.length === totalSuppliers
                     ? `Показано всіх ${totalSuppliers} постачальників`
                     : `Показано ${filteredAndSortedSuppliers.length} з ${totalSuppliers} постачальників`}
-                  {totalPages > 1 &&
-                    ` • Сторінка ${currentPage} з ${totalPages}`}
+                  {totalPages > 1 && (
+                    <span className="block sm:inline">
+                      {filteredAndSortedSuppliers.length === totalSuppliers ? " • " : " • "}
+                      Сторінка {currentPage} з {totalPages}
+                    </span>
+                  )}
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                 <Select
                   value={sortBy}
                   onValueChange={(value) =>
                     setSortBy(value as "name" | "date")
                   }
                 >
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -285,7 +289,7 @@ export default function SuppliersPage() {
                     setCurrentPage(1);
                   }}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-full sm:w-[120px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -316,9 +320,9 @@ export default function SuppliersPage() {
               onRefresh={refreshSuppliers}
             />
             {totalPages > 1 && (
-              <div className="mt-6">
+              <div className="mt-6 overflow-x-auto">
                 <Pagination>
-                  <PaginationContent>
+                  <PaginationContent className="flex-wrap justify-center">
                     <PaginationItem>
                       <PaginationPrevious
                         onClick={(e) => {

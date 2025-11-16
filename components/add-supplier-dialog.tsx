@@ -30,9 +30,10 @@ export function AddSupplierDialog({ onSupplierAdded }: AddSupplierDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
+        <Button className="gap-2 w-full sm:w-auto">
           <Plus className="h-4 w-4" />
-          Додати постачальника
+          <span className="hidden sm:inline">Додати постачальника</span>
+          <span className="sm:hidden">Додати</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">

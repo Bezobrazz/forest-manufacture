@@ -264,9 +264,10 @@ export function BulkImportSuppliersDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2 w-full sm:w-auto">
           <Upload className="h-4 w-4" />
-          Масовий імпорт
+          <span className="hidden sm:inline">Масовий імпорт</span>
+          <span className="sm:hidden">Імпорт</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
