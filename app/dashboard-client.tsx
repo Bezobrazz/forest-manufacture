@@ -47,6 +47,8 @@ import {
   Eye,
   EyeOff,
   Box,
+  Truck,
+  ShoppingCart,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -382,6 +384,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <DollarSign className="h-4 w-4 mr-2" />
                   <span>Облік витрат</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/transactions/suppliers" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  <span>Закупка</span>
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuContent>

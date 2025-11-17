@@ -51,6 +51,7 @@ import {
   User,
   Truck,
   Box,
+  ShoppingCart,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -475,6 +476,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <Truck className="h-4 w-4 mr-2" />
                   <span>Постачальники</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/transactions/suppliers" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  <span>Закупка</span>
                 </DropdownMenuItem>
               </Link>
               <Link href="/user" className="w-full">
