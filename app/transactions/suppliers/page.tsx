@@ -76,6 +76,8 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { uk } from "date-fns/locale";
+import { EditSupplierDeliveryDialog } from "@/components/edit-supplier-delivery-dialog";
+import { DeleteSupplierDeliveryButton } from "@/components/delete-supplier-delivery-button";
 
 function LoadingSkeleton() {
   return (
@@ -808,6 +810,7 @@ export default function SupplierTransactionsPage() {
                           Ціна за одиницю
                         </TableHead>
                         <TableHead className="text-right">Сума</TableHead>
+                        <TableHead className="text-right">Дії</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -876,6 +879,26 @@ export default function SupplierTransactionsPage() {
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <EditSupplierDeliveryDialog
+                                  delivery={delivery}
+                                  onDeliveryUpdated={async () => {
+                                    const updatedDeliveries =
+                                      await getSupplierDeliveries();
+                                    setDeliveries(updatedDeliveries);
+                                  }}
+                                />
+                                <DeleteSupplierDeliveryButton
+                                  delivery={delivery}
+                                  onDeliveryDeleted={async () => {
+                                    const updatedDeliveries =
+                                      await getSupplierDeliveries();
+                                    setDeliveries(updatedDeliveries);
+                                  }}
+                                />
+                              </div>
                             </TableCell>
                           </TableRow>
                         );

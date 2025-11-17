@@ -2442,6 +2442,308 @@ export async function createSupplierDelivery(formData: FormData) {
   }
 }
 
+// Оновлення транзакції закупівлі
+export async function updateSupplierDelivery(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const deliveryId = Number(formData.get("delivery_id"));
+    const supplierId = Number(formData.get("supplier_id"));
+    const productId = Number(formData.get("product_id"));
+    const warehouseId = Number(formData.get("warehouse_id"));
+    const quantity = Number(formData.get("quantity"));
+    const pricePerUnit = formData.get("price_per_unit")
+      ? Number(formData.get("price_per_unit"))
+      : null;
+    const deliveryDate = formData.get("delivery_date") as string;
+
+    if (!deliveryId || !supplierId || !productId || !warehouseId || !quantity) {
+      return {
+        success: false,
+        error: "Необхідно заповнити всі обов'язкові поля",
+      };
+    }
+
+    if (quantity <= 0) {
+      return {
+        success: false,
+        error: "Кількість повинна бути більше нуля",
+      };
+    }
+
+    // Отримуємо поточну транзакцію для відкату змін у warehouse_inventory
+    const { data: currentDelivery, error: getError } = await supabase
+      .from("supplier_deliveries")
+      .select("quantity, product_id, warehouse_id")
+      .eq("id", deliveryId)
+      .single();
+
+    if (getError || !currentDelivery) {
+      return {
+        success: false,
+        error: "Транзакцію не знайдено",
+      };
+    }
+
+    // Формуємо дату для created_at
+    let createdAt: string | undefined = undefined;
+    if (deliveryDate) {
+      const date = new Date(deliveryDate);
+      const now = new Date();
+      date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+      createdAt = date.toISOString();
+    }
+
+    // Оновлюємо транзакцію
+    const updateData: any = {
+      supplier_id: supplierId,
+      product_id: productId,
+      warehouse_id: warehouseId,
+      quantity: quantity,
+      price_per_unit: pricePerUnit,
+    };
+
+    if (createdAt) {
+      updateData.created_at = createdAt;
+    }
+
+    const { data, error } = await supabase
+      .from("supplier_deliveries")
+      .update(updateData)
+      .eq("id", deliveryId)
+      .select(
+        `
+        *,
+        supplier:suppliers(*),
+        product:products(*, category:product_categories(*)),
+        warehouse:warehouses(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error updating supplier delivery:", error);
+      return { success: false, error: error.message };
+    }
+
+    // Оновлюємо inventory_transaction та warehouse_inventory
+    const { data: inventoryTransaction } = await supabase
+      .from("inventory_transactions")
+      .select("id")
+      .eq("transaction_type", "income")
+      .eq("reference_id", deliveryId)
+      .single();
+
+    if (inventoryTransaction) {
+      // Обчислюємо різницю для коректного оновлення warehouse_inventory
+      const oldQuantity = Number(currentDelivery.quantity);
+      const newQuantity = Number(quantity);
+      const quantityDiff = newQuantity - oldQuantity;
+
+      // Якщо змінився склад або продукт, відкатуємо старі зміни та застосовуємо нові
+      const warehouseChanged = currentDelivery.warehouse_id !== warehouseId;
+      const productChanged = currentDelivery.product_id !== productId;
+
+      if (warehouseChanged || productChanged) {
+        // Відкатуємо старі зміни
+        if (currentDelivery.warehouse_id && currentDelivery.product_id) {
+          const { data: oldInventory } = await supabase
+            .from("warehouse_inventory")
+            .select("quantity")
+            .eq("warehouse_id", currentDelivery.warehouse_id)
+            .eq("product_id", currentDelivery.product_id)
+            .single();
+
+          if (oldInventory) {
+            const updatedOldQuantity = Math.max(0, Number(oldInventory.quantity) - oldQuantity);
+            await supabase
+              .from("warehouse_inventory")
+              .update({
+                quantity: updatedOldQuantity,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("warehouse_id", currentDelivery.warehouse_id)
+              .eq("product_id", currentDelivery.product_id);
+          }
+        }
+
+        // Застосовуємо нові зміни
+        const { data: newInventory } = await supabase
+          .from("warehouse_inventory")
+          .select("quantity")
+          .eq("warehouse_id", warehouseId)
+          .eq("product_id", productId)
+          .single();
+
+        if (newInventory) {
+          const updatedNewQuantity = Number(newInventory.quantity) + newQuantity;
+          await supabase
+            .from("warehouse_inventory")
+            .update({
+              quantity: updatedNewQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("warehouse_id", warehouseId)
+            .eq("product_id", productId);
+        } else {
+          // Якщо запису немає, створюємо новий
+          await supabase
+            .from("warehouse_inventory")
+            .insert({
+              warehouse_id: warehouseId,
+              product_id: productId,
+              quantity: newQuantity,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      } else if (quantityDiff !== 0) {
+        // Якщо склад і продукт не змінилися, просто оновлюємо кількість на різницю
+        const { data: currentInventory } = await supabase
+          .from("warehouse_inventory")
+          .select("quantity")
+          .eq("warehouse_id", warehouseId)
+          .eq("product_id", productId)
+          .single();
+
+        if (currentInventory) {
+          const updatedQuantity = Math.max(0, Number(currentInventory.quantity) + quantityDiff);
+          await supabase
+            .from("warehouse_inventory")
+            .update({
+              quantity: updatedQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("warehouse_id", warehouseId)
+            .eq("product_id", productId);
+        }
+      }
+
+      // Оновлюємо inventory_transaction
+      const { error: updateTransactionError } = await supabase
+        .from("inventory_transactions")
+        .update({
+          product_id: productId,
+          quantity: quantity,
+          warehouse_id: warehouseId,
+        })
+        .eq("id", inventoryTransaction.id);
+
+      if (updateTransactionError) {
+        console.error("Error updating inventory transaction:", updateTransactionError);
+      }
+    }
+
+    revalidatePath("/transactions/suppliers");
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in updateSupplierDelivery:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні транзакції",
+    };
+  }
+}
+
+// Видалення транзакції закупівлі
+export async function deleteSupplierDelivery(deliveryId: number) {
+  try {
+    const supabase = createServerClient();
+
+    if (!deliveryId) {
+      return { success: false, error: "Необхідно вказати ID транзакції" };
+    }
+
+    // Отримуємо інформацію про транзакцію перед видаленням
+    const { data: delivery, error: getError } = await supabase
+      .from("supplier_deliveries")
+      .select("quantity, product_id, warehouse_id")
+      .eq("id", deliveryId)
+      .single();
+
+    if (getError || !delivery) {
+      return { success: false, error: "Транзакцію не знайдено" };
+    }
+
+    // Знаходимо та видаляємо відповідну inventory_transaction
+    const { data: inventoryTransaction } = await supabase
+      .from("inventory_transactions")
+      .select("id")
+      .eq("transaction_type", "income")
+      .eq("reference_id", deliveryId)
+      .single();
+
+    if (inventoryTransaction) {
+      // Відкатуємо зміни у warehouse_inventory (віднімаємо кількість)
+      const { error: updateError } = await supabase.rpc(
+        "update_warehouse_inventory_on_delete",
+        {
+          p_warehouse_id: delivery.warehouse_id,
+          p_product_id: delivery.product_id,
+          p_quantity: -delivery.quantity,
+        }
+      );
+
+      if (updateError) {
+        // Якщо функції немає, виконуємо вручну - отримуємо поточну кількість та віднімаємо
+        const { data: currentInventory } = await supabase
+          .from("warehouse_inventory")
+          .select("quantity")
+          .eq("warehouse_id", delivery.warehouse_id)
+          .eq("product_id", delivery.product_id)
+          .single();
+
+        if (currentInventory) {
+          const newQuantity = Math.max(0, Number(currentInventory.quantity) - Number(delivery.quantity));
+          const { error: manualUpdateError } = await supabase
+            .from("warehouse_inventory")
+            .update({
+              quantity: newQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("warehouse_id", delivery.warehouse_id)
+            .eq("product_id", delivery.product_id);
+
+          if (manualUpdateError) {
+            console.error("Error updating warehouse inventory:", manualUpdateError);
+          }
+        }
+      }
+
+      // Видаляємо inventory_transaction
+      const { error: deleteTransactionError } = await supabase
+        .from("inventory_transactions")
+        .delete()
+        .eq("id", inventoryTransaction.id);
+
+      if (deleteTransactionError) {
+        console.error("Error deleting inventory transaction:", deleteTransactionError);
+      }
+    }
+
+    // Видаляємо транзакцію закупівлі
+    const { error } = await supabase
+      .from("supplier_deliveries")
+      .delete()
+      .eq("id", deliveryId);
+
+    if (error) {
+      console.error("Error deleting supplier delivery:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteSupplierDelivery:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при видаленні транзакції",
+    };
+  }
+}
+
 // Отримання виробничих матеріалів
 export async function getMaterials(): Promise<Product[]> {
   try {
