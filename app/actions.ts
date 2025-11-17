@@ -11,6 +11,8 @@ import type {
   InventoryTransaction,
   Task,
   Supplier,
+  SupplierDelivery,
+  Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { revalidatePath } from "next/cache";
@@ -20,20 +22,82 @@ export async function getInventory(): Promise<Inventory[]> {
   try {
     const supabase = createServerClient();
 
-    const { data, error } = await supabase
+    // Отримуємо готову продукцію зі старої таблиці inventory
+    const { data: oldInventoryData, error: oldInventoryError } = await supabase
       .from("inventory")
       .select("*, product:products(*, category:product_categories(*))")
       .order("id");
 
-    if (error) {
-      console.error("Error fetching inventory:", error);
-      return [];
+    // Отримуємо матеріали з warehouse_inventory для Main warehouse
+    const { data: mainWarehouseData } = await supabase
+      .from("warehouses")
+      .select("id")
+      .ilike("name", "%main%")
+      .limit(1)
+      .single();
+
+    let warehouseInventoryData: any[] = [];
+    if (mainWarehouseData) {
+      const { data, error } = await supabase
+        .from("warehouse_inventory")
+        .select(
+          "id, product_id, quantity, updated_at, product:products(*, category:product_categories(*))"
+        )
+        .eq("warehouse_id", mainWarehouseData.id)
+        .order("id");
+
+      if (!error && data) {
+        warehouseInventoryData = data;
+      }
     }
 
-    return data as Inventory[];
+    // Об'єднуємо дані: готова продукція з inventory + матеріали з warehouse_inventory
+    const result: Inventory[] = [];
+
+    // Додаємо готову продукцію зі старої таблиці
+    if (!oldInventoryError && oldInventoryData) {
+      // Фільтруємо тільки готову продукцію (не матеріали)
+      const finishedProducts = oldInventoryData.filter(
+        (item) =>
+          item.product?.product_type !== "material" &&
+          (item.product?.product_type === "finished" ||
+            (item.product?.product_type === null && item.product?.reward !== null))
+      );
+      result.push(...(finishedProducts as Inventory[]));
+    }
+
+    // Додаємо матеріали з warehouse_inventory
+    const warehouseInventory = warehouseInventoryData.map((item) => ({
+      id: item.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      updated_at: item.updated_at,
+      product: item.product,
+    })) as Inventory[];
+
+    result.push(...warehouseInventory);
+
+    return result;
   } catch (error) {
     console.error("Error in getInventory:", error);
-    return [];
+    // Fallback до старої таблиці
+    try {
+      const supabase = createServerClient();
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("*, product:products(*, category:product_categories(*))")
+        .order("id");
+
+      if (error) {
+        console.error("Error fetching inventory:", error);
+        return [];
+      }
+
+      return data as Inventory[];
+    } catch (fallbackError) {
+      console.error("Error in getInventory fallback:", fallbackError);
+      return [];
+    }
   }
 }
 
@@ -2246,6 +2310,132 @@ export async function createSuppliersBatch(
     return {
       success: false,
       error: "Сталася непередбачена помилка при масовому додаванні постачальників",
+    };
+  }
+}
+
+// Отримання складів
+export async function getWarehouses(): Promise<Warehouse[]> {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("warehouses")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching warehouses:", error);
+      return [];
+    }
+
+    return data as Warehouse[];
+  } catch (error) {
+    console.error("Error in getWarehouses:", error);
+    return [];
+  }
+}
+
+// Отримання транзакцій з постачальниками
+export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("supplier_deliveries")
+      .select(
+        `
+        *,
+        supplier:suppliers(*),
+        product:products(*, category:product_categories(*)),
+        warehouse:warehouses(*)
+      `
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching supplier deliveries:", error);
+      return [];
+    }
+
+    return data as SupplierDelivery[];
+  } catch (error) {
+    console.error("Error in getSupplierDeliveries:", error);
+    return [];
+  }
+}
+
+// Створення транзакції закупівлі у постачальника
+export async function createSupplierDelivery(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const supplierId = Number(formData.get("supplier_id"));
+    const productId = Number(formData.get("product_id"));
+    const warehouseId = Number(formData.get("warehouse_id"));
+    const quantity = Number(formData.get("quantity"));
+    const pricePerUnit = formData.get("price_per_unit")
+      ? Number(formData.get("price_per_unit"))
+      : null;
+    const deliveryDate = formData.get("delivery_date") as string;
+
+    if (!supplierId || !productId || !warehouseId || !quantity) {
+      return {
+        success: false,
+        error: "Необхідно заповнити всі обов'язкові поля",
+      };
+    }
+
+    if (quantity <= 0) {
+      return {
+        success: false,
+        error: "Кількість повинна бути більше нуля",
+      };
+    }
+
+    // Формуємо дату для created_at
+    let createdAt = new Date().toISOString();
+    if (deliveryDate) {
+      // Якщо вказана дата, використовуємо її, але зберігаємо час поточний
+      const date = new Date(deliveryDate);
+      const now = new Date();
+      date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+      createdAt = date.toISOString();
+    }
+
+    const { data, error } = await supabase
+      .from("supplier_deliveries")
+      .insert({
+        supplier_id: supplierId,
+        product_id: productId,
+        warehouse_id: warehouseId,
+        quantity: quantity,
+        price_per_unit: pricePerUnit,
+        created_at: createdAt,
+      })
+      .select(
+        `
+        *,
+        supplier:suppliers(*),
+        product:products(*, category:product_categories(*)),
+        warehouse:warehouses(*)
+      `
+      )
+      .single();
+
+    if (error) {
+      console.error("Error creating supplier delivery:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in createSupplierDelivery:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при створенні транзакції",
     };
   }
 }
