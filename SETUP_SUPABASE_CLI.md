@@ -138,3 +138,6 @@ supabase migration list
 3. Переконайтеся, що Supabase CLI встановлено: `supabase --version`
 
 
+
+
+

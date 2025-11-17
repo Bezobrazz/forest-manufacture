@@ -161,6 +161,9 @@ export default function InventoryPage() {
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [productType, setProductType] = useState<"finished" | "materials">(
+    "finished"
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -177,10 +180,24 @@ export default function InventoryPage() {
     loadData();
   }, []);
 
+  // Розділяємо інвентар на готову продукцію та виробничі матеріали
+  const finishedProducts = inventory.filter(
+    (item) =>
+      item.product?.reward !== null && item.product?.reward !== undefined
+  );
+  const materials = inventory.filter(
+    (item) =>
+      item.product?.reward === null || item.product?.reward === undefined
+  );
+
+  // Використовуємо вибраний тип продукту
+  const currentInventory =
+    productType === "finished" ? finishedProducts : materials;
+
   // Групуємо інвентар за категоріями
   const inventoryByCategory: Record<string, Inventory[]> = {};
 
-  inventory.forEach((item) => {
+  currentInventory.forEach((item) => {
     const categoryName = item.product?.category?.name || "Без категорії";
     if (!inventoryByCategory[categoryName]) {
       inventoryByCategory[categoryName] = [];
@@ -191,8 +208,8 @@ export default function InventoryPage() {
   // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(inventoryByCategory).sort();
 
-  // Розраховуємо загальну вартість інвентаря
-  const totalInventoryValue = inventory.reduce((total, item) => {
+  // Розраховуємо загальну вартість інвентаря для поточного типу
+  const totalInventoryValue = currentInventory.reduce((total, item) => {
     const productCost = item.product?.cost || 0;
     const quantity = item.quantity || 0;
     return total + productCost * quantity;
@@ -232,6 +249,30 @@ export default function InventoryPage() {
           Перегляд та управління запасами продукції на складі
         </p>
 
+        {/* Вкладки для вибору типу продукту */}
+        <Tabs
+          value={productType}
+          onValueChange={(value) =>
+            setProductType(value as "finished" | "materials")
+          }
+          className="mb-6"
+        >
+          <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted p-1 rounded-lg">
+            <TabsTrigger
+              value="finished"
+              className="text-sm min-w-0 overflow-hidden"
+            >
+              <span className="truncate block w-full">Готова продукція</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="materials"
+              className="text-sm min-w-0 overflow-hidden"
+            >
+              <span className="truncate block w-full">Виробничі матеріали</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         {/* Статистична панель з метриками */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card>
@@ -257,7 +298,7 @@ export default function InventoryPage() {
                 </h3>
               </div>
               <p className="text-2xl font-bold text-blue-700">
-                {inventory.length}
+                {currentInventory.length}
               </p>
             </CardContent>
           </Card>
@@ -271,7 +312,7 @@ export default function InventoryPage() {
                 </h3>
               </div>
               <p className="text-2xl font-bold text-orange-700">
-                {inventory
+                {currentInventory
                   .reduce((total, item) => total + (item.quantity || 0), 0)
                   .toLocaleString("uk-UA")}{" "}
                 шт

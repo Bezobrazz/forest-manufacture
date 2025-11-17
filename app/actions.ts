@@ -1,3 +1,5 @@
+"use server";
+
 import { createServerClient } from "@/lib/supabase/server";
 import type {
   Employee,
@@ -8,6 +10,7 @@ import type {
   Inventory,
   InventoryTransaction,
   Task,
+  Supplier,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { revalidatePath } from "next/cache";
@@ -2041,6 +2044,200 @@ export async function updateTask(
     return {
       success: false,
       error: "Сталася непередбачена помилка при оновленні задачі",
+    };
+  }
+}
+
+// Отримання списку постачальників
+export async function getSuppliers(): Promise<Supplier[]> {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching suppliers:", error);
+      return [];
+    }
+
+    return data as Supplier[];
+  } catch (error) {
+    console.error("Error in getSuppliers:", error);
+    return [];
+  }
+}
+
+// Створення постачальника
+export async function createSupplier(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const name = formData.get("name") as string;
+    const phone = formData.get("phone") as string;
+    const notes = formData.get("notes") as string;
+
+    if (!name) {
+      return {
+        success: false,
+        error: "Назва постачальника обов'язкова",
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .insert({
+        name,
+        phone: phone || null,
+        notes: notes || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating supplier:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in createSupplier:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при створенні постачальника",
+    };
+  }
+}
+
+// Оновлення постачальника
+export async function updateSupplier(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const id = Number(formData.get("id"));
+    const name = formData.get("name") as string;
+    const phone = formData.get("phone") as string;
+    const notes = formData.get("notes") as string;
+
+    if (!id || !name) {
+      return {
+        success: false,
+        error: "Необхідно вказати ID та назву постачальника",
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .update({
+        name,
+        phone: phone || null,
+        notes: notes || null,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating supplier:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error("Error in updateSupplier:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні постачальника",
+    };
+  }
+}
+
+// Видалення постачальника
+export async function deleteSupplier(supplierId: number) {
+  try {
+    const supabase = createServerClient();
+
+    if (!supplierId) {
+      return { success: false, error: "Необхідно вказати ID постачальника" };
+    }
+
+    const { error } = await supabase
+      .from("suppliers")
+      .delete()
+      .eq("id", supplierId);
+
+    if (error) {
+      console.error("Error deleting supplier:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteSupplier:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при видаленні постачальника",
+    };
+  }
+}
+
+// Масове додавання постачальників
+export async function createSuppliersBatch(
+  suppliers: Array<{
+    name: string;
+    phone?: string | null;
+    notes?: string | null;
+  }>
+) {
+  try {
+    const supabase = createServerClient();
+
+    if (!suppliers || suppliers.length === 0) {
+      return {
+        success: false,
+        error: "Список постачальників не може бути порожнім",
+      };
+    }
+
+    // Валідація та очищення даних
+    const validSuppliers = suppliers
+      .map((supplier) => ({
+        name: (supplier.name || "").trim(),
+        phone: supplier.phone ? supplier.phone.trim() || null : null,
+        notes: supplier.notes ? supplier.notes.trim() || null : null,
+      }))
+      .filter((supplier) => supplier.name.length > 0);
+
+    if (validSuppliers.length === 0) {
+      return {
+        success: false,
+        error: "Немає валідних постачальників для додавання",
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .insert(validSuppliers)
+      .select();
+
+    if (error) {
+      console.error("Error creating suppliers batch:", error);
+      return { success: false, error: error.message };
+    }
+
+    return {
+      success: true,
+      data,
+      created: data.length,
+      total: suppliers.length,
+    };
+  } catch (error) {
+    console.error("Error in createSuppliersBatch:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при масовому додаванні постачальників",
     };
   }
 }

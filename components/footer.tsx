@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, Users, BarChart, Boxes, CheckSquare, DollarSign } from "lucide-react";
+import { Package, Users, BarChart, Boxes, CheckSquare, DollarSign, Truck } from "lucide-react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -80,6 +80,15 @@ export function Footer() {
                 >
                   <DollarSign className="h-4 w-4" />
                   Витрати
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/suppliers"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <Truck className="h-4 w-4" />
+                  Постачальники
                 </Link>
               </li>
             </ul>
