@@ -8,6 +8,7 @@ import {
   getShifts,
   getEmployees,
   getProducts,
+  getMaterials,
   getProductionStats,
   getInventory,
   getActiveTasks,
@@ -73,6 +74,7 @@ type DefaultCards = {
   shifts: boolean;
   employees: boolean;
   products: boolean;
+  materials: boolean;
   inventory: boolean;
   expenses: boolean;
 };
@@ -194,6 +196,7 @@ export default function HomePage() {
     activeShifts: ShiftWithDetails[];
     employees: Employee[];
     products: Product[];
+    materials: Product[];
     productionStats: {
       totalProduction: number;
       productionByCategory: Record<string, number>;
@@ -205,6 +208,7 @@ export default function HomePage() {
     activeShifts: [],
     employees: [],
     products: [],
+    materials: [],
     productionStats: { totalProduction: 0, productionByCategory: {} },
     inventory: [],
     activeTasks: [],
@@ -216,6 +220,7 @@ export default function HomePage() {
     shifts: true,
     employees: true,
     products: true,
+    materials: true,
     inventory: true,
     expenses: true,
   };
@@ -253,6 +258,7 @@ export default function HomePage() {
         activeShifts,
         employees,
         products,
+        materials,
         productionStats,
         inventory,
         activeTasks,
@@ -261,6 +267,7 @@ export default function HomePage() {
         getActiveShifts(),
         getEmployees(),
         getProducts(),
+        getMaterials(),
         getProductionStats(),
         getInventory(),
         getActiveTasks(),
@@ -271,6 +278,7 @@ export default function HomePage() {
         activeShifts,
         employees,
         products,
+        materials,
         productionStats,
         inventory,
         activeTasks,
@@ -368,6 +376,7 @@ export default function HomePage() {
   const activeShiftsCount = data.activeShifts.length;
   const employeesCount = data.employees.length;
   const productsCount = data.products.length;
+  const materialsCount = data.materials.length;
   const { totalProduction, productionByCategory } = data.productionStats;
 
   // Підрахунок загальної кількості продукції на складі
@@ -489,6 +498,7 @@ export default function HomePage() {
                 shifts: true,
                 employees: true,
                 products: true,
+                materials: true,
                 inventory: true,
                 expenses: true,
               })
@@ -499,7 +509,7 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-4 mb-8">
+      <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-8">
         {visibleCards.shifts && (
           <Card>
             <CardHeader className="pb-2 relative">
@@ -635,6 +645,53 @@ export default function HomePage() {
               >
                 <span className="flex-1 min-w-0 truncate">
                   Керувати продукцією
+                </span>
+                <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+        {visibleCards.materials && (
+          <Card>
+            <CardHeader className="pb-2 relative">
+              <button
+                className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCard("materials")}
+                aria-label={visibleCards.materials ? "Сховати" : "Показати"}
+                type="button"
+              >
+                {visibleCards.materials ? (
+                  <Eye className="h-5 w-5" />
+                ) : (
+                  <EyeOff className="h-5 w-5" />
+                )}
+              </button>
+              <CardTitle className="flex items-center gap-2">
+                <Box className="h-5 w-5 text-primary" />
+                <span>Матеріали</span>
+              </CardTitle>
+              <CardDescription className="truncate">
+                Загальна кількість матеріалів
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                {formatNumber(materialsCount)}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  startTransition(() => {
+                    router.push("/materials");
+                  });
+                }}
+                disabled={isPending}
+              >
+                <span className="flex-1 min-w-0 truncate">
+                  Керувати матеріалами
                 </span>
                 <ArrowRight className="h-4 w-4 ml-2 flex-shrink-0" />
               </Button>
