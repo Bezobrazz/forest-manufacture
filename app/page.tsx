@@ -49,6 +49,7 @@ import {
   EyeOff,
   User,
   Truck,
+  Box,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -429,6 +430,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <Package className="h-4 w-4 mr-2" />
                   <span>Керувати продукцією</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/materials" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Box className="h-4 w-4 mr-2" />
+                  <span>Керувати матеріалами</span>
                 </DropdownMenuItem>
               </Link>
               <Link href="/inventory" className="w-full">

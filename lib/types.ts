@@ -35,6 +35,7 @@ export interface Product {
   category_id: number | null;
   reward: number | null;
   cost: number | null;
+  product_type?: "finished" | "raw" | "material" | null;
   created_at: string;
   category?: ProductCategory;
 }

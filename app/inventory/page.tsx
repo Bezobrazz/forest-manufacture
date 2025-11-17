@@ -5,6 +5,7 @@ import {
   getInventory,
   getInventoryTransactions,
   getProducts,
+  getMaterials,
 } from "@/app/actions";
 import {
   Card,
@@ -160,6 +161,7 @@ export default function InventoryPage() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [materials, setMaterials] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [productType, setProductType] = useState<"finished" | "materials">(
     "finished"
@@ -168,31 +170,62 @@ export default function InventoryPage() {
   useEffect(() => {
     async function loadData() {
       console.log("Loading inventory data...");
-      const [inventoryData, transactionsData, productsData] = await Promise.all(
-        [getInventory(), getInventoryTransactions(), getProducts()]
-      );
+      const [inventoryData, transactionsData, productsData, materialsData] =
+        await Promise.all([
+          getInventory(),
+          getInventoryTransactions(),
+          getProducts(),
+          getMaterials(),
+        ]);
       console.log("Loaded transactions:", transactionsData);
       setInventory(inventoryData);
       setTransactions(transactionsData);
       setProducts(productsData);
+      setMaterials(materialsData);
       setIsLoading(false);
     }
     loadData();
   }, []);
 
   // Розділяємо інвентар на готову продукцію та виробничі матеріали
+  // Використовуємо product_type для правильного розділення
   const finishedProducts = inventory.filter(
     (item) =>
-      item.product?.reward !== null && item.product?.reward !== undefined
+      item.product?.product_type === "finished" ||
+      (item.product?.product_type === null && item.product?.reward !== null)
   );
-  const materials = inventory.filter(
-    (item) =>
-      item.product?.reward === null || item.product?.reward === undefined
+
+  // Для матеріалів: об'єднуємо дані з inventory та всі матеріали з products
+  // щоб показати всі матеріали, навіть якщо їх кількість = 0
+  const materialsFromInventory = inventory.filter(
+    (item) => item.product?.product_type === "material"
   );
+
+  // Створюємо мапу inventory для швидкого пошуку
+  const inventoryMap = new Map(
+    materialsFromInventory.map((item) => [item.product_id, item])
+  );
+
+  // Об'єднуємо всі матеріали з inventory
+  // Якщо матеріал є в inventory - використовуємо його дані, інакше створюємо запис з кількістю 0
+  const allMaterials: Inventory[] = materials.map((material) => {
+    const inventoryItem = inventoryMap.get(material.id);
+    if (inventoryItem) {
+      return inventoryItem;
+    }
+    // Якщо немає запису в inventory, створюємо запис з кількістю 0
+    return {
+      id: 0, // тимчасовий ID
+      product_id: material.id,
+      quantity: 0,
+      updated_at: new Date().toISOString(),
+      product: material,
+    } as Inventory;
+  });
 
   // Використовуємо вибраний тип продукту
   const currentInventory =
-    productType === "finished" ? finishedProducts : materials;
+    productType === "finished" ? finishedProducts : allMaterials;
 
   // Групуємо інвентар за категоріями
   const inventoryByCategory: Record<string, Inventory[]> = {};

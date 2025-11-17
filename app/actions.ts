@@ -411,6 +411,7 @@ export async function getProducts(): Promise<Product[]> {
     const { data, error } = await supabase
       .from("products")
       .select("*, category:product_categories(*)")
+      .or("product_type.eq.finished,product_type.is.null") // Фільтруємо тільки готову продукцію
       .order("name");
 
     if (error) {
@@ -1344,7 +1345,14 @@ export async function createProduct(formData: FormData) {
     try {
       const { data, error } = await supabase
         .from("products")
-        .insert([{ name, description, category_id, reward, cost }])
+        .insert([{ 
+          name, 
+          description, 
+          category_id, 
+          reward, 
+          cost,
+          product_type: "finished" // Встановлюємо тип продукту як готову продукцію
+        }])
         .select();
 
       if (error) {
@@ -2238,6 +2246,198 @@ export async function createSuppliersBatch(
     return {
       success: false,
       error: "Сталася непередбачена помилка при масовому додаванні постачальників",
+    };
+  }
+}
+
+// Отримання виробничих матеріалів
+export async function getMaterials(): Promise<Product[]> {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, category:product_categories(*)")
+      .eq("product_type", "material")
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching materials:", error);
+      return [];
+    }
+
+    return data as Product[];
+  } catch (error) {
+    console.error("Error in getMaterials:", error);
+    throw error;
+  }
+}
+
+// Створення виробничого матеріалу
+export async function createMaterial(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const category_id_raw = formData.get("category_id") as string;
+    const cost_raw = formData.get("cost") as string;
+
+    // Обробка значень
+    const category_id = category_id_raw === "" ? null : Number(category_id_raw);
+    const cost = cost_raw === "" ? null : Number(cost_raw);
+
+    console.log("createMaterial отримав такі дані:");
+    console.log("Назва:", name);
+    console.log("Опис:", description);
+    console.log("Категорія ID:", category_id);
+    console.log("Вартість:", cost, "Тип:", typeof cost);
+
+    if (!name) {
+      return { success: false, error: "Необхідно вказати назву матеріалу" };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .insert([{ 
+          name, 
+          description, 
+          category_id, 
+          cost,
+          product_type: "material",
+          reward: null // Матеріали не мають винагороди
+        }])
+        .select();
+
+      if (error) {
+        console.error("Error creating material:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log("Матеріал успішно створено:", data);
+      return { success: true, data: data };
+    } catch (error) {
+      console.error("Unexpected error in createMaterial:", error);
+      return {
+        success: false,
+        error: "Сталася непередбачена помилка при створенні матеріалу",
+      };
+    }
+  } catch (error) {
+    console.error("Error in createMaterial:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при створенні матеріалу",
+    };
+  }
+}
+
+// Оновлення виробничого матеріалу
+export async function updateMaterial(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const id = Number(formData.get("id"));
+    const name = formData.get("name");
+    const description = formData.get("description");
+    const category_id =
+      formData.get("category_id") === ""
+        ? null
+        : Number(formData.get("category_id"));
+    const cost =
+      formData.get("cost") === "" ? null : Number(formData.get("cost"));
+
+    console.log("updateMaterial отримав такі дані:");
+    console.log("ID:", id);
+    console.log("Назва:", name);
+    console.log("Опис:", description);
+    console.log("Категорія ID:", category_id);
+    console.log("Вартість:", cost, "Тип:", typeof cost);
+
+    if (!id || !name) {
+      return {
+        success: false,
+        error: "Необхідно вказати ID та назву матеріалу",
+      };
+    }
+
+    try {
+      const updateData = {
+        name: name,
+        description: description,
+        category_id: category_id,
+        cost: cost,
+        reward: null, // Матеріали не мають винагороди
+        // product_type залишається 'material' - не змінюємо
+      };
+
+      console.log("Дані для оновлення:", updateData);
+
+      const { data, error } = await supabase
+        .from("products")
+        .update(updateData)
+        .eq("id", id)
+        .eq("product_type", "material") // Перевіряємо, що це матеріал
+        .select();
+
+      if (error) {
+        console.error("Error updating material:", error);
+        return { success: false, error: error.message };
+      }
+
+      console.log("Результат оновлення:", data);
+      return { success: true, data: data };
+    } catch (error) {
+      console.error("Unexpected error in updateMaterial:", error);
+      return {
+        success: false,
+        error: "Сталася непередбачена помилка при оновленні матеріалу",
+      };
+    }
+  } catch (error) {
+    console.error("Error in updateMaterial:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні матеріалу",
+    };
+  }
+}
+
+// Видалення виробничого матеріалу
+export async function deleteMaterial(materialId: number) {
+  try {
+    const supabase = createServerClient();
+
+    if (!materialId) {
+      return { success: false, error: "Необхідно вказати ID матеріалу" };
+    }
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", materialId)
+        .eq("product_type", "material"); // Перевіряємо, що це матеріал
+
+      if (error) {
+        console.error("Error deleting material:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Unexpected error in deleteMaterial:", error);
+      return {
+        success: false,
+        error: "Сталася непередбачена помилка при видаленні матеріалу",
+      };
+    }
+  } catch (error) {
+    console.error("Error in deleteMaterial:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при видаленні матеріалу",
     };
   }
 }
