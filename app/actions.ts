@@ -66,14 +66,16 @@ export async function getInventory(): Promise<Inventory[]> {
       result.push(...(finishedProducts as Inventory[]));
     }
 
-    // Додаємо матеріали з warehouse_inventory
-    const warehouseInventory = warehouseInventoryData.map((item) => ({
-      id: item.id,
-      product_id: item.product_id,
-      quantity: item.quantity,
-      updated_at: item.updated_at,
-      product: item.product,
-    })) as Inventory[];
+    // Додаємо матеріали з warehouse_inventory (тільки ті, що мають product_type === "material")
+    const warehouseInventory = warehouseInventoryData
+      .filter((item) => item.product?.product_type === "material")
+      .map((item) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        updated_at: item.updated_at,
+        product: item.product,
+      })) as Inventory[];
 
     result.push(...warehouseInventory);
 

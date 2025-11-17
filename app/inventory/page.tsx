@@ -206,21 +206,32 @@ export default function InventoryPage() {
     materialsFromInventory.map((item) => [item.product_id, item])
   );
 
-  // Об'єднуємо всі матеріали з inventory
-  // Якщо матеріал є в inventory - використовуємо його дані, інакше створюємо запис з кількістю 0
-  const allMaterials: Inventory[] = materials.map((material) => {
-    const inventoryItem = inventoryMap.get(material.id);
-    if (inventoryItem) {
-      return inventoryItem;
+  // Об'єднуємо матеріали з inventory та додаємо ті, що є в inventory, але не в списку materials
+  const allMaterials: Inventory[] = [];
+
+  // Спочатку додаємо всі матеріали з inventory (з warehouse_inventory)
+  // Використовуємо Map для уникнення дублікатів
+  const addedMaterialIds = new Set<number>();
+  materialsFromInventory.forEach((item) => {
+    if (item.product_id && !addedMaterialIds.has(item.product_id)) {
+      allMaterials.push(item);
+      addedMaterialIds.add(item.product_id);
     }
-    // Якщо немає запису в inventory, створюємо запис з кількістю 0
-    return {
-      id: 0, // тимчасовий ID
-      product_id: material.id,
-      quantity: 0,
-      updated_at: new Date().toISOString(),
-      product: material,
-    } as Inventory;
+  });
+
+  // Потім додаємо матеріали зі списку materials, яких немає в inventory
+  materials.forEach((material) => {
+    if (!inventoryMap.has(material.id) && !addedMaterialIds.has(material.id)) {
+      // Якщо немає запису в inventory, створюємо запис з кількістю 0
+      allMaterials.push({
+        id: 0, // тимчасовий ID
+        product_id: material.id,
+        quantity: 0,
+        updated_at: new Date().toISOString(),
+        product: material,
+      } as Inventory);
+      addedMaterialIds.add(material.id);
+    }
   });
 
   // Використовуємо вибраний тип продукту
