@@ -17,9 +17,9 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
+    // webpackBuildWorker: true, // Викликає помилки з webpack require
+    // parallelServerBuildTraces: true, // Може спричиняти проблеми
+    // parallelServerCompiles: true, // Може спричиняти проблеми
   },
 }
 

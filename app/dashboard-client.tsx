@@ -46,6 +46,9 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  Box,
+  Truck,
+  ShoppingCart,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -353,6 +356,12 @@ export default function HomePage() {
                   <span>Керувати продукцією</span>
                 </DropdownMenuItem>
               </Link>
+              <Link href="/materials" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Box className="h-4 w-4 mr-2" />
+                  <span>Керувати матеріалами</span>
+                </DropdownMenuItem>
+              </Link>
               <Link href="/inventory" className="w-full">
                 <DropdownMenuItem className="cursor-pointer">
                   <Boxes className="h-4 w-4 mr-2" />
@@ -375,6 +384,12 @@ export default function HomePage() {
                 <DropdownMenuItem className="cursor-pointer">
                   <DollarSign className="h-4 w-4 mr-2" />
                   <span>Облік витрат</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/transactions/suppliers" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  <span>Закупка</span>
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuContent>
@@ -677,7 +692,9 @@ export default function HomePage() {
                     <CardDescription className="flex items-center gap-2">
                       <Calendar className="h-3 w-3" />
                       <span>
-                        {formatDateTime(shift.created_at || shift.shift_date)}
+                        {formatDateTime(
+                          shift.opened_at || shift.created_at || shift.shift_date
+                        )}
                       </span>
                     </CardDescription>
                   </CardHeader>

@@ -12,6 +12,7 @@ export interface Shift {
   notes: string | null;
   created_at: string;
   completed_at: string | null;
+  opened_at: string | null;
 }
 
 export interface ShiftEmployee {
@@ -35,6 +36,7 @@ export interface Product {
   category_id: number | null;
   reward: number | null;
   cost: number | null;
+  product_type?: "finished" | "raw" | "material" | null;
   created_at: string;
   category?: ProductCategory;
 }
@@ -90,4 +92,23 @@ export interface Supplier {
   phone: string | null;
   notes: string | null;
   created_at: string;
+}
+
+export interface Warehouse {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface SupplierDelivery {
+  id: number;
+  supplier_id: number;
+  product_id: number;
+  warehouse_id: number;
+  quantity: number;
+  price_per_unit: number | null;
+  created_at: string;
+  supplier?: Supplier;
+  product?: Product;
+  warehouse?: Warehouse;
 }

@@ -43,6 +43,7 @@ export function ShiftForm() {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const [shiftDate, setShiftDate] = useState("");
+  const [openedAt, setOpenedAt] = useState("");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -60,6 +61,9 @@ export function ShiftForm() {
     try {
       const formData = new FormData();
       formData.append("shift_date", shiftDate);
+      if (openedAt) {
+        formData.append("opened_at", openedAt);
+      }
       formData.append("notes", notes || "");
       formData.append("status", "active");
       const result = await createShift(formData);
@@ -69,6 +73,7 @@ export function ShiftForm() {
           description: "Зміну успішно створено",
         });
         setShiftDate("");
+        setOpenedAt("");
         setNotes("");
         setIsOpen(false);
         router.refresh();
@@ -114,6 +119,19 @@ export function ShiftForm() {
                 onChange={(e) => setShiftDate(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="openedAt">Дата відкриття зміни (опціонально)</Label>
+              <Input
+                id="openedAt"
+                type="date"
+                value={openedAt}
+                onChange={(e) => setOpenedAt(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Якщо не вказано, буде використано поточну дату
+              </p>
             </div>
 
             <div className="space-y-2">

@@ -87,6 +87,17 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="opened_at">Дата відкриття зміни (опціонально)</Label>
+            <Input
+              id="opened_at"
+              name="opened_at"
+              type="date"
+            />
+            <p className="text-xs text-muted-foreground">
+              Якщо не вказано, буде використано поточну дату
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="notes">Примітки</Label>
             <Textarea id="notes" name="notes" rows={3} placeholder="Додаткова інформація про зміну" />
           </div>
