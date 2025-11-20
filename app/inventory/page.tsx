@@ -185,6 +185,27 @@ export default function InventoryPage() {
       setIsLoading(false);
     }
     loadData();
+
+    // Оновлюємо дані при фокусі на сторінку
+    const handleFocus = () => {
+      loadData();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // Оновлюємо дані при отриманні повідомлення про оновлення інвентаря
+    const channel = new BroadcastChannel("inventory-update");
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === "inventory-updated") {
+        loadData();
+      }
+    };
+    channel.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      channel.removeEventListener("message", handleMessage);
+      channel.close();
+    };
   }, []);
 
   // Розділяємо інвентар на готову продукцію та виробничі матеріали
