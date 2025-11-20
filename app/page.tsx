@@ -858,7 +858,11 @@ export default function HomePage() {
                     <CardDescription className="flex items-center gap-2">
                       <Calendar className="h-3 w-3" />
                       <span>
-                        {formatDateTime(shift.created_at || shift.shift_date)}
+                        {formatDateTime(
+                          shift.opened_at ||
+                            shift.created_at ||
+                            shift.shift_date
+                        )}
                       </span>
                     </CardDescription>
                   </CardHeader>

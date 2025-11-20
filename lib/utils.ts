@@ -22,8 +22,15 @@ export function formatDateTime(dateString: string): string {
   // Перевіряємо, чи дата валідна
   if (isNaN(date.getTime())) return dateString;
 
-  // Встановлюємо український часовий пояс (UTC+2, або UTC+3 влітку)
-  // Визначаємо, чи зараз літній час в Україні
+  // Отримуємо компоненти дати з UTC, щоб уникнути зміни дати через часовий пояс
+  // Дата вже зберігається в UTC, тому використовуємо UTC методи для отримання компонентів
+  let day = date.getUTCDate();
+  let month = date.getUTCMonth();
+  let year = date.getUTCFullYear();
+  let hours = date.getUTCHours();
+  let minutes = date.getUTCMinutes();
+  
+  // Визначаємо, чи зараз літній час в Україні для правильного відображення часу
   const isUkrainianDST = () => {
     // Літній час в Україні: остання неділя березня - остання неділя жовтня
     const year = date.getUTCFullYear();
@@ -40,21 +47,37 @@ export function formatDateTime(dateString: string): string {
     return date >= marchLastSunday && date < octoberLastSunday;
   };
 
-  // Отримуємо зсув часового поясу
+  // Додаємо зсув часового поясу тільки до часу
   const offsetHours = isUkrainianDST() ? 3 : 2;
+  hours = hours + offsetHours;
   
-  // Створюємо нову дату з урахуванням зсуву для правильного обчислення дати
-  const ukrainianTime = date.getTime() + (offsetHours * 60 * 60 * 1000);
-  const ukrainianDate = new Date(ukrainianTime);
+  // Якщо години перевищують 23, переходимо на наступний день
+  if (hours >= 24) {
+    hours = hours - 24;
+    day = day + 1;
+    
+    // Перевіряємо, чи не перейшли на наступний місяць
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    if (day > daysInMonth) {
+      day = 1;
+      month = month + 1;
+      
+      // Перевіряємо, чи не перейшли на наступний рік
+      if (month > 11) {
+        month = 0;
+        year = year + 1;
+      }
+    }
+  }
   
-  // Отримуємо компоненти дати з нової дати (яка вже враховує зсув)
-  const day = ukrainianDate.getUTCDate().toString().padStart(2, "0");
-  const month = (ukrainianDate.getUTCMonth() + 1).toString().padStart(2, "0");
-  const year = ukrainianDate.getUTCFullYear();
-  const hours = ukrainianDate.getUTCHours().toString().padStart(2, "0");
-  const minutes = ukrainianDate.getUTCMinutes().toString().padStart(2, "0");
+  // Форматуємо компоненти
+  const dayStr = day.toString().padStart(2, "0");
+  const monthStr = (month + 1).toString().padStart(2, "0");
+  const yearStr = year.toString();
+  const hoursStr = hours.toString().padStart(2, "0");
+  const minutesStr = minutes.toString().padStart(2, "0");
 
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
+  return `${dayStr}.${monthStr}.${yearStr} ${hoursStr}:${minutesStr}`;
 }
 
 /**
