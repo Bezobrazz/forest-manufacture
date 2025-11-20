@@ -12,6 +12,7 @@ export interface Shift {
   notes: string | null;
   created_at: string;
   completed_at: string | null;
+  opened_at: string | null;
 }
 
 export interface ShiftEmployee {

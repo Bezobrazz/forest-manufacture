@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
+import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
+import { getUserWithRole } from "@/lib/auth/get-user-role";
 import type { ShiftWithDetails } from "@/lib/types";
 
 interface ShiftPageProps {
@@ -49,6 +51,10 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   if (!shift) {
     notFound();
   }
+
+  // Отримуємо роль користувача для перевірки доступу до редагування
+  const { role } = await getUserWithRole();
+  const isOwner = role === "owner";
 
   // Додаємо логування для перевірки даних зміни
   console.log(
@@ -171,8 +177,13 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                       <Clock className="h-4 w-4 text-primary" />
                       <span>
                         Зміна відкрита:{" "}
-                        {formatDateTime(shift.created_at || shift.shift_date)}
+                        {formatDateTime(
+                          shift.opened_at || shift.created_at || shift.shift_date
+                        )}
                       </span>
+                      {isOwner && (
+                        <EditShiftOpenedDate shift={shift} />
+                      )}
                     </div>
 
                     {shift.status === "completed" && shift.completed_at && (

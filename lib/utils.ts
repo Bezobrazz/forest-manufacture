@@ -40,13 +40,14 @@ export function formatDateTime(dateString: string): string {
     return date >= marchLastSunday && date < octoberLastSunday;
   };
 
-  // Зсув часового поясу в мілісекундах (UTC+2 або UTC+3)
-  const offsetMs = (isUkrainianDST() ? 3 : 2) * 60 * 60 * 1000;
-
-  // Створюємо нову дату з урахуванням українського часового поясу
-  const ukrainianDate = new Date(date.getTime() + offsetMs);
-
-  // Форматуємо дату у вигляді "DD.MM.YYYY HH:MM"
+  // Отримуємо зсув часового поясу
+  const offsetHours = isUkrainianDST() ? 3 : 2;
+  
+  // Створюємо нову дату з урахуванням зсуву для правильного обчислення дати
+  const ukrainianTime = date.getTime() + (offsetHours * 60 * 60 * 1000);
+  const ukrainianDate = new Date(ukrainianTime);
+  
+  // Отримуємо компоненти дати з нової дати (яка вже враховує зсув)
   const day = ukrainianDate.getUTCDate().toString().padStart(2, "0");
   const month = (ukrainianDate.getUTCMonth() + 1).toString().padStart(2, "0");
   const year = ukrainianDate.getUTCFullYear();

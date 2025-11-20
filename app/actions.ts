@@ -896,15 +896,41 @@ export async function createShift(formData: FormData) {
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
+    const opened_at = formData.get("opened_at");
 
     if (!shift_date) {
       return { success: false, error: "Необхідно вказати дату зміни" };
     }
 
+    // Формуємо об'єкт для вставки
+    const insertData: {
+      shift_date: string;
+      notes: string | null;
+      opened_at?: string;
+    } = {
+      shift_date: shift_date as string,
+      notes: (notes as string) || null,
+    };
+
+    // Якщо вказана дата відкриття, додаємо її
+    if (opened_at) {
+      // Створюємо дату з компонентів, щоб уникнути проблем з часовими поясами
+      const dateParts = (opened_at as string).split("-");
+      const year = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1; // Місяці в JavaScript починаються з 0
+      const day = parseInt(dateParts[2]);
+      
+      // Створюємо дату в локальному часовому поясі з часом 09:00
+      const openedDate = new Date(year, month, day, 9, 0, 0, 0);
+      insertData.opened_at = openedDate.toISOString();
+    }
+    // Якщо не вказано, opened_at буде встановлено автоматично через тригер або залишиться NULL
+    // і буде використано created_at при відображенні
+
     try {
       const { data, error } = await supabase
         .from("shifts")
-        .insert([{ shift_date: shift_date, notes: notes }])
+        .insert([insertData])
         .select();
 
       if (error) {
@@ -951,10 +977,34 @@ export async function createShiftWithEmployees(
     }
 
     try {
+      // Формуємо об'єкт для вставки
+      const opened_at = formData.get("opened_at");
+      const insertData: {
+        shift_date: string;
+        notes: string | null;
+        opened_at?: string;
+      } = {
+        shift_date: shift_date as string,
+        notes: (notes as string) || null,
+      };
+
+      // Якщо вказана дата відкриття, додаємо її
+      if (opened_at) {
+        // Створюємо дату з компонентів, щоб уникнути проблем з часовими поясами
+        const dateParts = (opened_at as string).split("-");
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1; // Місяці в JavaScript починаються з 0
+        const day = parseInt(dateParts[2]);
+        
+        // Створюємо дату в локальному часовому поясі з часом 09:00
+        const openedDate = new Date(year, month, day, 9, 0, 0, 0);
+        insertData.opened_at = openedDate.toISOString();
+      }
+
       // Створюємо зміну
       const { data: shiftData, error: shiftError } = await supabase
         .from("shifts")
-        .insert([{ shift_date: shift_date, notes: notes }])
+        .insert([insertData])
         .select();
 
       if (shiftError) {
@@ -992,6 +1042,60 @@ export async function createShiftWithEmployees(
     return {
       success: false,
       error: "Сталася непередбачена помилка при створенні зміни",
+    };
+  }
+}
+
+export async function updateShiftOpenedAt(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const shiftId = formData.get("shift_id");
+    const opened_at = formData.get("opened_at");
+
+    if (!shiftId) {
+      return { success: false, error: "Необхідно вказати ID зміни" };
+    }
+
+    if (!opened_at) {
+      return { success: false, error: "Необхідно вказати дату відкриття" };
+    }
+
+    // Конвертуємо дату в формат ISO з часом
+    // Створюємо дату з компонентів, щоб уникнути проблем з часовими поясами
+    const dateParts = (opened_at as string).split("-");
+    const year = parseInt(dateParts[0]);
+    const month = parseInt(dateParts[1]) - 1; // Місяці в JavaScript починаються з 0
+    const day = parseInt(dateParts[2]);
+    
+    // Створюємо дату в локальному часовому поясі з часом 09:00
+    const openedDate = new Date(year, month, day, 9, 0, 0, 0);
+
+    try {
+      const { data, error } = await supabase
+        .from("shifts")
+        .update({ opened_at: openedDate.toISOString() })
+        .eq("id", Number.parseInt(shiftId as string))
+        .select();
+
+      if (error) {
+        console.error("Error updating shift opened_at:", error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, data: data };
+    } catch (error) {
+      console.error("Unexpected error in updateShiftOpenedAt:", error);
+      return {
+        success: false,
+        error: "Сталася непередбачена помилка при оновленні дати відкриття",
+      };
+    }
+  } catch (error) {
+    console.error("Error in updateShiftOpenedAt:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні дати відкриття",
     };
   }
 }
