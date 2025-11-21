@@ -6,3 +6,4 @@ SET warehouse_id = (SELECT id FROM public.warehouses WHERE name = 'Main warehous
 
 CREATE INDEX inventory_transactions_warehouse_id_idx ON public.inventory_transactions(warehouse_id);
 
+

@@ -34,3 +34,4 @@ AFTER INSERT ON public.inventory_transactions
 FOR EACH ROW
 EXECUTE FUNCTION public.update_warehouse_inventory();
 
+

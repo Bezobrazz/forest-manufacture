@@ -36,3 +36,4 @@ AFTER INSERT ON public.supplier_deliveries
 FOR EACH ROW
 EXECUTE FUNCTION public.create_inventory_transaction_on_delivery();
 
+

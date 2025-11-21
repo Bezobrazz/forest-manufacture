@@ -125,9 +125,18 @@ export async function getInventoryTransactions(): Promise<
     );
     if (data && data.length > 0) {
       console.log("Sample transactions:", data.slice(0, 3));
+      // Логуємо транзакції виробництва для діагностики
+      const productionTransactions = data.filter(
+        (t: any) => t.transaction_type === "production"
+      );
+      console.log(
+        `Found ${productionTransactions.length} production transactions:`,
+        productionTransactions.slice(0, 5)
+      );
     }
 
-    return data as InventoryTransaction[];
+    // Фільтруємо null значення та повертаємо дані
+    return (data || []).filter((t) => t != null) as InventoryTransaction[];
   } catch (error) {
     console.error("Error in getInventoryTransactions:", error);
     return [];
