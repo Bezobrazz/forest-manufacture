@@ -15,7 +15,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -3166,4 +3166,247 @@ export async function deleteMaterial(materialId: number) {
       error: "Сталася непередбачена помилка при видаленні матеріалу",
     };
   }
+}
+
+// Оптимізовані функції для головної сторінки з кешуванням та обмеженням даних
+
+// Отримання останніх змін для головної сторінки (тільки для відображення)
+export async function getRecentShifts(limit = 10) {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("shifts")
+          .select(
+            `
+            *,
+            employees:shift_employees(*, employee:employees(*)),
+            production:production(*, product:products(*, category:product_categories(*)))
+          `
+          )
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (error) {
+          console.error("Error fetching recent shifts:", error);
+          return [];
+        }
+
+        return data as ShiftWithDetails[];
+      } catch (error) {
+        console.error("Error in getRecentShifts:", error);
+        return [];
+      }
+    },
+    [`recent-shifts-${limit}`],
+    {
+      revalidate: 60, // Кешуємо на 60 секунд
+      tags: ["shifts"],
+    }
+  )();
+}
+
+// Отримання кількості активних змін (тільки count, без даних)
+export async function getActiveShiftsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("shifts")
+          .select("id")
+          .eq("status", "active");
+
+        if (error) {
+          console.error("Error fetching active shifts count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getActiveShiftsCount:", error);
+        return 0;
+      }
+    },
+    ["active-shifts-count"],
+    {
+      revalidate: 30, // Кешуємо на 30 секунд
+      tags: ["shifts"],
+    }
+  )();
+}
+
+// Отримання кількості працівників (тільки count)
+export async function getEmployeesCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("employees")
+          .select("id");
+
+        if (error) {
+          console.error("Error fetching employees count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getEmployeesCount:", error);
+        return 0;
+      }
+    },
+    ["employees-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["employees"],
+    }
+  )();
+}
+
+// Отримання кількості продуктів (тільки count)
+export async function getProductsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("id")
+          .or("product_type.eq.finished,product_type.is.null");
+
+        if (error) {
+          console.error("Error fetching products count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getProductsCount:", error);
+        return 0;
+      }
+    },
+    ["products-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["products"],
+    }
+  )();
+}
+
+// Отримання кількості матеріалів (тільки count)
+export async function getMaterialsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("id")
+          .eq("product_type", "material");
+
+        if (error) {
+          console.error("Error fetching materials count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getMaterialsCount:", error);
+        return 0;
+      }
+    },
+    ["materials-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["materials"],
+    }
+  )();
+}
+
+// Отримання загальної кількості на складі (тільки сума)
+export async function getTotalInventory() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        // Отримуємо готову продукцію зі старої таблиці inventory
+        const { data: oldInventoryData, error: oldInventoryError } = await supabase
+          .from("inventory")
+          .select("quantity");
+
+        // Отримуємо матеріали з warehouse_inventory для Main warehouse
+        const { data: mainWarehouseData } = await supabase
+          .from("warehouses")
+          .select("id")
+          .ilike("name", "%main%")
+          .limit(1)
+          .single();
+
+        let warehouseInventoryTotal = 0;
+        if (mainWarehouseData) {
+          const { data: warehouseData, error: warehouseError } = await supabase
+            .from("warehouse_inventory")
+            .select("quantity")
+            .eq("warehouse_id", mainWarehouseData.id);
+
+          if (!warehouseError && warehouseData) {
+            warehouseInventoryTotal = warehouseData.reduce(
+              (sum, item) => sum + (item.quantity || 0),
+              0
+            );
+          }
+        }
+
+        const oldInventoryTotal =
+          !oldInventoryError && oldInventoryData
+            ? oldInventoryData.reduce((sum, item) => sum + (item.quantity || 0), 0)
+            : 0;
+
+        return oldInventoryTotal + warehouseInventoryTotal;
+      } catch (error) {
+        console.error("Error in getTotalInventory:", error);
+        return 0;
+      }
+    },
+    ["total-inventory"],
+    {
+      revalidate: 60, // Кешуємо на 60 секунд
+      tags: ["inventory"],
+    }
+  )();
+}
+
+// Оптимізована функція для завантаження всіх даних головної сторінки
+export async function getHomePageData() {
+  // Завантажуємо дані паралельно, але з кешуванням
+  const [recentShifts, activeShiftsCount, employeesCount, productsCount, materialsCount, totalInventory, productionStats, activeTasks] = await Promise.all([
+    getRecentShifts(10),
+    getActiveShiftsCount(),
+    getEmployeesCount(),
+    getProductsCount(),
+    getMaterialsCount(),
+    getTotalInventory(),
+    getProductionStats("year"),
+    getActiveTasks(),
+  ]);
+
+  return {
+    recentShifts,
+    activeShiftsCount,
+    employeesCount,
+    productsCount,
+    materialsCount,
+    totalInventory,
+    productionStats,
+    activeTasks,
+  };
 }
