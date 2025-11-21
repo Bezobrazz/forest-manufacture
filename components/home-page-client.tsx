@@ -451,7 +451,10 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {formatNumberWithUnit(initialData.totalInventory, "шт")}
+                {formatNumberWithUnit(initialData.totalInventory, "шт", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
               </div>
             </CardContent>
             <CardFooter>
@@ -677,7 +680,10 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
             <div className="flex items-center gap-4 mb-4">
               <div className="text-4xl font-bold">
                 {" "}
-                {formatNumberWithUnit(totalProduction, "шт")}
+                {formatNumberWithUnit(totalProduction, "шт", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
               </div>
               {totalProduction > 0 && (
                 <div className="flex-1">
@@ -694,7 +700,10 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
                         >
                           <Package className="h-3 w-3" />
                           <span>
-                            {category}: {formatNumberWithUnit(total, "шт")}
+                            {category}: {formatNumberWithUnit(total, "шт", {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
                           </span>
                         </Badge>
                       )

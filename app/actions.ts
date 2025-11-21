@@ -619,17 +619,27 @@ export async function getProductionStats(
       const productionByCategory: Record<string, number> = {};
 
       productionData.forEach((item: any) => {
-        totalProduction += item.quantity;
+        const quantity = Math.round(item.quantity || 0);
+        totalProduction += quantity;
 
         const categoryName = item.product?.category_id
           ? item.product?.product_categories?.name || "Без категорії"
           : "Без категорії";
 
         productionByCategory[categoryName] =
-          (productionByCategory[categoryName] || 0) + item.quantity;
+          Math.round((productionByCategory[categoryName] || 0) + quantity);
       });
 
-      return { totalProduction, productionByCategory };
+      // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
+      return { 
+        totalProduction: Math.round(totalProduction), 
+        productionByCategory: Object.fromEntries(
+          Object.entries(productionByCategory).map(([key, value]) => [
+            key,
+            Math.round(value),
+          ])
+        ),
+      };
     } catch (error) {
       console.error("Error generating production stats:", error);
       return { totalProduction: 0, productionByCategory: {} };
@@ -3336,12 +3346,13 @@ export async function getTotalInventory() {
   return unstable_cache(
     async () => {
       try {
+        // Використовуємо ту саму логіку, що і getInventory(), щоб отримати всі товари на складі
         const supabase = createServerClient();
 
         // Отримуємо готову продукцію зі старої таблиці inventory
         const { data: oldInventoryData, error: oldInventoryError } = await supabase
           .from("inventory")
-          .select("quantity");
+          .select("quantity, product:products(product_type, reward)");
 
         // Отримуємо матеріали з warehouse_inventory для Main warehouse
         const { data: mainWarehouseData } = await supabase
@@ -3355,26 +3366,50 @@ export async function getTotalInventory() {
         if (mainWarehouseData) {
           const { data: warehouseData, error: warehouseError } = await supabase
             .from("warehouse_inventory")
-            .select("quantity")
+            .select("quantity, product:products(product_type)")
             .eq("warehouse_id", mainWarehouseData.id);
 
           if (!warehouseError && warehouseData) {
-            warehouseInventoryTotal = warehouseData.reduce(
-              (sum, item) => sum + (item.quantity || 0),
+            // Фільтруємо тільки матеріали (product_type === "material")
+            const materials = warehouseData.filter(
+              (item) => item.product?.product_type === "material"
+            );
+            warehouseInventoryTotal = materials.reduce(
+              (sum, item) => sum + (Number(item.quantity) || 0),
               0
             );
           }
         }
 
-        const oldInventoryTotal =
-          !oldInventoryError && oldInventoryData
-            ? oldInventoryData.reduce((sum, item) => sum + (item.quantity || 0), 0)
-            : 0;
+        // Фільтруємо тільки готову продукцію (не матеріали) з inventory
+        let oldInventoryTotal = 0;
+        if (!oldInventoryError && oldInventoryData) {
+          const finishedProducts = oldInventoryData.filter(
+            (item) =>
+              item.product?.product_type !== "material" &&
+              (item.product?.product_type === "finished" ||
+                (item.product?.product_type === null && item.product?.reward !== null))
+          );
+          oldInventoryTotal = finishedProducts.reduce(
+            (sum, item) => sum + (Number(item.quantity) || 0),
+            0
+          );
+        }
 
-        return oldInventoryTotal + warehouseInventoryTotal;
+        // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
+        return Math.round(oldInventoryTotal + warehouseInventoryTotal);
       } catch (error) {
         console.error("Error in getTotalInventory:", error);
-        return 0;
+        // Якщо помилка, спробуємо використати getInventory() як fallback
+        try {
+          const inventory = await getInventory();
+          return Math.round(
+            inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+          );
+        } catch (fallbackError) {
+          console.error("Error in getTotalInventory fallback:", fallbackError);
+          return 0;
+        }
       }
     },
     ["total-inventory"],
