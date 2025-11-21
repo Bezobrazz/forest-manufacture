@@ -15,7 +15,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -120,7 +120,23 @@ export async function getInventoryTransactions(): Promise<
       return [];
     }
 
-    return data as InventoryTransaction[];
+    console.log(
+      `Loaded ${data?.length || 0} inventory transactions from database`
+    );
+    if (data && data.length > 0) {
+      console.log("Sample transactions:", data.slice(0, 3));
+      // Логуємо транзакції виробництва для діагностики
+      const productionTransactions = data.filter(
+        (t: any) => t.transaction_type === "production"
+      );
+      console.log(
+        `Found ${productionTransactions.length} production transactions:`,
+        productionTransactions.slice(0, 5)
+      );
+    }
+
+    // Фільтруємо null значення та повертаємо дані
+    return (data || []).filter((t) => t != null) as InventoryTransaction[];
   } catch (error) {
     console.error("Error in getInventoryTransactions:", error);
     return [];
@@ -194,19 +210,38 @@ export async function updateInventoryQuantity(
 
     console.log(`Інвентар успішно оновлено, додаємо запис про транзакцію`);
 
+    // Отримуємо ID Main warehouse для транзакції
+    const { data: mainWarehouse, error: warehouseError } = await supabase
+      .from("warehouses")
+      .select("id")
+      .ilike("name", "%main%")
+      .limit(1)
+      .single();
+
+    if (warehouseError) {
+      console.error("Error fetching main warehouse:", warehouseError);
+      // Продовжуємо без warehouse_id, але це може призвести до проблем
+    }
+
     // Додаємо запис про транзакцію
-    const transactionData = {
+    const transactionData: any = {
       product_id: productId,
       quantity: adjustment,
       transaction_type: "adjustment",
       notes: notes || "Ручне коригування кількості",
     };
 
+    // Додаємо warehouse_id, якщо він є
+    if (mainWarehouse?.id) {
+      transactionData.warehouse_id = mainWarehouse.id;
+    }
+
     console.log(`Дані транзакції:`, transactionData);
 
-    const { error: transactionError } = await supabase
+    const { error: transactionError, data: transactionResult } = await supabase
       .from("inventory_transactions")
-      .insert(transactionData);
+      .insert(transactionData)
+      .select();
 
     if (transactionError) {
       console.error(
@@ -216,7 +251,7 @@ export async function updateInventoryQuantity(
       return { success: false, error: transactionError.message };
     }
 
-    console.log(`Транзакція успішно створена, оновлення завершено`);
+    console.log(`Транзакція успішно створена:`, transactionResult);
     return { success: true };
   } catch (error) {
     console.error(`Непередбачена помилка в updateInventoryQuantity:`, error);
@@ -281,15 +316,37 @@ export async function shipInventory(formData: FormData) {
         return { success: false, error: updateError.message };
       }
 
-      // 2. Додаємо запис про транзакцію
-      const { error: transactionError } = await supabase
-        .from("inventory_transactions")
-        .insert({
-          product_id: productId,
-          quantity: -quantity, // Від'ємне значення, оскільки це відвантаження
-          transaction_type: "shipment",
-          notes: notes || "Відвантаження продукції",
-        });
+      // 2. Отримуємо ID Main warehouse для транзакції
+      const { data: mainWarehouse, error: warehouseError } = await supabase
+        .from("warehouses")
+        .select("id")
+        .ilike("name", "%main%")
+        .limit(1)
+        .single();
+
+      if (warehouseError) {
+        console.error("Error fetching main warehouse:", warehouseError);
+        // Продовжуємо без warehouse_id, але це може призвести до проблем
+      }
+
+      // 3. Додаємо запис про транзакцію
+      const transactionData: any = {
+        product_id: productId,
+        quantity: -quantity, // Від'ємне значення, оскільки це відвантаження
+        transaction_type: "shipment",
+        notes: notes || "Відвантаження продукції",
+      };
+
+      // Додаємо warehouse_id, якщо він є
+      if (mainWarehouse?.id) {
+        transactionData.warehouse_id = mainWarehouse.id;
+      }
+
+      const { error: transactionError, data: transactionResult } =
+        await supabase
+          .from("inventory_transactions")
+          .insert(transactionData)
+          .select();
 
       if (transactionError) {
         console.error(
@@ -298,6 +355,8 @@ export async function shipInventory(formData: FormData) {
         );
         return { success: false, error: transactionError.message };
       }
+
+      console.log("Successfully created shipment transaction:", transactionResult);
 
       return { success: true };
     } catch (error) {
@@ -560,17 +619,27 @@ export async function getProductionStats(
       const productionByCategory: Record<string, number> = {};
 
       productionData.forEach((item: any) => {
-        totalProduction += item.quantity;
+        const quantity = Math.round(item.quantity || 0);
+        totalProduction += quantity;
 
         const categoryName = item.product?.category_id
           ? item.product?.product_categories?.name || "Без категорії"
           : "Без категорії";
 
         productionByCategory[categoryName] =
-          (productionByCategory[categoryName] || 0) + item.quantity;
+          Math.round((productionByCategory[categoryName] || 0) + quantity);
       });
 
-      return { totalProduction, productionByCategory };
+      // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
+      return { 
+        totalProduction: Math.round(totalProduction), 
+        productionByCategory: Object.fromEntries(
+          Object.entries(productionByCategory).map(([key, value]) => [
+            key,
+            Math.round(value),
+          ])
+        ),
+      };
     } catch (error) {
       console.error("Error generating production stats:", error);
       return { totalProduction: 0, productionByCategory: {} };
@@ -719,7 +788,21 @@ export async function completeShift(shiftId: number) {
       // Об'єднуємо дані
       shiftData.production = productionData || [];
 
+      // 1.2 Отримуємо ID Main warehouse для транзакцій
+      const { data: mainWarehouse, error: warehouseError } = await supabase
+        .from("warehouses")
+        .select("id")
+        .ilike("name", "%main%")
+        .limit(1)
+        .single();
+
+      if (warehouseError) {
+        console.error("Error fetching main warehouse:", warehouseError);
+        // Продовжуємо без warehouse_id, але це може призвести до проблем
+      }
+
       // 2. Оновлюємо інвентар та створюємо транзакції
+      const transactionErrors: string[] = [];
       for (const item of shiftData.production || []) {
         // 2.1 Отримуємо поточну кількість на складі
         const { data: inventoryData, error: inventoryError } = await supabase
@@ -730,6 +813,9 @@ export async function completeShift(shiftId: number) {
 
         if (inventoryError && inventoryError.code !== "PGRST116") {
           console.error("Error fetching inventory data:", inventoryError);
+          transactionErrors.push(
+            `Помилка отримання інвентаря для продукту ${item.product.name}: ${inventoryError.message}`
+          );
           continue; // Продовжуємо з наступним продуктом
         }
 
@@ -764,27 +850,58 @@ export async function completeShift(shiftId: number) {
 
         if (updateError) {
           console.error("Error updating inventory:", updateError);
+          transactionErrors.push(
+            `Помилка оновлення інвентаря для продукту ${item.product.name}: ${updateError.message}`
+          );
           continue; // Продовжуємо з наступним продуктом
         }
 
         // 2.3 Додаємо запис про транзакцію
-        const { error: transactionError } = await supabase
-          .from("inventory_transactions")
-          .insert({
-            product_id: item.product.id,
-            quantity: item.quantity,
-            transaction_type: "production",
-            reference_id: shiftId,
-            notes: `Виробництво на зміні #${shiftId} (автоматичне додавання при закритті зміни)`,
-          });
+        const transactionData: any = {
+          product_id: item.product.id,
+          quantity: item.quantity,
+          transaction_type: "production",
+          reference_id: shiftId,
+          notes: `Виробництво на зміні #${shiftId} (автоматичне додавання при закритті зміни)`,
+        };
+
+        // Додаємо warehouse_id, якщо він є
+        if (mainWarehouse?.id) {
+          transactionData.warehouse_id = mainWarehouse.id;
+        }
+
+        const { error: transactionError, data: transactionDataResult } =
+          await supabase
+            .from("inventory_transactions")
+            .insert(transactionData)
+            .select();
 
         if (transactionError) {
           console.error(
             "Error creating inventory transaction:",
-            transactionError
+            transactionError,
+            "Transaction data:",
+            transactionData
           );
-          // Продовжуємо, навіть якщо не вдалося створити запис про транзакцію
+          transactionErrors.push(
+            `Помилка створення транзакції для продукту ${item.product.name}: ${transactionError.message}`
+          );
+          // Продовжуємо обробку інших продуктів
+        } else {
+          console.log(
+            "Successfully created inventory transaction:",
+            transactionDataResult
+          );
         }
+      }
+
+      // Якщо є помилки створення транзакцій, повертаємо їх
+      if (transactionErrors.length > 0) {
+        console.error("Errors during transaction creation:", transactionErrors);
+        return {
+          success: false,
+          error: `Помилки при створенні транзакцій:\n${transactionErrors.join("\n")}`,
+        };
       }
 
       // 3. Змінюємо статус зміни на "completed"
@@ -872,6 +989,9 @@ ${Object.entries(productsByCategory)
 `;
 
       await sendTelegramMessage(message);
+
+      // Оновлюємо кеш для сторінки інвентаря
+      revalidatePath("/inventory");
 
       return { success: true, data: data };
     } catch (error) {
@@ -1250,6 +1370,19 @@ export async function deleteShift(shiftId: number) {
         return { success: false, error: productionError.message };
       }
 
+      // 3. Отримуємо ID Main warehouse для транзакцій
+      const { data: mainWarehouse, error: warehouseError } = await supabase
+        .from("warehouses")
+        .select("id")
+        .ilike("name", "%main%")
+        .limit(1)
+        .single();
+
+      if (warehouseError) {
+        console.error("Error fetching main warehouse:", warehouseError);
+        // Продовжуємо без warehouse_id, але це може призвести до проблем
+      }
+
       // 4. Оновлюємо кількість на складі для кожного продукту
       for (const item of productionData || []) {
         if (!item.product || !(item.product as any).id) {
@@ -1294,7 +1427,7 @@ export async function deleteShift(shiftId: number) {
         }
 
         // 4.3 Додаємо запис про транзакцію
-        const transactionData = {
+        const transactionData: any = {
           product_id: productId,
           quantity: -item.quantity,
           transaction_type: "adjustment",
@@ -1302,6 +1435,11 @@ export async function deleteShift(shiftId: number) {
           notes: `Видалення зміни #${shiftId} (автоматичне віднімання при видаленні зміни)`,
           created_at: new Date().toISOString(),
         };
+
+        // Додаємо warehouse_id, якщо він є
+        if (mainWarehouse?.id) {
+          transactionData.warehouse_id = mainWarehouse.id;
+        }
 
         const { error: transactionError } = await supabase
           .from("inventory_transactions")
@@ -3038,4 +3176,272 @@ export async function deleteMaterial(materialId: number) {
       error: "Сталася непередбачена помилка при видаленні матеріалу",
     };
   }
+}
+
+// Оптимізовані функції для головної сторінки з кешуванням та обмеженням даних
+
+// Отримання останніх змін для головної сторінки (тільки для відображення)
+export async function getRecentShifts(limit = 10) {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("shifts")
+          .select(
+            `
+            *,
+            employees:shift_employees(*, employee:employees(*)),
+            production:production(*, product:products(*, category:product_categories(*)))
+          `
+          )
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (error) {
+          console.error("Error fetching recent shifts:", error);
+          return [];
+        }
+
+        return data as ShiftWithDetails[];
+      } catch (error) {
+        console.error("Error in getRecentShifts:", error);
+        return [];
+      }
+    },
+    [`recent-shifts-${limit}`],
+    {
+      revalidate: 60, // Кешуємо на 60 секунд
+      tags: ["shifts"],
+    }
+  )();
+}
+
+// Отримання кількості активних змін (тільки count, без даних)
+export async function getActiveShiftsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("shifts")
+          .select("id")
+          .eq("status", "active");
+
+        if (error) {
+          console.error("Error fetching active shifts count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getActiveShiftsCount:", error);
+        return 0;
+      }
+    },
+    ["active-shifts-count"],
+    {
+      revalidate: 30, // Кешуємо на 30 секунд
+      tags: ["shifts"],
+    }
+  )();
+}
+
+// Отримання кількості працівників (тільки count)
+export async function getEmployeesCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("employees")
+          .select("id");
+
+        if (error) {
+          console.error("Error fetching employees count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getEmployeesCount:", error);
+        return 0;
+      }
+    },
+    ["employees-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["employees"],
+    }
+  )();
+}
+
+// Отримання кількості продуктів (тільки count)
+export async function getProductsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("id")
+          .or("product_type.eq.finished,product_type.is.null");
+
+        if (error) {
+          console.error("Error fetching products count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getProductsCount:", error);
+        return 0;
+      }
+    },
+    ["products-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["products"],
+    }
+  )();
+}
+
+// Отримання кількості матеріалів (тільки count)
+export async function getMaterialsCount() {
+  return unstable_cache(
+    async () => {
+      try {
+        const supabase = createServerClient();
+
+        const { data, error } = await supabase
+          .from("products")
+          .select("id")
+          .eq("product_type", "material");
+
+        if (error) {
+          console.error("Error fetching materials count:", error);
+          return 0;
+        }
+
+        return data?.length || 0;
+      } catch (error) {
+        console.error("Error in getMaterialsCount:", error);
+        return 0;
+      }
+    },
+    ["materials-count"],
+    {
+      revalidate: 300, // Кешуємо на 5 хвилин
+      tags: ["materials"],
+    }
+  )();
+}
+
+// Отримання загальної кількості на складі (тільки сума)
+export async function getTotalInventory() {
+  return unstable_cache(
+    async () => {
+      try {
+        // Використовуємо ту саму логіку, що і getInventory(), щоб отримати всі товари на складі
+        const supabase = createServerClient();
+
+        // Отримуємо готову продукцію зі старої таблиці inventory
+        const { data: oldInventoryData, error: oldInventoryError } = await supabase
+          .from("inventory")
+          .select("quantity, product:products(product_type, reward)");
+
+        // Отримуємо матеріали з warehouse_inventory для Main warehouse
+        const { data: mainWarehouseData } = await supabase
+          .from("warehouses")
+          .select("id")
+          .ilike("name", "%main%")
+          .limit(1)
+          .single();
+
+        let warehouseInventoryTotal = 0;
+        if (mainWarehouseData) {
+          const { data: warehouseData, error: warehouseError } = await supabase
+            .from("warehouse_inventory")
+            .select("quantity, product:products(product_type)")
+            .eq("warehouse_id", mainWarehouseData.id);
+
+          if (!warehouseError && warehouseData) {
+            // Фільтруємо тільки матеріали (product_type === "material")
+            const materials = warehouseData.filter(
+              (item) => item.product?.product_type === "material"
+            );
+            warehouseInventoryTotal = materials.reduce(
+              (sum, item) => sum + (Number(item.quantity) || 0),
+              0
+            );
+          }
+        }
+
+        // Фільтруємо тільки готову продукцію (не матеріали) з inventory
+        let oldInventoryTotal = 0;
+        if (!oldInventoryError && oldInventoryData) {
+          const finishedProducts = oldInventoryData.filter(
+            (item) =>
+              item.product?.product_type !== "material" &&
+              (item.product?.product_type === "finished" ||
+                (item.product?.product_type === null && item.product?.reward !== null))
+          );
+          oldInventoryTotal = finishedProducts.reduce(
+            (sum, item) => sum + (Number(item.quantity) || 0),
+            0
+          );
+        }
+
+        // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
+        return Math.round(oldInventoryTotal + warehouseInventoryTotal);
+      } catch (error) {
+        console.error("Error in getTotalInventory:", error);
+        // Якщо помилка, спробуємо використати getInventory() як fallback
+        try {
+          const inventory = await getInventory();
+          return Math.round(
+            inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+          );
+        } catch (fallbackError) {
+          console.error("Error in getTotalInventory fallback:", fallbackError);
+          return 0;
+        }
+      }
+    },
+    ["total-inventory"],
+    {
+      revalidate: 60, // Кешуємо на 60 секунд
+      tags: ["inventory"],
+    }
+  )();
+}
+
+// Оптимізована функція для завантаження всіх даних головної сторінки
+export async function getHomePageData() {
+  // Завантажуємо дані паралельно, але з кешуванням
+  const [recentShifts, activeShiftsCount, employeesCount, productsCount, materialsCount, totalInventory, productionStats, activeTasks] = await Promise.all([
+    getRecentShifts(10),
+    getActiveShiftsCount(),
+    getEmployeesCount(),
+    getProductsCount(),
+    getMaterialsCount(),
+    getTotalInventory(),
+    getProductionStats("year"),
+    getActiveTasks(),
+  ]);
+
+  return {
+    recentShifts,
+    activeShiftsCount,
+    employeesCount,
+    productsCount,
+    materialsCount,
+    totalInventory,
+    productionStats,
+    activeTasks,
+  };
 }

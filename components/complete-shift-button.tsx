@@ -44,6 +44,13 @@ export function CompleteShiftButton({ shift }: CompleteShiftButtonProps) {
         setIsPending(false);
         setOpen(false);
         router.refresh();
+        
+        // Відправляємо повідомлення для оновлення інших сторінок
+        if (typeof window !== "undefined") {
+          const channel = new BroadcastChannel("inventory-update");
+          channel.postMessage({ type: "inventory-updated" });
+          channel.close();
+        }
       } else {
         toast.error("Помилка", {
           description: result.error,

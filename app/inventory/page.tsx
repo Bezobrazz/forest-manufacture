@@ -185,6 +185,27 @@ export default function InventoryPage() {
       setIsLoading(false);
     }
     loadData();
+
+    // Оновлюємо дані при фокусі на сторінку
+    const handleFocus = () => {
+      loadData();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // Оновлюємо дані при отриманні повідомлення про оновлення інвентаря
+    const channel = new BroadcastChannel("inventory-update");
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === "inventory-updated") {
+        loadData();
+      }
+    };
+    channel.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      channel.removeEventListener("message", handleMessage);
+      channel.close();
+    };
   }, []);
 
   // Розділяємо інвентар на готову продукцію та виробничі матеріали
@@ -463,57 +484,64 @@ export default function InventoryPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {transactions.map((transaction) => (
-                    <div
-                      key={transaction.id}
-                      className="flex items-start justify-between py-2 border-b last:border-0"
-                    >
-                      <div className="flex items-start gap-3">
-                        {transaction.transaction_type === "production" ? (
-                          <ArrowUp className="h-5 w-5 text-green-500 mt-1" />
-                        ) : transaction.transaction_type === "shipment" ? (
-                          <ArrowDown className="h-5 w-5 text-red-500 mt-1" />
-                        ) : (
-                          <Settings className="h-5 w-5 text-blue-500 mt-1" />
-                        )}
-                        <div>
-                          <div className="font-medium">
-                            {transaction.transaction_type === "production"
-                              ? "Виробництво"
-                              : transaction.transaction_type === "shipment"
-                              ? "Відвантаження"
-                              : "Коригування"}
-                          </div>
-                          <div className="text-sm">
-                            {transaction.product?.name}{" "}
-                            <span className="text-muted-foreground">
-                              (
-                              {transaction.product?.category?.name ||
-                                "Без категорії"}
-                              )
-                            </span>
-                          </div>
-                          {transaction.notes && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              {transaction.notes}
-                            </div>
+                  {transactions
+                    .filter((transaction) => transaction != null)
+                    .map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className="flex items-start justify-between py-2 border-b last:border-0"
+                      >
+                        <div className="flex items-start gap-3">
+                          {transaction.transaction_type === "production" ? (
+                            <ArrowUp className="h-5 w-5 text-green-500 mt-1" />
+                          ) : transaction.transaction_type === "shipment" ? (
+                            <ArrowDown className="h-5 w-5 text-red-500 mt-1" />
+                          ) : transaction.transaction_type === "income" ? (
+                            <ArrowUp className="h-5 w-5 text-blue-500 mt-1" />
+                          ) : (
+                            <Settings className="h-5 w-5 text-blue-500 mt-1" />
                           )}
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {formatDateTime(transaction.created_at)}
+                          <div>
+                            <div className="font-medium">
+                              {transaction.transaction_type === "production"
+                                ? "Виробництво"
+                                : transaction.transaction_type === "shipment"
+                                ? "Відвантаження"
+                                : transaction.transaction_type === "income"
+                                ? "Надходження"
+                                : "Коригування"}
+                            </div>
+                            <div className="text-sm">
+                              {transaction.product?.name ||
+                                `Продукт ID: ${transaction.product_id}`}{" "}
+                              <span className="text-muted-foreground">
+                                (
+                                {transaction.product?.category?.name ||
+                                  "Без категорії"}
+                                )
+                              </span>
+                            </div>
+                            {transaction.notes && (
+                              <div className="text-sm text-muted-foreground mt-1">
+                                {transaction.notes}
+                              </div>
+                            )}
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {formatDateTime(transaction.created_at)}
+                            </div>
                           </div>
                         </div>
+                        <Badge
+                          variant={
+                            transaction.quantity > 0 ? "default" : "destructive"
+                          }
+                          className="ml-2 whitespace-nowrap"
+                        >
+                          {transaction.quantity > 0 ? "+" : ""}
+                          {formatNumberWithUnit(transaction.quantity, "шт")}
+                        </Badge>
                       </div>
-                      <Badge
-                        variant={
-                          transaction.quantity > 0 ? "default" : "destructive"
-                        }
-                        className="ml-2 whitespace-nowrap"
-                      >
-                        {transaction.quantity > 0 ? "+" : ""}
-                        {formatNumberWithUnit(transaction.quantity, "шт")}
-                      </Badge>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </CardContent>
