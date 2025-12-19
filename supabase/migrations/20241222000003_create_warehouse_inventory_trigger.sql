@@ -35,3 +35,5 @@ FOR EACH ROW
 EXECUTE FUNCTION public.update_warehouse_inventory();
 
 
+
+
