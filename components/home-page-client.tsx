@@ -115,8 +115,18 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
     setVisibleCards((prev) => ({ ...prev, [card]: !prev[card] }));
   };
 
+  // Сортуємо зміни: спочатку активні, потім завершені
   // Обмежуємо кількість елементів для відображення на головній сторінці
-  const recentShifts = initialData.recentShifts.slice(0, 3);
+  const sortedShifts = [...initialData.recentShifts].sort((a, b) => {
+    // Активні зміни мають бути першими
+    if (a.status === "active" && b.status !== "active") return -1;
+    if (a.status !== "active" && b.status === "active") return 1;
+    // Якщо обидві активні або обидві завершені, сортуємо за датою (новіші першими)
+    const dateA = a.opened_at || a.created_at || a.shift_date;
+    const dateB = b.opened_at || b.created_at || b.shift_date;
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
+  });
+  const recentShifts = sortedShifts.slice(0, 3);
   const { totalProduction, productionByCategory } = initialData.productionStats;
 
   return (
