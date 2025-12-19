@@ -46,7 +46,7 @@ export function NavigationButton({
     return () => clearTimeout(timer);
   }, [href, isCurrentWeek]);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
 
     // Якщо це поточний тиждень, показуємо повідомлення
@@ -58,7 +58,11 @@ export function NavigationButton({
     }
 
     setIsLoading(true);
-    router.push(href);
+    await router.push(href);
+    // Примусово оновлюємо сторінку для завантаження нових даних після навігації
+    setTimeout(() => {
+      router.refresh();
+    }, 100);
   };
 
   return (

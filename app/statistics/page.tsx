@@ -7,7 +7,6 @@ import {
   getShifts,
   getProducts,
   getProductCategories,
-  getShiftDetails,
 } from "@/app/actions";
 import {
   Card,
@@ -62,6 +61,7 @@ export default function StatisticsPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
+        console.log("Завантаження даних статистики...");
         const [stats, shiftsData, productsData, categoriesData] =
           await Promise.all([
             getProductionStats(period),
@@ -70,26 +70,33 @@ export default function StatisticsPage() {
             getProductCategories(),
           ]);
 
+        console.log("Дані завантажено:", {
+          stats,
+          shiftsCount: shiftsData?.length || 0,
+          productsCount: productsData?.length || 0,
+          categoriesCount: categoriesData?.length || 0,
+        });
+
         setProductionStats(stats);
-        setProducts(productsData);
-        setCategories(categoriesData);
+        setProducts(productsData || []);
+        setCategories(categoriesData || []);
 
-        // Отримуємо детальну інформацію про зміни
-        const shiftsWithDetails = await Promise.all(
-          shiftsData
-            .filter((shift) => shift.status === "completed")
-            .map(async (shift) => await getShiftDetails(shift.id))
-        );
-
-        // Фільтруємо null значення
-        const filteredShifts = shiftsWithDetails.filter(
-          Boolean
+        // Фільтруємо завершені зміни (getShifts вже повертає повну інформацію)
+        const completedShifts = (shiftsData || []).filter(
+          (shift) => shift.status === "completed"
         ) as ShiftWithDetails[];
-        setShifts(filteredShifts);
+        setShifts(completedShifts);
+        console.log("Завершені зміни:", completedShifts.length);
       } catch (error) {
         console.error("Помилка при завантаженні даних:", error);
+        // Встановлюємо порожні дані у випадку помилки
+        setProductionStats({ totalProduction: 0, productionByCategory: {} });
+        setProducts([]);
+        setCategories([]);
+        setShifts([]);
       } finally {
         setIsLoading(false);
+        console.log("Завантаження завершено");
       }
     };
 

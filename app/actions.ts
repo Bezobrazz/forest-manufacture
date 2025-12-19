@@ -594,21 +594,42 @@ export async function getProductionStats(
         startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 1 число поточного місяця
         break;
       case "week":
-        const day = now.getDay();
+        // Тиждень починається з понеділка (день 1), неділя = 0
+        const dayOfWeek = now.getDay(); // 0 = неділя, 1 = понеділок, ...
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Якщо неділя, віднімаємо 6 днів
         startDate = new Date(now);
-        startDate.setDate(now.getDate() - day); // Неділя поточного тижня
+        startDate.setDate(now.getDate() - daysToMonday);
+        startDate.setHours(0, 0, 0, 0); // Початок дня
         break;
       default:
         startDate = new Date(now.getFullYear(), 0, 1);
     }
 
     try {
+      // Спочатку отримуємо shifts з фільтром за датою
+      const { data: shiftsData, error: shiftsError } = await supabase
+        .from("shifts")
+        .select("id")
+        .gte("shift_date", startDate.toISOString().split("T")[0]); // Використовуємо тільки дату без часу
+
+      if (shiftsError) {
+        console.error("Error fetching shifts:", shiftsError);
+        return { totalProduction: 0, productionByCategory: {} };
+      }
+
+      if (!shiftsData || shiftsData.length === 0) {
+        return { totalProduction: 0, productionByCategory: {} };
+      }
+
+      const shiftIds = shiftsData.map((shift) => shift.id);
+
+      // Отримуємо production для цих shifts
       const { data: productionData, error: productionError } = await supabase
         .from("production")
         .select(
-          "quantity, shift:shifts(created_at), product:products(category_id, product_categories(name))"
+          "quantity, product:products(category_id, category:product_categories(name))"
         )
-        .gte("shift.created_at", startDate.toISOString());
+        .in("shift_id", shiftIds);
 
       if (productionError) {
         console.error("Error fetching production data:", productionError);
@@ -618,17 +639,17 @@ export async function getProductionStats(
       let totalProduction = 0;
       const productionByCategory: Record<string, number> = {};
 
-      productionData.forEach((item: any) => {
-        const quantity = Math.round(item.quantity || 0);
-        totalProduction += quantity;
+      if (productionData) {
+        productionData.forEach((item: any) => {
+          const quantity = Math.round(item.quantity || 0);
+          totalProduction += quantity;
 
-        const categoryName = item.product?.category_id
-          ? item.product?.product_categories?.name || "Без категорії"
-          : "Без категорії";
+          const categoryName = item.product?.category?.name || "Без категорії";
 
-        productionByCategory[categoryName] =
-          Math.round((productionByCategory[categoryName] || 0) + quantity);
-      });
+          productionByCategory[categoryName] =
+            Math.round((productionByCategory[categoryName] || 0) + quantity);
+        });
+      }
 
       // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
       return { 
