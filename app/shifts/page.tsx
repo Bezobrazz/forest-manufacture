@@ -35,23 +35,28 @@ export const revalidate = 0;
 export default async function ShiftsPage({
   searchParams,
 }: {
-  searchParams: { week?: string; startDate?: string; endDate?: string };
+  searchParams: Promise<{ week?: string; year?: string; startDate?: string; endDate?: string }>;
 }) {
   const shifts = await getShifts();
+  
+  // Розгортаємо Promise searchParams
+  const params = await searchParams;
 
   // Отримуємо поточний тиждень або з параметрів URL
   const currentDate = new Date();
-  const currentWeek = searchParams.week
-    ? parseInt(searchParams.week)
+  const currentWeek = params.week
+    ? parseInt(params.week)
     : getWeekNumber(currentDate);
-  const currentYear = currentDate.getFullYear();
+  const currentYear = params.year
+    ? parseInt(params.year)
+    : currentDate.getFullYear();
 
   // Перевіряємо, чи використовується діапазон дат
-  const useDateRange = searchParams.startDate && searchParams.endDate;
-  const startDate = searchParams.startDate
-    ? new Date(searchParams.startDate)
+  const useDateRange = params.startDate && params.endDate;
+  const startDate = params.startDate
+    ? new Date(params.startDate)
     : null;
-  const endDate = searchParams.endDate ? new Date(searchParams.endDate) : null;
+  const endDate = params.endDate ? new Date(params.endDate) : null;
 
   // Отримуємо детальну інформацію про завершені зміни для розрахунку заробітної плати
   const completedShifts = shifts.filter(
@@ -84,7 +89,10 @@ export default async function ShiftsPage({
 
   // Фільтруємо зміни за поточний тиждень або діапазон дат
   const filteredShifts = shifts.filter((shift) => {
-    const shiftDate = new Date(shift.shift_date);
+    // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
+    const shiftDate = new Date(
+      shift.opened_at || shift.created_at || shift.shift_date
+    );
 
     if (useDateRange && startDate && endDate) {
       // Використовуємо діапазон дат
@@ -117,8 +125,13 @@ export default async function ShiftsPage({
   detailedShifts.forEach((shift) => {
     if (!shift) return;
 
-    const shiftDate = new Date(shift.shift_date);
-    const dayOfWeek = getDayOfWeek(shift.shift_date);
+    // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
+    const shiftDate = new Date(
+      shift.opened_at || shift.created_at || shift.shift_date
+    );
+    const dayOfWeek = getDayOfWeek(
+      shift.opened_at || shift.created_at || shift.shift_date
+    );
 
     // Перевіряємо, чи зміна належить до фільтрованого діапазону
     let isInRange = false;
@@ -180,22 +193,19 @@ export default async function ShiftsPage({
     const prevWeek = currentWeek - 1;
     const prevYear = prevWeek <= 0 ? currentYear - 1 : currentYear;
     const actualPrevWeek = prevWeek <= 0 ? 52 : prevWeek; // Приблизно 52 тижні в році
-    return `?week=${actualPrevWeek}${
-      prevYear !== currentYear ? `&year=${prevYear}` : ""
-    }`;
+    return `?week=${actualPrevWeek}&year=${prevYear}`;
   };
 
   const getNextWeek = () => {
     const nextWeek = currentWeek + 1;
     const nextYear = nextWeek > 52 ? currentYear + 1 : currentYear;
     const actualNextWeek = nextWeek > 52 ? 1 : nextWeek;
-    return `?week=${actualNextWeek}${
-      nextYear !== currentYear ? `&year=${nextYear}` : ""
-    }`;
+    return `?week=${actualNextWeek}&year=${nextYear}`;
   };
 
   const getCurrentWeekUrl = () => {
-    return `?week=${getWeekNumber(new Date())}`;
+    const now = new Date();
+    return `?week=${getWeekNumber(now)}&year=${now.getFullYear()}`;
   };
 
   return (
@@ -217,7 +227,7 @@ export default async function ShiftsPage({
               ? `Зміни з ${formatDate(
                   startDate!.toISOString()
                 )} по ${formatDate(endDate!.toISOString())}`
-              : `Зміни за тиждень ${currentWeek}`}
+              : `Зміни за тиждень ${currentWeek} (${currentYear} р.)`}
           </h1>
           <div className="flex items-center gap-2">
             {!useDateRange && (
@@ -366,10 +376,16 @@ export default async function ShiftsPage({
               <Card className="h-full hover:bg-muted/50 transition-colors">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">Зміна #{shift.id}</CardTitle>
-                  <CardDescription className="flex items-center gap-2">
-                    <Calendar className="h-3 w-3" />
-                    <span>{formatDate(shift.shift_date)}</span>
-                  </CardDescription>
+                    <CardDescription className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {formatDate(
+                          shift.opened_at ||
+                            shift.created_at ||
+                            shift.shift_date
+                        )}
+                      </span>
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-2">
