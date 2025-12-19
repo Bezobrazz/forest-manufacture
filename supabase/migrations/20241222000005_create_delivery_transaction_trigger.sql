@@ -37,3 +37,5 @@ FOR EACH ROW
 EXECUTE FUNCTION public.create_inventory_transaction_on_delivery();
 
 
+
+

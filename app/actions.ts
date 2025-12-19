@@ -15,7 +15,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { revalidatePath, unstable_cache } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -990,8 +990,10 @@ ${Object.entries(productsByCategory)
 
       await sendTelegramMessage(message);
 
-      // Оновлюємо кеш для сторінки інвентаря
+      // Оновлюємо кеш для сторінки інвентаря та головної сторінки
       revalidatePath("/inventory");
+      revalidateTag("shifts");
+      revalidatePath("/");
 
       return { success: true, data: data };
     } catch (error) {
@@ -1057,6 +1059,10 @@ export async function createShift(formData: FormData) {
         console.error("Error creating shift:", error);
         return { success: false, error: error.message };
       }
+
+      // Оновлюємо кеш для головної сторінки
+      revalidateTag("shifts");
+      revalidatePath("/");
 
       return { success: true, data: data };
     } catch (error) {
@@ -1149,6 +1155,10 @@ export async function createShiftWithEmployees(
         return { success: false, error: shiftEmployeesError.message };
       }
 
+      // Оновлюємо кеш для головної сторінки
+      revalidateTag("shifts");
+      revalidatePath("/");
+
       return { success: true, data: shiftData };
     } catch (error) {
       console.error("Unexpected error in createShiftWithEmployees:", error);
@@ -1202,6 +1212,10 @@ export async function updateShiftOpenedAt(formData: FormData) {
         console.error("Error updating shift opened_at:", error);
         return { success: false, error: error.message };
       }
+
+      // Оновлюємо кеш для головної сторінки
+      revalidateTag("shifts");
+      revalidatePath("/");
 
       return { success: true, data: data };
     } catch (error) {
@@ -1488,6 +1502,11 @@ export async function deleteShift(shiftId: number) {
         console.error("Error deleting shift:", deleteShiftError);
         return { success: false, error: deleteShiftError.message };
       }
+
+      // Оновлюємо кеш для сторінки інвентаря та головної сторінки
+      revalidatePath("/inventory");
+      revalidateTag("shifts");
+      revalidatePath("/");
 
       return { success: true };
     } catch (error) {

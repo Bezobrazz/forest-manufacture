@@ -26,3 +26,5 @@ CREATE INDEX supplier_deliveries_product_id_idx ON public.supplier_deliveries(pr
 CREATE INDEX supplier_deliveries_warehouse_id_idx ON public.supplier_deliveries(warehouse_id);
 
 
+
+
