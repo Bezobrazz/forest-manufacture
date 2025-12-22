@@ -34,13 +34,14 @@ import { getUserWithRole } from "@/lib/auth/get-user-role";
 import type { ShiftWithDetails } from "@/lib/types";
 
 interface ShiftPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function ShiftPage({ params }: ShiftPageProps) {
-  const shiftId = Number.parseInt(params.id);
+  const { id } = await params;
+  const shiftId = Number.parseInt(id);
 
   if (isNaN(shiftId)) {
     notFound();
@@ -178,12 +179,12 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                       <span>
                         Зміна відкрита:{" "}
                         {formatDateTime(
-                          shift.opened_at || shift.created_at || shift.shift_date
+                          shift.opened_at ||
+                            shift.created_at ||
+                            shift.shift_date
                         )}
                       </span>
-                      {isOwner && (
-                        <EditShiftOpenedDate shift={shift} />
-                      )}
+                      {isOwner && <EditShiftOpenedDate shift={shift} />}
                     </div>
 
                     {shift.status === "completed" && shift.completed_at && (
