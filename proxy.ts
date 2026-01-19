@@ -9,6 +9,18 @@ export async function proxy(request: NextRequest) {
     },
   });
 
+  const currentPath = request.nextUrl.pathname;
+
+  // Швидка перевірка - якщо це публічний ресурс, не робимо нічого
+  if (
+    currentPath.startsWith("/_next") ||
+    currentPath.startsWith("/api/auth") ||
+    currentPath === "/favicon.ico" ||
+    /\.(svg|png|jpg|jpeg|gif|webp)$/.test(currentPath)
+  ) {
+    return response;
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -26,33 +38,6 @@ export async function proxy(request: NextRequest) {
       },
     }
   );
-
-  // Отримуємо користувача
-  // Спочатку пробуємо getUser() - це оновлює сесію автоматично
-  // Потім getSession() якщо потрібно
-  const {
-    data: { user: userFromGetUser },
-    error: getUserError,
-  } = await supabase.auth.getUser();
-
-  // Якщо getUser() знайшов користувача, використовуємо його
-  // Якщо ні, пробуємо getSession()
-  let user: { id: string } | null = userFromGetUser ?? null;
-  let session = null;
-
-  if (!user) {
-    const {
-      data: { session: sessionData },
-    } = await supabase.auth.getSession();
-    session = sessionData;
-    user = session?.user ?? null;
-  } else {
-    // Якщо користувач є, отримуємо сесію для діагностики
-    const {
-      data: { session: sessionData },
-    } = await supabase.auth.getSession();
-    session = sessionData;
-  }
 
   // Визначення роутів та їх вимог до ролей
   const routePermissions: Record<string, UserRole[]> = {
@@ -75,8 +60,6 @@ export async function proxy(request: NextRequest) {
   // Захищені маршрути - потребують авторизації
   const protectedPaths = Object.keys(routePermissions);
 
-  const currentPath = request.nextUrl.pathname;
-
   // Перевіряємо, чи це захищений роут
   // Виключаємо /auth та / (головна сторінка)
   const isProtectedPath =
@@ -84,193 +67,112 @@ export async function proxy(request: NextRequest) {
     !currentPath.startsWith("/auth") &&
     currentPath !== "/";
 
-  // Діагностика (можна видалити після виправлення)
-  if (process.env.NODE_ENV === "development" && isProtectedPath) {
-    const allCookies = request.cookies.getAll();
-    const supabaseCookies = allCookies.filter(
-      (c) => c.name.includes("supabase") || c.name.includes("sb-")
-    );
-
-    console.log("[Middleware] Protected path check:", {
-      path: currentPath,
-      isProtectedPath,
-      hasSession: !!session,
-      hasUser: !!user,
-      userId: user?.id || null,
-      getUserError: getUserError?.message || null,
-      cookiesCount: supabaseCookies.length,
-      cookieNames: supabaseCookies.map((c) => c.name),
-    });
-  }
-
-  // Якщо вже на сторінці авторизації - не робимо нічого
+  // Якщо вже на сторінці авторизації
   if (
     currentPath.startsWith("/auth/login") ||
     currentPath.startsWith("/auth/signup")
   ) {
-    // Якщо користувач вже авторизований, перенаправляємо на головну
-    if (user && currentPath !== "/") {
+    // Перевіряємо, чи користувач вже авторизований (тільки якщо потрібно)
+    // Використовуємо getSession() - швидше для простих перевірок
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user && currentPath !== "/") {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
       redirectUrl.searchParams.delete("redirectedFrom");
       return NextResponse.redirect(redirectUrl);
     }
-    // Якщо не авторизований - дозволяємо залишитися на сторінці логіну
     return response;
   }
 
+  // Якщо це не захищений роут, пропускаємо
+  if (!isProtectedPath) {
+    return response;
+  }
+
+  // Для захищених роутів - отримуємо користувача (тільки один виклик)
+  // Використовуємо getUser() - він автоматично оновлює сесію
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   // Якщо користувач не авторизований і намагається зайти на захищений маршрут
-  if (isProtectedPath && !user) {
-    // Діагностика: логуємо, чому користувач не авторизований
-    if (process.env.NODE_ENV === "development") {
-      const allCookies = request.cookies.getAll();
-      const supabaseCookies = allCookies.filter(
-        (c) => c.name.includes("supabase") || c.name.includes("sb-")
-      );
-
-      console.log("[Middleware] Redirecting to login:", {
-        path: currentPath,
-        isProtectedPath,
-        hasSession: !!session,
-        sessionUserId: session?.user?.id ?? null,
-        hasUser: !!user,
-        userId: (user as { id: string } | null)?.id ?? null,
-        cookiesCount: supabaseCookies.length,
-        cookieNames: supabaseCookies.map((c) => c.name),
-      });
-    }
-
+  if (!user) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
     redirectUrl.searchParams.set("redirectedFrom", currentPath);
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Якщо користувач авторизований, перевіряємо та створюємо запис з роллю, якщо його немає
-  if (user) {
-    // Перевіряємо, чи є запис в public.users з роллю
-    try {
-      const { data: userData, error } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
+  // Знаходимо відповідний роут та його вимоги до ролі
+  const matchedRoute = Object.keys(routePermissions).find((path) =>
+    currentPath.startsWith(path)
+  );
 
-      // Якщо запису немає або ролі немає, створюємо/оновлюємо запис
-      if (error || !userData || !userData.role) {
-        // Отримуємо email користувача з auth.users
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
-
-        if (authUser) {
-          // Створюємо або оновлюємо запис з роллю за замовчуванням
-          const defaultRole: UserRole = "worker";
-          await supabase
-            .from("users")
-            .upsert(
-              {
-                id: user.id,
-                email: authUser.email || "",
-                role: defaultRole,
-              },
-              {
-                onConflict: "id",
-              }
-            );
-        }
-      }
-    } catch (error) {
-      // Якщо помилка - логуємо, але не блокуємо
-      console.error("Error ensuring user record exists:", error);
-    }
+  if (!matchedRoute) {
+    return response;
   }
 
-  // Якщо користувач авторизований, перевіряємо роль
-  // АЛЕ тільки для роутів, де потрібна конкретна роль (не всі ролі)
-  if (isProtectedPath && user) {
-    // Знаходимо відповідний роут та його вимоги до ролі
-    const matchedRoute = Object.keys(routePermissions).find((path) =>
-      currentPath.startsWith(path)
-    );
+  const allowedRoles = routePermissions[matchedRoute];
 
-    if (matchedRoute) {
-      const allowedRoles = routePermissions[matchedRoute];
+  // Якщо всі ролі дозволені (всі авторизовані), пропускаємо перевірку
+  if (allowedRoles.length >= 3) {
+    return response;
+  }
 
-      // Якщо всі ролі дозволені (всі авторизовані), пропускаємо перевірку
-      // Перевіряємо тільки для роутів з обмеженнями (менше 3 ролей)
-      if (allowedRoles.length < 3) {
-        try {
-          // Отримуємо роль користувача з бази даних
-          const { data: userData, error } = await supabase
-            .from("users")
-            .select("role, email")
-            .eq("id", user.id)
-            .single();
+  // Перевіряємо роль тільки для роутів з обмеженнями
+  try {
+    // Отримуємо роль користувача з бази даних (тільки один запит)
+    const { data: userData, error: userDataError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-          // Якщо запису немає або ролі немає, створюємо/оновлюємо запис
-          if (error || !userData || !userData.role) {
-            // Отримуємо email користувача з auth.users
-            const {
-              data: { user: authUser },
-            } = await supabase.auth.getUser();
+    let userRole: UserRole | null = null;
 
-            if (authUser) {
-              // Створюємо або оновлюємо запис з роллю за замовчуванням
-              const defaultRole: UserRole = "worker";
-              const { error: upsertError } = await supabase
-                .from("users")
-                .upsert(
-                  {
-                    id: user.id,
-                    email: authUser.email || "",
-                    role: defaultRole,
-                  },
-                  {
-                    onConflict: "id",
-                  }
-                );
-
-              if (upsertError) {
-                console.warn("Could not create/update user record:", upsertError.message);
-                // Пропускаємо перевірку, дозволяємо доступ
-                return response;
-              }
-
-              // Після створення запису, перевіряємо роль
-              const userRole = defaultRole;
-              if (!allowedRoles.includes(userRole)) {
-                const redirectUrl = request.nextUrl.clone();
-                redirectUrl.pathname = "/";
-                redirectUrl.searchParams.set("error", "access_denied");
-                return NextResponse.redirect(redirectUrl);
-              }
-            } else {
-              // Якщо не вдалося отримати користувача, дозволяємо доступ
-              return response;
-            }
-          } else {
-            // Якщо запис є і роль є, перевіряємо доступ
-            const userRole = userData.role as UserRole;
-
-            // Перевіряємо, чи користувач має дозволену роль
-            if (!allowedRoles.includes(userRole)) {
-              // Якщо немає доступу, перенаправляємо на головну з повідомленням
-              const redirectUrl = request.nextUrl.clone();
-              redirectUrl.pathname = "/";
-              redirectUrl.searchParams.set("error", "access_denied");
-              return NextResponse.redirect(redirectUrl);
-            }
+    // Якщо запису немає або ролі немає, створюємо/оновлюємо запис
+    if (userDataError || !userData || !userData.role) {
+      // Використовуємо вже отриманого користувача з getUser()
+      const defaultRole: UserRole = "worker";
+      const { error: upsertError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            id: user.id,
+            email: user.email || "",
+            role: defaultRole,
+          },
+          {
+            onConflict: "id",
           }
-        } catch (error) {
-          // Якщо критична помилка - логуємо, але не блокуємо
-          console.error("Error checking user role:", error);
-          // Пропускаємо перевірку, щоб не блокувати користувача
-          return response;
-        }
+        );
+
+      if (upsertError) {
+        // Якщо не вдалося створити запис, дозволяємо доступ (не блокуємо)
+        console.warn("Could not create/update user record:", upsertError.message);
+        return response;
       }
-      // Якщо всі ролі дозволені, просто пропускаємо
+
+      userRole = defaultRole;
+    } else {
+      userRole = userData.role as UserRole;
     }
+
+    // Перевіряємо, чи користувач має дозволену роль
+    if (userRole && !allowedRoles.includes(userRole)) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/";
+      redirectUrl.searchParams.set("error", "access_denied");
+      return NextResponse.redirect(redirectUrl);
+    }
+  } catch (error) {
+    // Якщо критична помилка - логуємо, але не блокуємо
+    console.error("Error checking user role:", error);
+    // Пропускаємо перевірку, щоб не блокувати користувача
+    return response;
   }
 
   return response;
