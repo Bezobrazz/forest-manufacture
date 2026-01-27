@@ -25,6 +25,13 @@ import {
 import type { ShiftWithDetails, Product, ProductCategory } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   formatNumber,
   formatNumberWithUnit,
   formatPercentage,
@@ -43,6 +50,7 @@ type PeriodFilter = "year" | "month" | "week";
 
 export default function StatisticsPage() {
   const [period, setPeriod] = useState<PeriodFilter>("year");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [productionStats, setProductionStats] = useState<{
     totalProduction: number;
     productionByCategory: Record<string, number>;
@@ -64,7 +72,7 @@ export default function StatisticsPage() {
         console.log("Завантаження даних статистики...");
         const [stats, shiftsData, productsData, categoriesData] =
           await Promise.all([
-            getProductionStats(period),
+            getProductionStats(period, selectedYear),
             getShifts(),
             getProducts(),
             getProductCategories(),
@@ -101,7 +109,7 @@ export default function StatisticsPage() {
     };
 
     loadData();
-  }, [period]);
+  }, [period, selectedYear]);
 
   const { totalProduction, productionByCategory } = productionStats;
 
@@ -157,15 +165,29 @@ export default function StatisticsPage() {
     return months[monthIndex];
   };
 
+  // Отримуємо список доступних років з shifts
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    shifts.forEach((shift) => {
+      if (shift.shift_date) {
+        const year = new Date(shift.shift_date).getFullYear();
+        years.add(year);
+      }
+    });
+    const currentYear = new Date().getFullYear();
+    if (!years.has(currentYear)) {
+      years.add(currentYear);
+    }
+    return Array.from(years).sort((a, b) => b - a); // Сортуємо від більшого до меншого
+  }, [shifts]);
+
   // Обчислення помісячних даних виробництва
   const monthlyProductionData = useMemo(() => {
     const monthlyData: Record<string, number> = {};
 
-    // Ініціалізуємо всі місяці поточного року нулями
-    const now = new Date();
-    const currentYear = now.getFullYear();
+    // Ініціалізуємо всі місяці вибраного року нулями
     for (let month = 0; month < 12; month++) {
-      const monthKey = `${currentYear}-${String(month + 1).padStart(2, "0")}`;
+      const monthKey = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
       monthlyData[monthKey] = 0;
     }
 
@@ -183,7 +205,7 @@ export default function StatisticsPage() {
           shiftTotal += item.quantity;
         });
 
-        if (year === currentYear) {
+        if (year === selectedYear) {
           monthlyData[monthKey] = (monthlyData[monthKey] || 0) + shiftTotal;
         }
       }
@@ -200,18 +222,16 @@ export default function StatisticsPage() {
         };
       })
       .sort((a, b) => a.monthIndex - b.monthIndex);
-  }, [shifts]);
+  }, [shifts, selectedYear]);
 
   // Обчислення середнього виробництва по місяцях
   const monthlyAverageProductionData = useMemo(() => {
     const monthlyData: Record<string, { total: number; shiftsCount: number }> =
       {};
 
-    // Ініціалізуємо всі місяці поточного року нулями
-    const now = new Date();
-    const currentYear = now.getFullYear();
+    // Ініціалізуємо всі місяці вибраного року нулями
     for (let month = 0; month < 12; month++) {
-      const monthKey = `${currentYear}-${String(month + 1).padStart(2, "0")}`;
+      const monthKey = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
       monthlyData[monthKey] = { total: 0, shiftsCount: 0 };
     }
 
@@ -229,7 +249,7 @@ export default function StatisticsPage() {
           shiftTotal += item.quantity;
         });
 
-        if (year === currentYear) {
+        if (year === selectedYear) {
           monthlyData[monthKey].total =
             (monthlyData[monthKey].total || 0) + shiftTotal;
           monthlyData[monthKey].shiftsCount =
@@ -251,7 +271,7 @@ export default function StatisticsPage() {
         };
       })
       .sort((a, b) => a.monthIndex - b.monthIndex);
-  }, [shifts]);
+  }, [shifts, selectedYear]);
 
   if (isLoading) {
     return (
@@ -280,29 +300,47 @@ export default function StatisticsPage() {
         </Link>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Статистика виробництва</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Статистика виробництва</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Аналіз виробленої продукції за вибраний період
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-[100px] sm:w-[120px]">
+              <SelectValue placeholder="Рік" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             variant={period === "year" ? "default" : "outline"}
             onClick={() => setPeriod("year")}
+            className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Рік
           </Button>
           <Button
             variant={period === "month" ? "default" : "outline"}
             onClick={() => setPeriod("month")}
+            className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Місяць
           </Button>
           <Button
             variant={period === "week" ? "default" : "outline"}
             onClick={() => setPeriod("week")}
+            className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Тиждень
           </Button>
@@ -387,7 +425,7 @@ export default function StatisticsPage() {
               <span>Помісячний графік виробництва</span>
             </CardTitle>
             <CardDescription>
-              Динаміка виробленої продукції по місяцях поточного року
+              Динаміка виробленої продукції по місяцях {selectedYear} року
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -443,8 +481,7 @@ export default function StatisticsPage() {
               <span>Помісячний графік середнього виробництва</span>
             </CardTitle>
             <CardDescription>
-              Динаміка середньої кількості продукції на зміну по місяцях
-              поточного року
+              Динаміка середньої кількості продукції на зміну по місяцях {selectedYear} року
             </CardDescription>
           </CardHeader>
           <CardContent>
