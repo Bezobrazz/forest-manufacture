@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { NavigationButton } from "@/components/navigation-button";
+import { ShiftDatePicker } from "@/components/shift-date-picker";
 import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 
 import {
@@ -35,10 +36,15 @@ export const revalidate = 0;
 export default async function ShiftsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; year?: string; startDate?: string; endDate?: string }>;
+  searchParams: Promise<{
+    week?: string;
+    year?: string;
+    startDate?: string;
+    endDate?: string;
+  }>;
 }) {
   const shifts = await getShifts();
-  
+
   // Розгортаємо Promise searchParams
   const params = await searchParams;
 
@@ -53,17 +59,15 @@ export default async function ShiftsPage({
 
   // Перевіряємо, чи використовується діапазон дат
   const useDateRange = params.startDate && params.endDate;
-  const startDate = params.startDate
-    ? new Date(params.startDate)
-    : null;
+  const startDate = params.startDate ? new Date(params.startDate) : null;
   const endDate = params.endDate ? new Date(params.endDate) : null;
 
   // Отримуємо детальну інформацію про завершені зміни для розрахунку заробітної плати
   const completedShifts = shifts.filter(
-    (shift) => shift.status === "completed"
+    (shift) => shift.status === "completed",
   );
   const shiftsWithDetails = await Promise.all(
-    completedShifts.map(async (shift) => await getShiftDetails(shift.id))
+    completedShifts.map(async (shift) => await getShiftDetails(shift.id)),
   );
 
   // Фільтруємо null значення
@@ -91,7 +95,7 @@ export default async function ShiftsPage({
   const filteredShifts = shifts.filter((shift) => {
     // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
     const shiftDate = new Date(
-      shift.opened_at || shift.created_at || shift.shift_date
+      shift.opened_at || shift.created_at || shift.shift_date,
     );
 
     if (useDateRange && startDate && endDate) {
@@ -127,10 +131,10 @@ export default async function ShiftsPage({
 
     // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
     const shiftDate = new Date(
-      shift.opened_at || shift.created_at || shift.shift_date
+      shift.opened_at || shift.created_at || shift.shift_date,
     );
     const dayOfWeek = getDayOfWeek(
-      shift.opened_at || shift.created_at || shift.shift_date
+      shift.opened_at || shift.created_at || shift.shift_date,
     );
 
     // Перевіряємо, чи зміна належить до фільтрованого діапазону
@@ -220,41 +224,50 @@ export default async function ShiftsPage({
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between mb-6">
-        <div className="flex flex-wrap items-center gap-4 mb-4 sm:mb-0">
-          <h1 className="text-2xl font-bold">
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-xl sm:text-2xl font-bold">
             {useDateRange
-              ? `Зміни з ${formatDate(
-                  startDate!.toISOString()
-                )} по ${formatDate(endDate!.toISOString())}`
+              ? startDate &&
+                endDate &&
+                startDate.toISOString().split("T")[0] ===
+                  endDate.toISOString().split("T")[0]
+                ? `Зміни за ${formatDate(startDate.toISOString())}`
+                : `Зміни з ${formatDate(
+                    startDate!.toISOString(),
+                  )} по ${formatDate(endDate!.toISOString())}`
               : `Зміни за тиждень ${currentWeek} (${currentYear} р.)`}
           </h1>
-          <div className="flex items-center gap-2">
-            {!useDateRange && (
-              <>
-                <NavigationButton href={getPreviousWeek()}>
-                  <ChevronLeft className="h-4 w-4" />
-                </NavigationButton>
-                <NavigationButton
-                  href={getCurrentWeekUrl()}
-                  isCurrentWeek={currentWeek === getWeekNumber(new Date())}
-                  currentWeekMessage="Ви вже переглядаєте поточний тиждень"
-                >
-                  Поточний тиждень
-                </NavigationButton>
-                <NavigationButton href={getNextWeek()}>
-                  <ChevronRight className="h-4 w-4" />
-                </NavigationButton>
-              </>
-            )}
-          </div>
+          <Link href="/shifts/new" className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">
+              <Plus className="h-4 w-4 mr-2" />
+              <span>Створити зміну</span>
+            </Button>
+          </Link>
         </div>
-        <Link href="/shifts/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            <span>Створити зміну</span>
-          </Button>
-        </Link>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="flex-shrink-0">
+            <ShiftDatePicker />
+          </div>
+          {!useDateRange && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <NavigationButton href={getPreviousWeek()}>
+                <ChevronLeft className="h-4 w-4" />
+              </NavigationButton>
+              <NavigationButton
+                href={getCurrentWeekUrl()}
+                isCurrentWeek={currentWeek === getWeekNumber(new Date())}
+                currentWeekMessage="Ви вже переглядаєте поточний тиждень"
+              >
+                <span className="hidden sm:inline">Поточний тиждень</span>
+                <span className="sm:hidden">Поточний</span>
+              </NavigationButton>
+              <NavigationButton href={getNextWeek()}>
+                <ChevronRight className="h-4 w-4" />
+              </NavigationButton>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Додаємо секцію з підсумком заробітної плати за тиждень */}
@@ -265,7 +278,7 @@ export default async function ShiftsPage({
             <span>
               {useDateRange
                 ? `Заробітна плата з ${formatDate(
-                    startDate!.toISOString()
+                    startDate!.toISOString(),
                   )} по ${formatDate(endDate!.toISOString())}`
                 : `Заробітна плата за тиждень ${currentWeek}`}
             </span>
@@ -273,7 +286,7 @@ export default async function ShiftsPage({
           <CardDescription>
             {useDateRange
               ? `Підсумок заробітної плати за завершеними змінами з ${formatDate(
-                  startDate!.toISOString()
+                  startDate!.toISOString(),
                 )} по ${formatDate(endDate!.toISOString())}`
               : `Підсумок заробітної плати за завершеними змінами тижня ${currentWeek}`}
           </CardDescription>
@@ -340,7 +353,7 @@ export default async function ShiftsPage({
               <div className="text-center py-4 text-muted-foreground">
                 {useDateRange
                   ? `Немає завершених змін з ${formatDate(
-                      startDate!.toISOString()
+                      startDate!.toISOString(),
                     )} по ${formatDate(endDate!.toISOString())}`
                   : `Немає завершених змін за тиждень ${currentWeek}`}
               </div>
@@ -356,7 +369,7 @@ export default async function ShiftsPage({
               <p className="text-muted-foreground mb-4">
                 {useDateRange
                   ? `Немає змін з ${formatDate(
-                      startDate!.toISOString()
+                      startDate!.toISOString(),
                     )} по ${formatDate(endDate!.toISOString())}`
                   : `Немає змін за тиждень ${currentWeek}`}
               </p>
@@ -376,16 +389,14 @@ export default async function ShiftsPage({
               <Card className="h-full hover:bg-muted/50 transition-colors">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">Зміна #{shift.id}</CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      <Calendar className="h-3 w-3" />
-                      <span>
-                        {formatDate(
-                          shift.opened_at ||
-                            shift.created_at ||
-                            shift.shift_date
-                        )}
-                      </span>
-                    </CardDescription>
+                  <CardDescription className="flex items-center gap-2">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      {formatDate(
+                        shift.opened_at || shift.created_at || shift.shift_date,
+                      )}
+                    </span>
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-2">
@@ -408,7 +419,7 @@ export default async function ShiftsPage({
                     {shift.status === "completed" &&
                       (() => {
                         const shiftDetail = detailedShifts.find(
-                          (s) => s?.id === shift.id
+                          (s) => s?.id === shift.id,
                         );
                         if (!shiftDetail) return null;
 
