@@ -22,13 +22,11 @@ export async function getInventory(): Promise<Inventory[]> {
   try {
     const supabase = createServerClient();
 
-    // Отримуємо готову продукцію зі старої таблиці inventory
     const { data: oldInventoryData, error: oldInventoryError } = await supabase
       .from("inventory")
       .select("*, product:products(*, category:product_categories(*))")
       .order("id");
 
-    // Отримуємо матеріали з warehouse_inventory для Main warehouse
     const { data: mainWarehouseData } = await supabase
       .from("warehouses")
       .select("id")
@@ -51,12 +49,9 @@ export async function getInventory(): Promise<Inventory[]> {
       }
     }
 
-    // Об'єднуємо дані: готова продукція з inventory + матеріали з warehouse_inventory
     const result: Inventory[] = [];
 
-    // Додаємо готову продукцію зі старої таблиці
     if (!oldInventoryError && oldInventoryData) {
-      // Фільтруємо тільки готову продукцію (не матеріали)
       const finishedProducts = oldInventoryData.filter(
         (item) =>
           item.product?.product_type !== "material" &&
@@ -66,7 +61,6 @@ export async function getInventory(): Promise<Inventory[]> {
       result.push(...(finishedProducts as Inventory[]));
     }
 
-    // Додаємо матеріали з warehouse_inventory (тільки ті, що мають product_type === "material")
     const warehouseInventory = warehouseInventoryData
       .filter((item) => item.product?.product_type === "material")
       .map((item) => ({
@@ -82,7 +76,6 @@ export async function getInventory(): Promise<Inventory[]> {
     return result;
   } catch (error) {
     console.error("Error in getInventory:", error);
-    // Fallback до старої таблиці
     try {
       const supabase = createServerClient();
       const { data, error } = await supabase
@@ -125,7 +118,6 @@ export async function getInventoryTransactions(): Promise<
     );
     if (data && data.length > 0) {
       console.log("Sample transactions:", data.slice(0, 3));
-      // Логуємо транзакції виробництва для діагностики
       const productionTransactions = data.filter(
         (t: any) => t.transaction_type === "production"
       );
@@ -135,7 +127,6 @@ export async function getInventoryTransactions(): Promise<
       );
     }
 
-    // Фільтруємо null значення та повертаємо дані
     return (data || []).filter((t) => t != null) as InventoryTransaction[];
   } catch (error) {
     console.error("Error in getInventoryTransactions:", error);
@@ -155,7 +146,6 @@ export async function updateInventoryQuantity(
   try {
     const supabase = createServerClient();
 
-    // Отримуємо поточну кількість на складі
     const { data: currentInventory, error: getError } = await supabase
       .from("inventory")
       .select("quantity, id")
@@ -189,7 +179,6 @@ export async function updateInventoryQuantity(
       return { success: true };
     }
 
-    // Оновлюємо інвентар, використовуючи upsert замість окремих операцій update/insert
     console.log(`Використовуємо upsert для оновлення інвентаря`);
     const { error: updateError } = await supabase.from("inventory").upsert(
       {
@@ -199,7 +188,7 @@ export async function updateInventoryQuantity(
       },
       {
         onConflict: "product_id",
-        ignoreDuplicates: false, // Оновити при конфлікті
+        ignoreDuplicates: false,
       }
     );
 
@@ -210,7 +199,6 @@ export async function updateInventoryQuantity(
 
     console.log(`Інвентар успішно оновлено, додаємо запис про транзакцію`);
 
-    // Отримуємо ID Main warehouse для транзакції
     const { data: mainWarehouse, error: warehouseError } = await supabase
       .from("warehouses")
       .select("id")
@@ -220,10 +208,8 @@ export async function updateInventoryQuantity(
 
     if (warehouseError) {
       console.error("Error fetching main warehouse:", warehouseError);
-      // Продовжуємо без warehouse_id, але це може призвести до проблем
     }
 
-    // Додаємо запис про транзакцію
     const transactionData: any = {
       product_id: productId,
       quantity: adjustment,
@@ -231,7 +217,6 @@ export async function updateInventoryQuantity(
       notes: notes || "Ручне коригування кількості",
     };
 
-    // Додаємо warehouse_id, якщо він є
     if (mainWarehouse?.id) {
       transactionData.warehouse_id = mainWarehouse.id;
     }
@@ -279,7 +264,6 @@ export async function shipInventory(formData: FormData) {
     }
 
     try {
-      // Отримуємо поточну кількість на складі
       const { data: currentInventory, error: getError } = await supabase
         .from("inventory")
         .select("quantity")
@@ -316,7 +300,6 @@ export async function shipInventory(formData: FormData) {
         return { success: false, error: updateError.message };
       }
 
-      // 2. Отримуємо ID Main warehouse для транзакції
       const { data: mainWarehouse, error: warehouseError } = await supabase
         .from("warehouses")
         .select("id")
@@ -326,10 +309,8 @@ export async function shipInventory(formData: FormData) {
 
       if (warehouseError) {
         console.error("Error fetching main warehouse:", warehouseError);
-        // Продовжуємо без warehouse_id, але це може призвести до проблем
       }
 
-      // 3. Додаємо запис про транзакцію
       const transactionData: any = {
         product_id: productId,
         quantity: -quantity, // Від'ємне значення, оскільки це відвантаження
@@ -337,7 +318,6 @@ export async function shipInventory(formData: FormData) {
         notes: notes || "Відвантаження продукції",
       };
 
-      // Додаємо warehouse_id, якщо він є
       if (mainWarehouse?.id) {
         transactionData.warehouse_id = mainWarehouse.id;
       }
@@ -391,7 +371,6 @@ export async function updateProduction(formData: FormData) {
     }
 
     try {
-      // Перевіряємо, чи існує вже запис
       const { data: existingData, error: checkError } = await supabase
         .from("production")
         .select("*")
@@ -407,7 +386,6 @@ export async function updateProduction(formData: FormData) {
       let result;
 
       if (existingData) {
-        // Оновлюємо існуючий запис
         result = await supabase
           .from("production")
           .update({

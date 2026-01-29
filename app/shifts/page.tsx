@@ -45,10 +45,8 @@ export default async function ShiftsPage({
 }) {
   const shifts = await getShifts();
 
-  // Розгортаємо Promise searchParams
   const params = await searchParams;
 
-  // Отримуємо поточний тиждень або з параметрів URL
   const currentDate = new Date();
   const currentWeek = params.week
     ? parseInt(params.week)
@@ -57,12 +55,10 @@ export default async function ShiftsPage({
     ? parseInt(params.year)
     : currentDate.getFullYear();
 
-  // Перевіряємо, чи використовується діапазон дат
   const useDateRange = params.startDate && params.endDate;
   const startDate = params.startDate ? new Date(params.startDate) : null;
   const endDate = params.endDate ? new Date(params.endDate) : null;
 
-  // Отримуємо детальну інформацію про завершені зміни для розрахунку заробітної плати
   const completedShifts = shifts.filter(
     (shift) => shift.status === "completed",
   );
@@ -70,7 +66,6 @@ export default async function ShiftsPage({
     completedShifts.map(async (shift) => await getShiftDetails(shift.id)),
   );
 
-  // Фільтруємо null значення
   const detailedShifts = shiftsWithDetails.filter(Boolean);
 
   // Функція для отримання дня тижня з дати
@@ -91,25 +86,20 @@ export default async function ShiftsPage({
     return days[(date.getDay() + 1) % 7];
   };
 
-  // Фільтруємо зміни за поточний тиждень або діапазон дат
   const filteredShifts = shifts.filter((shift) => {
-    // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
     const shiftDate = new Date(
       shift.opened_at || shift.created_at || shift.shift_date,
     );
 
     if (useDateRange && startDate && endDate) {
-      // Використовуємо діапазон дат
       return shiftDate >= startDate && shiftDate <= endDate;
     } else {
-      // Використовуємо тиждень
       const shiftWeek = getWeekNumber(shiftDate);
       const shiftYear = shiftDate.getFullYear();
       return shiftWeek === currentWeek && shiftYear === currentYear;
     }
   });
 
-  // Групуємо зміни за днями тижня і розраховуємо заробітну плату
   const shiftsByDay: Record<
     string,
     {
@@ -120,16 +110,12 @@ export default async function ShiftsPage({
     }
   > = {};
 
-  // Загальна сума за тиждень
   let weeklyTotalWages = 0;
-  // Додаємо підрахунок загальної кількості продукції за тиждень
   let weeklyTotalProduction = 0;
 
-  // Обробляємо кожну зміну
   detailedShifts.forEach((shift) => {
     if (!shift) return;
 
-    // Використовуємо opened_at, created_at або shift_date для визначення дати зміни
     const shiftDate = new Date(
       shift.opened_at || shift.created_at || shift.shift_date,
     );
@@ -137,23 +123,18 @@ export default async function ShiftsPage({
       shift.opened_at || shift.created_at || shift.shift_date,
     );
 
-    // Перевіряємо, чи зміна належить до фільтрованого діапазону
     let isInRange = false;
 
     if (useDateRange && startDate && endDate) {
-      // Використовуємо діапазон дат
       isInRange = shiftDate >= startDate && shiftDate <= endDate;
     } else {
-      // Використовуємо тиждень
       const weekNumber = getWeekNumber(shiftDate);
       const year = shiftDate.getFullYear();
       isInRange = weekNumber === currentWeek && year === currentYear;
     }
 
-    // Якщо не в діапазоні, пропускаємо
     if (!isInRange) return;
 
-    // Розраховуємо заробітну плату для зміни
     let shiftWages = 0;
     if (shift.production && shift.production.length > 0) {
       shift.production.forEach((item) => {
@@ -163,18 +144,15 @@ export default async function ShiftsPage({
       });
     }
 
-    // Додаємо до загальної суми за тиждень
     weeklyTotalWages += shiftWages;
 
-    // Додаємо підрахунок продукції
     if (shift.production && shift.production.length > 0) {
       shift.production.forEach((item) => {
         weeklyTotalProduction += item.quantity;
       });
     }
 
-    // Додаємо до групи за днем тижня
-    const dateKey = shiftDate.toISOString().split("T")[0]; // Формат YYYY-MM-DD
+    const dateKey = shiftDate.toISOString().split("T")[0];
 
     if (!shiftsByDay[dateKey]) {
       shiftsByDay[dateKey] = {
@@ -189,10 +167,8 @@ export default async function ShiftsPage({
     shiftsByDay[dateKey].totalWages += shiftWages;
   });
 
-  // Сортуємо дні за датою (від найновішого до найстарішого)
   const sortedDays = Object.keys(shiftsByDay).sort().reverse();
 
-  // Функції для навігації між тижнями
   const getPreviousWeek = () => {
     const prevWeek = currentWeek - 1;
     const prevYear = prevWeek <= 0 ? currentYear - 1 : currentYear;
@@ -270,7 +246,6 @@ export default async function ShiftsPage({
         </div>
       </div>
 
-      {/* Додаємо секцію з підсумком заробітної плати за тиждень */}
       <Card className="mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -415,7 +390,6 @@ export default async function ShiftsPage({
                       </div>
                     )}
 
-                    {/* Додаємо інформацію про заробітну плату для завершених змін */}
                     {shift.status === "completed" &&
                       (() => {
                         const shiftDetail = detailedShifts.find(

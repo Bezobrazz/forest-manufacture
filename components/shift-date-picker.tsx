@@ -53,10 +53,8 @@ export function ShiftDatePicker() {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   
-  // Використовуємо useRef для відстеження попередніх значень, щоб уникнути зациклення
   const prevParamsRef = React.useRef<string>("");
 
-  // Отримуємо значення параметрів та створюємо стабільну залежність
   const weekParam = searchParams.get("week");
   const yearParam = searchParams.get("year");
   const paramsKey = React.useMemo(
@@ -64,37 +62,29 @@ export function ShiftDatePicker() {
     [weekParam, yearParam]
   );
 
-  // Отримуємо поточний тиждень з URL параметрів
   React.useEffect(() => {
-    // Перевіряємо, чи змінилися параметри
     if (prevParamsRef.current === paramsKey) {
       return;
     }
     prevParamsRef.current = paramsKey;
     
-    // Скидаємо стан завантаження при зміні параметрів
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 100);
     
-    // Якщо є параметри тижня, встановлюємо вибраний тиждень
     if (weekParam && yearParam) {
       const week = parseInt(weekParam);
       const year = parseInt(yearParam);
       
-      // Знаходимо суботу цього тижня
-      // Перша субота року
       const firstDayOfYear = new Date(year, 0, 1);
       const firstSaturday = new Date(firstDayOfYear);
       const dayOfWeek = firstDayOfYear.getDay();
       const diff = dayOfWeek === 6 ? 0 : 6 - dayOfWeek;
       firstSaturday.setDate(firstDayOfYear.getDate() + diff);
       
-      // Субота вибраного тижня
       const weekStart = new Date(firstSaturday);
       weekStart.setDate(firstSaturday.getDate() + (week - 1) * 7);
       
-      // Перевіряємо, чи не змінився тиждень, щоб уникнути зайвих оновлень
       setSelectedWeek((prev) => {
         if (prev && prev.week === week && prev.year === year) {
           return prev;
@@ -108,7 +98,6 @@ export function ShiftDatePicker() {
         };
       });
       
-      // Встановлюємо дату для відображення в календарі (субота тижня)
       setSelectedDate((prev) => {
         if (prev && prev.getTime() === weekStart.getTime()) {
           return prev;
@@ -132,11 +121,9 @@ export function ShiftDatePicker() {
   const handleDateSelect = async (date: Date | undefined) => {
     if (date) {
       setIsLoading(true);
-      // Визначаємо тиждень для вибраної дати
       const week = getWeekNumber(date);
       const year = date.getFullYear();
       
-      // Перевіряємо, чи не вибрано той самий тиждень
       if (selectedWeek && selectedWeek.week === week && selectedWeek.year === year) {
         setIsLoading(false);
         setIsOpen(false);
@@ -146,11 +133,9 @@ export function ShiftDatePicker() {
       const weekStart = getWeekStart(date);
       const weekEnd = getWeekEnd(date);
       
-      // Встановлюємо параметри тижня в URL
       router.push(`/shifts?week=${week}&year=${year}`);
       setIsOpen(false);
     } else {
-      // Якщо дата не вибрана, очищаємо параметри
       setIsLoading(true);
       router.push("/shifts");
       setSelectedDate(undefined);
@@ -209,7 +194,7 @@ export function ShiftDatePicker() {
             selected={selectedDate}
             onSelect={handleDateSelect}
             locale={uk}
-            weekStartsOn={6} // Тиждень починається з суботи
+            weekStartsOn={6}
             initialFocus
             className="rounded-md"
           />

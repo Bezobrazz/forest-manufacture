@@ -145,7 +145,6 @@ export default function SupplierTransactionsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Стани для форми закупівлі
   const [deliveryDate, setDeliveryDate] = useState<Date | undefined>(
     new Date()
   );
@@ -161,7 +160,6 @@ export default function SupplierTransactionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
 
-  // Функція для завантаження даних
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
@@ -180,7 +178,6 @@ export default function SupplierTransactionsPage() {
       setMaterials(materialsData);
       setWarehouses(warehousesData);
 
-      // Встановлюємо Main warehouse за замовчуванням
       const mainWarehouse = warehousesData.find((w) =>
         w.name.toLowerCase().includes("main")
       );
@@ -190,7 +187,6 @@ export default function SupplierTransactionsPage() {
     } catch (err: any) {
       console.error("Помилка при завантаженні даних:", err);
 
-      // Перевіряємо, чи це помилка підключення до бази даних
       if (
         err?.message?.includes("Supabase") ||
         err?.message?.includes("credentials")
@@ -204,12 +200,10 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  // Завантажуємо дані при першому рендері
   useEffect(() => {
     loadData();
   }, []);
 
-  // Функція для оновлення списку постачальників
   const refreshSuppliers = async () => {
     try {
       const suppliersData = await getSuppliers();
@@ -221,7 +215,6 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  // Фільтрація та сортування транзакцій
   const filteredAndSortedDeliveries = useMemo(() => {
     let filtered = deliveries.filter((delivery) => {
       const query = searchQuery.toLowerCase().trim();
@@ -237,7 +230,6 @@ export default function SupplierTransactionsPage() {
       return supplierMatch || productMatch || warehouseMatch;
     });
 
-    // Сортування
     filtered = [...filtered].sort((a, b) => {
       if (sortBy === "date") {
         return (
@@ -259,7 +251,6 @@ export default function SupplierTransactionsPage() {
     return filtered;
   }, [deliveries, searchQuery, sortBy]);
 
-  // Розрахунок пагінації
   const totalPages = Math.ceil(
     filteredAndSortedDeliveries.length / itemsPerPage
   );
@@ -268,7 +259,6 @@ export default function SupplierTransactionsPage() {
     currentPage * itemsPerPage
   );
 
-  // Функції для керування пагінацією
   const goToNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
@@ -287,12 +277,10 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  // Скидання пагінації при зміні пошуку або сортування
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, sortBy]);
 
-  // Фільтрація постачальників для пошуку
   const filteredSuppliers = useMemo(() => {
     if (!supplierSearchQuery.trim()) return suppliers;
     const query = supplierSearchQuery.toLowerCase();
@@ -303,7 +291,6 @@ export default function SupplierTransactionsPage() {
     );
   }, [suppliers, supplierSearchQuery]);
 
-  // Фільтрація матеріалів для пошуку
   const filteredMaterials = useMemo(() => {
     if (!materialSearchQuery.trim()) return materials;
     const query = materialSearchQuery.toLowerCase();
@@ -312,14 +299,12 @@ export default function SupplierTransactionsPage() {
     );
   }, [materials, materialSearchQuery]);
 
-  // Розрахунок суми закупівлі
   const purchaseTotal = useMemo(() => {
     const qty = Number(quantity) || 0;
     const price = Number(pricePerUnit) || 0;
     return qty * price;
   }, [quantity, pricePerUnit]);
 
-  // Обробка додавання транзакції
   const handleAddTransaction = async () => {
     if (!selectedSupplierId || !selectedMaterialId) {
       toast.error("Заповніть всі обов'язкові поля");
@@ -358,11 +343,9 @@ export default function SupplierTransactionsPage() {
       const result = await createSupplierDelivery(formData);
 
       if (result.success && result.data) {
-        // Додаємо нову транзакцію на початок списку
         setDeliveries([result.data as SupplierDelivery, ...deliveries]);
         toast.success("Транзакцію успішно додано");
 
-        // Очищаємо форму
         setSelectedSupplierId("");
         setSupplierSearchQuery("");
         setSelectedMaterialId("");
@@ -381,7 +364,6 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  // Статистика
   const totalDeliveries = deliveries.length;
   const totalQuantity = deliveries.reduce(
     (sum, delivery) => sum + Number(delivery.quantity),
@@ -712,7 +694,6 @@ export default function SupplierTransactionsPage() {
         </Card>
       )}
 
-      {/* Статистика */}
       {!isLoading && !databaseError && totalDeliveries > 0 && (
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -964,7 +945,6 @@ export default function SupplierTransactionsPage() {
                           { length: totalPages },
                           (_, i) => i + 1
                         ).map((page) => {
-                          // Показуємо першу, останню, поточну та сусідні сторінки
                           const showPage =
                             page === 1 ||
                             page === totalPages ||
@@ -972,7 +952,6 @@ export default function SupplierTransactionsPage() {
                               page <= currentPage + 1);
 
                           if (!showPage) {
-                            // Показуємо ellipsis
                             if (
                               (page === currentPage - 2 && currentPage > 3) ||
                               (page === currentPage + 2 &&
