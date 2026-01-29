@@ -25,6 +25,14 @@ import {
   Plus,
   Calendar as CalendarIcon,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SupplierForm } from "@/components/supplier-form";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -151,6 +159,7 @@ export default function SupplierTransactionsPage() {
   const [pricePerUnit, setPricePerUnit] = useState<string>("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
 
   // Функція для завантаження даних
   const loadData = async () => {
@@ -199,6 +208,18 @@ export default function SupplierTransactionsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Функція для оновлення списку постачальників
+  const refreshSuppliers = async () => {
+    try {
+      const suppliersData = await getSuppliers();
+      setSuppliers(suppliersData);
+      setAddSupplierDialogOpen(false);
+      setSupplierPopoverOpen(false);
+    } catch (error) {
+      console.error("Помилка оновлення постачальників:", error);
+    }
+  };
 
   // Фільтрація та сортування транзакцій
   const filteredAndSortedDeliveries = useMemo(() => {
@@ -488,8 +509,23 @@ export default function SupplierTransactionsPage() {
                       />
                       <div className="max-h-[200px] overflow-auto">
                         {filteredSuppliers.length === 0 ? (
-                          <div className="p-2 text-sm text-muted-foreground">
-                            Постачальників не знайдено
+                          <div className="p-2 space-y-2">
+                            <div className="text-sm text-muted-foreground">
+                              Постачальників не знайдено
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSupplierPopoverOpen(false);
+                                setAddSupplierDialogOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                              Додати постачальника
+                            </Button>
                           </div>
                         ) : (
                           filteredSuppliers.map((supplier) => (
@@ -990,6 +1026,20 @@ export default function SupplierTransactionsPage() {
           </CardContent>
         </Card>
       )}
+      <Dialog open={addSupplierDialogOpen} onOpenChange={setAddSupplierDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Додати нового постачальника</DialogTitle>
+            <DialogDescription>
+              Заповніть інформацію про постачальника. Поля з позначкою * є
+              обов'язковими.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <SupplierForm onSupplierAdded={refreshSuppliers} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
