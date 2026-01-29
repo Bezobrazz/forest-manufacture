@@ -1,0 +1,77 @@
+# Cursor Project Rules
+
+## 1. General Principles
+
+- Follow clean code and readability first.
+- Prefer simplicity over overengineering.
+- Do not introduce new libraries without explicit instruction.
+- Respect existing project architecture and folder structure.
+- Do not break existing functionality.
+
+## 2. Language & Syntax
+
+- Use modern JavaScript (ES6+) and TypeScript where applicable.
+- Prefer `const` and `let`, never use `var`.
+- Use arrow functions instead of function declarations where reasonable.
+- Use optional chaining and nullish coalescing when appropriate.
+
+## 3. React Rules
+
+- Use functional components only.
+- Prefer React Hooks over class-based patterns.
+- Keep components small and focused (single responsibility).
+- Extract reusable logic into custom hooks.
+- Avoid unnecessary re-renders.
+
+### State Management
+
+- Prefer local state (`useState`) when possible.
+- Use `useMemo` and `useCallback` only when there is a clear performance reason.
+- Do not introduce global state unless explicitly requested.
+
+## 4. Next.js Rules (if applicable)
+
+- Prefer Server Components by default.
+- Use Client Components only when necessary (`"use client"`).
+- Follow App Router conventions.
+- Keep data fetching close to where it is used.
+- Do not fetch data inside components unless required.
+
+## 5. Styling
+
+- Follow existing styling solution (Tailwind / CSS Modules / styled-components).
+- Do not mix styling approaches.
+- Keep class names readable and consistent.
+- Avoid inline styles unless absolutely necessary.
+
+## 6. File & Folder Structure
+
+- Respect existing folder structure.
+- Do not move files unless explicitly requested.
+- Group related logic together.
+- Use index files only if already present in the project.
+
+## 7. Naming Conventions
+
+- Components: `PascalCase`
+- Hooks: `useSomething`
+- Variables & functions: `camelCase`
+- Constants: `UPPER_SNAKE_CASE`
+
+## 8. API & Data
+
+- Assume API responses may be undefined or partially missing.
+- Always handle loading and error states.
+- Do not hardcode API URLs unless instructed.
+
+## 9. Comments & Explanations
+
+- Do not add obvious comments.
+- Explain non-trivial logic briefly.
+- Prefer self-explanatory code.
+
+## 10. Output Rules
+
+- When generating code, provide only the necessary files or snippets.
+- Do not repeat unchanged code.
+- Do not include explanations unless explicitly requested.
