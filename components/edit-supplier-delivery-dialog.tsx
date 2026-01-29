@@ -68,7 +68,6 @@ export function EditSupplierDeliveryDialog({
   const [materialPopoverOpen, setMaterialPopoverOpen] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
 
-  // Завантажуємо дані при відкритті діалогу
   useEffect(() => {
     if (open) {
       loadData();
@@ -104,7 +103,6 @@ export function EditSupplierDeliveryDialog({
     }
   };
 
-  // Оновлюємо стан форми при зміні транзакції
   useEffect(() => {
     setFormData({
       delivery_id: delivery.id,
@@ -117,7 +115,6 @@ export function EditSupplierDeliveryDialog({
     });
   }, [delivery]);
 
-  // Фільтрація постачальників
   const filteredSuppliers = suppliers.filter((supplier) => {
     if (!supplierSearchQuery.trim()) return true;
     const query = supplierSearchQuery.toLowerCase();
@@ -127,14 +124,12 @@ export function EditSupplierDeliveryDialog({
     );
   });
 
-  // Фільтрація матеріалів
   const filteredMaterials = materials.filter((material) => {
     if (!materialSearchQuery.trim()) return true;
     const query = materialSearchQuery.toLowerCase();
     return material.name.toLowerCase().includes(query);
   });
 
-  // Обробник зміни полів форми
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -142,7 +137,6 @@ export function EditSupplierDeliveryDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Функція для відправки форми
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsPending(true);

@@ -89,7 +89,6 @@ export default function StatisticsPage() {
         setProducts(productsData || []);
         setCategories(categoriesData || []);
 
-        // Фільтруємо завершені зміни (getShifts вже повертає повну інформацію)
         const completedShifts = (shiftsData || []).filter(
           (shift) => shift.status === "completed"
         ) as ShiftWithDetails[];
@@ -97,7 +96,6 @@ export default function StatisticsPage() {
         console.log("Завершені зміни:", completedShifts.length);
       } catch (error) {
         console.error("Помилка при завантаженні даних:", error);
-        // Встановлюємо порожні дані у випадку помилки
         setProductionStats({ totalProduction: 0, productionByCategory: {} });
         setProducts([]);
         setCategories([]);
@@ -113,12 +111,10 @@ export default function StatisticsPage() {
 
   const { totalProduction, productionByCategory } = productionStats;
 
-  // Підготовка даних для візуалізації
   const categoryColors: Record<string, string> = {
     "Без категорії": "hsl(var(--muted))",
   };
 
-  // Призначаємо кольори для категорій
   categories.forEach((category, index) => {
     const hues = [200, 150, 100, 50, 300, 250, 350];
     categoryColors[category.name] = `hsl(${
@@ -126,19 +122,16 @@ export default function StatisticsPage() {
     }, 70%, 50%)`;
   });
 
-  // Розрахунок відсотків для кожної категорії
   const categoryPercentages: Record<string, number> = {};
   Object.entries(productionByCategory).forEach(([category, amount]) => {
     categoryPercentages[category] =
       totalProduction > 0 ? (amount / totalProduction) * 100 : 0;
   });
 
-  // Сортуємо категорії за кількістю продукції (від більшої до меншої)
   const sortedCategories = Object.entries(productionByCategory).sort(
     (a, b) => b[1] - a[1]
   );
 
-  // Підрахунок статистики по змінах
   const completedShifts = shifts.filter(
     (shift) => shift.status === "completed"
   );
@@ -165,7 +158,6 @@ export default function StatisticsPage() {
     return months[monthIndex];
   };
 
-  // Отримуємо список доступних років з shifts
   const availableYears = useMemo(() => {
     const years = new Set<number>();
     shifts.forEach((shift) => {
@@ -178,20 +170,17 @@ export default function StatisticsPage() {
     if (!years.has(currentYear)) {
       years.add(currentYear);
     }
-    return Array.from(years).sort((a, b) => b - a); // Сортуємо від більшого до меншого
+    return Array.from(years).sort((a, b) => b - a);
   }, [shifts]);
 
-  // Обчислення помісячних даних виробництва
   const monthlyProductionData = useMemo(() => {
     const monthlyData: Record<string, number> = {};
 
-    // Ініціалізуємо всі місяці вибраного року нулями
     for (let month = 0; month < 12; month++) {
       const monthKey = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
       monthlyData[monthKey] = 0;
     }
 
-    // Підраховуємо виробництво по місяцях
     shifts.forEach((shift) => {
       if (shift.status === "completed" && shift.production) {
         const shiftDate = new Date(shift.shift_date);
@@ -211,7 +200,6 @@ export default function StatisticsPage() {
       }
     });
 
-    // Конвертуємо в масив для графіка
     return Object.entries(monthlyData)
       .map(([key, value]) => {
         const [year, month] = key.split("-");
@@ -224,18 +212,15 @@ export default function StatisticsPage() {
       .sort((a, b) => a.monthIndex - b.monthIndex);
   }, [shifts, selectedYear]);
 
-  // Обчислення середнього виробництва по місяцях
   const monthlyAverageProductionData = useMemo(() => {
     const monthlyData: Record<string, { total: number; shiftsCount: number }> =
       {};
 
-    // Ініціалізуємо всі місяці вибраного року нулями
     for (let month = 0; month < 12; month++) {
       const monthKey = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
       monthlyData[monthKey] = { total: 0, shiftsCount: 0 };
     }
 
-    // Підраховуємо виробництво та кількість змін по місяцях
     shifts.forEach((shift) => {
       if (shift.status === "completed" && shift.production) {
         const shiftDate = new Date(shift.shift_date);
@@ -258,7 +243,6 @@ export default function StatisticsPage() {
       }
     });
 
-    // Конвертуємо в масив для графіка з розрахунком середнього
     return Object.entries(monthlyData)
       .map(([key, data]) => {
         const [year, month] = key.split("-");
@@ -667,19 +651,15 @@ export default function StatisticsPage() {
               {/* Створюємо графік для кожної категорії */}
               {sortedCategories
                 .map(([category, totalAmount]) => {
-                  // Фільтруємо продукти цієї категорії
                   const categoryProducts = products.filter(
                     (product) =>
                       (category === "Без категорії" && !product.category_id) ||
                       product.category?.name === category
                   );
 
-                  // Отримуємо статистику виробництва для кожного продукту
                   const productStats = categoryProducts.map((product) => {
-                    // Підраховуємо загальну кількість виробленої продукції для цього продукту
                     let productTotal = 0;
 
-                    // Проходимо по всіх змінах і шукаємо виробництво цього продукту
                     shifts.forEach((shift) => {
                       if (shift.production) {
                         const productionItem = shift.production.find(
@@ -701,15 +681,12 @@ export default function StatisticsPage() {
                     };
                   });
 
-                  // Сортуємо продукти за кількістю виробництва (від більшого до меншого)
                   const sortedProducts = productStats
-                    .filter((stat) => stat.total > 0) // Показуємо тільки продукти з виробництвом
+                    .filter((stat) => stat.total > 0)
                     .sort((a, b) => b.total - a.total);
 
-                  // Якщо немає продуктів з виробництвом у цій категорії, пропускаємо
                   if (sortedProducts.length === 0) return null;
 
-                  // Знаходимо максимальне значення для масштабування графіка
                   const maxValue = Math.max(
                     ...sortedProducts.map((p) => p.total)
                   );
