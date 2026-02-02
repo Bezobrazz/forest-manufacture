@@ -10,8 +10,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Car } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Car, Pencil } from "lucide-react";
 import { AddVehicleDialog } from "@/components/add-vehicle-dialog";
+import { EditVehicleDialog } from "@/components/edit-vehicle-dialog";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +62,7 @@ export default function VehiclesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -150,39 +153,57 @@ export default function VehiclesPage() {
                 Додайте перший транспорт за допомогою кнопки вище
               </div>
             ) : (
-              <div className="space-y-0 divide-y">
-                {vehicles.map((v) => (
-                  <div
-                    key={v.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Car className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <span className="font-medium">{v.name}</span>
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {typeLabel[v.type] ?? v.type}
-                        </Badge>
+              <>
+                <div className="space-y-0 divide-y">
+                  {vehicles.map((v) => (
+                    <div
+                      key={v.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div>
+                          <span className="font-medium">{v.name}</span>
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {typeLabel[v.type] ?? v.type}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        {v.default_fuel_consumption_l_per_100km != null && (
+                          <span>
+                            {v.default_fuel_consumption_l_per_100km} л/100 км
+                          </span>
+                        )}
+                        {v.default_depreciation_uah_per_km != null && (
+                          <span>
+                            {v.default_depreciation_uah_per_km} грн/км
+                          </span>
+                        )}
+                        {v.default_daily_taxes_uah != null && (
+                          <span>{v.default_daily_taxes_uah} грн/день</span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditingVehicle(v)}
+                          aria-label="Редагувати"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {v.default_fuel_consumption_l_per_100km != null && (
-                        <span>
-                          {v.default_fuel_consumption_l_per_100km} л/100 км
-                        </span>
-                      )}
-                      {v.default_depreciation_uah_per_km != null && (
-                        <span>
-                          {v.default_depreciation_uah_per_km} грн/км
-                        </span>
-                      )}
-                      {v.default_daily_taxes_uah != null && (
-                        <span>{v.default_daily_taxes_uah} грн/день</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                <EditVehicleDialog
+                  vehicle={editingVehicle}
+                  open={!!editingVehicle}
+                  onOpenChange={(open) => !open && setEditingVehicle(null)}
+                  onVehicleUpdated={loadData}
+                />
+              </>
             )}
           </CardContent>
         </Card>

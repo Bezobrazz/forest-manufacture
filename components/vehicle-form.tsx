@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { createVehicle, type CreateVehiclePayload } from "@/app/vehicles/actions";
+import { useState, useEffect } from "react";
+import {
+  createVehicle,
+  updateVehicle,
+  type CreateVehiclePayload,
+  type Vehicle,
+} from "@/app/vehicles/actions";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
 import type { VehicleType } from "@/lib/trips/calc";
 import { vehicleFormSchema } from "@/lib/vehicles/schemas";
@@ -31,20 +36,59 @@ function parseNum(value: string): number | null {
 }
 
 interface VehicleFormProps {
+  vehicleId?: string;
+  initialData?: Vehicle | null;
   onVehicleAdded?: () => void | Promise<void>;
+  onVehicleUpdated?: () => void | Promise<void>;
 }
 
-export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
+function toFormState(v: Vehicle | null | undefined) {
+  if (!v) return null;
+  return {
+    name: v.name ?? "",
+    type: (v.type ?? "van") as VehicleType,
+    fuel:
+      v.default_fuel_consumption_l_per_100km != null
+        ? String(v.default_fuel_consumption_l_per_100km)
+        : "",
+    dailyTaxes:
+      v.default_daily_taxes_uah != null ? String(v.default_daily_taxes_uah) : "",
+    depreciation:
+      v.default_depreciation_uah_per_km != null
+        ? String(v.default_depreciation_uah_per_km)
+        : "",
+  };
+}
+
+export function VehicleForm({
+  vehicleId,
+  initialData,
+  onVehicleAdded,
+  onVehicleUpdated,
+}: VehicleFormProps) {
+  const isEdit = Boolean(vehicleId);
+  const defaults = TYPE_DEFAULTS.van;
   const [isPending, setIsPending] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<VehicleType>("van");
-  const [fuel, setFuel] = useState<string>(String(TYPE_DEFAULTS.van.fuel));
-  const [dailyTaxes, setDailyTaxes] = useState<string>(
-    String(TYPE_DEFAULTS.van.dailyTaxes)
-  );
+  const [fuel, setFuel] = useState<string>(String(defaults.fuel));
+  const [dailyTaxes, setDailyTaxes] = useState<string>(String(defaults.dailyTaxes));
   const [depreciation, setDepreciation] = useState<string>(
-    String(TYPE_DEFAULTS.van.depreciation)
+    String(defaults.depreciation)
   );
+
+  useEffect(() => {
+    const state = toFormState(initialData ?? null);
+    if (state) {
+      setName(state.name);
+      setType(state.type);
+      setFuel(state.fuel || String(TYPE_DEFAULTS[state.type].fuel));
+      setDailyTaxes(state.dailyTaxes || String(TYPE_DEFAULTS[state.type].dailyTaxes));
+      setDepreciation(
+        state.depreciation || String(TYPE_DEFAULTS[state.type].depreciation)
+      );
+    }
+  }, [initialData]);
 
   const applyTypeDefaults = (newType: VehicleType) => {
     const d = TYPE_DEFAULTS[newType];
@@ -76,17 +120,25 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
     }
     setIsPending(true);
     try {
-      const result = await createVehicle(parsed.data);
-      if (result.ok) {
-        toast.success("Транспорт додано");
-        setName("");
-        setType("van");
-        applyTypeDefaults("van");
-        if (onVehicleAdded) {
-          await onVehicleAdded();
+      if (isEdit && vehicleId) {
+        const result = await updateVehicle(vehicleId, parsed.data);
+        if (result.ok) {
+          toast.success("Транспорт оновлено");
+          if (onVehicleUpdated) await onVehicleUpdated();
+        } else {
+          toast.error(result.error);
         }
       } else {
-        toast.error(result.error);
+        const result = await createVehicle(parsed.data);
+        if (result.ok) {
+          toast.success("Транспорт додано");
+          setName("");
+          setType("van");
+          applyTypeDefaults("van");
+          if (onVehicleAdded) await onVehicleAdded();
+        } else {
+          toast.error(result.error);
+        }
       }
     } catch {
       toast.error("Помилка при збереженні");
@@ -164,6 +216,8 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
             <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
             Збереження...
           </>
+        ) : isEdit ? (
+          "Зберегти зміни"
         ) : (
           "Зберегти"
         )}
