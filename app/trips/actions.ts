@@ -10,38 +10,82 @@ export type CreateTripPayload = Omit<TripInput, "user_id" | "id"> & {
   user_id?: string;
 };
 
-export async function getTrips(): Promise<
-  Array<{
-    id: string;
-    name: string | null;
-    trip_date: string;
-    vehicle_id: string;
-    distance_km: number | null;
-    profit_uah: number | null;
-    roi_percent: number | null;
-  }>
-> {
+export type TripListItem = {
+  id: string;
+  name: string | null;
+  trip_date: string;
+  vehicle_id: string;
+  vehicle: { name: string } | null;
+  distance_km: number | null;
+  freight_uah: number | null;
+  fuel_cost_uah: number | null;
+  driver_cost_uah: number | null;
+  total_costs_uah: number | null;
+  profit_uah: number | null;
+  profit_per_km_uah: number | null;
+  roi_percent: number | null;
+};
+
+export async function getTrips(): Promise<TripListItem[]> {
   const supabase = await createServerSupabaseClient();
   const user = await getServerUser();
   if (!user) return [];
   const { data, error } = await supabase
     .from("trips")
-    .select("id, name, trip_date, vehicle_id, distance_km, profit_uah, roi_percent")
+    .select("id, name, trip_date, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
     .eq("user_id", user.id)
     .order("trip_date", { ascending: false });
   if (error) {
     console.error("Error fetching trips:", error);
     return [];
   }
-  return (data ?? []) as Array<{
-    id: string;
-    name: string | null;
-    trip_date: string;
-    vehicle_id: string;
-    distance_km: number | null;
-    profit_uah: number | null;
-    roi_percent: number | null;
-  }>;
+  return (data ?? []) as TripListItem[];
+}
+
+export type TripDetail = {
+  id: string;
+  user_id: string;
+  vehicle_id: string;
+  name: string | null;
+  trip_date: string;
+  start_odometer_km: number | null;
+  end_odometer_km: number | null;
+  fuel_consumption_l_per_100km: number | null;
+  fuel_price_uah_per_l: number | null;
+  depreciation_uah_per_km: number | null;
+  days_count: number;
+  daily_taxes_uah: number | null;
+  freight_uah: number | null;
+  driver_pay_mode: string;
+  driver_pay_uah: number | null;
+  driver_pay_uah_per_day: number | null;
+  extra_costs_uah: number | null;
+  notes: string | null;
+  distance_km: number | null;
+  fuel_used_l: number | null;
+  fuel_cost_uah: number | null;
+  depreciation_cost_uah: number | null;
+  taxes_cost_uah: number | null;
+  driver_cost_uah: number | null;
+  total_costs_uah: number | null;
+  profit_uah: number | null;
+  profit_per_km_uah: number | null;
+  roi_percent: number | null;
+  vehicle: { name: string } | null;
+};
+
+export async function getTrip(tripId: string): Promise<TripDetail | null> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("trips")
+    .select("*, vehicle:vehicles(name)")
+    .eq("id", tripId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as TripDetail;
 }
 
 export async function createTrip(
