@@ -38,6 +38,7 @@ import {
   Truck,
   Box,
   ShoppingCart,
+  Car,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -207,6 +208,12 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
                 <DropdownMenuItem className="cursor-pointer">
                   <Truck className="h-4 w-4 mr-2" />
                   <span>Постачальники</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/vehicles" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <Car className="h-4 w-4 mr-2" />
+                  <span>Транспорт</span>
                 </DropdownMenuItem>
               </Link>
               <Link href="/transactions/suppliers" className="w-full">
