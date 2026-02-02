@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createTrip, type CreateTripPayload } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
-import type { DriverPayMode } from "@/lib/trips/calc";
+import { calculateTripMetrics, type DriverPayMode } from "@/lib/trips/calc";
 import {
   Card,
   CardContent,
@@ -91,6 +91,61 @@ export default function NewTripPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!vehicleId || vehicles.length === 0) return;
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    if (!vehicle) return;
+    if (vehicle.default_fuel_consumption_l_per_100km != null) {
+      setFuelConsumption(String(vehicle.default_fuel_consumption_l_per_100km));
+    }
+    if (vehicle.default_depreciation_uah_per_km != null) {
+      setDepreciation(String(vehicle.default_depreciation_uah_per_km));
+    }
+    if (vehicle.default_daily_taxes_uah != null) {
+      setDailyTaxes(String(vehicle.default_daily_taxes_uah));
+    }
+  }, [vehicleId, vehicles]);
+
+  const previewMetrics = useMemo(() => {
+    const input = {
+      user_id: "",
+      vehicle_id: vehicleId,
+      trip_date: tripDate,
+      start_odometer_km: parseNum(startOdometer),
+      end_odometer_km: parseNum(endOdometer),
+      fuel_consumption_l_per_100km: parseNum(fuelConsumption),
+      fuel_price_uah_per_l: parseNum(fuelPrice),
+      depreciation_uah_per_km: parseNum(depreciation),
+      days_count: parseNum(daysCount) ?? 1,
+      daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
+      freight_uah: parseNum(freightUah) ?? 0,
+      driver_pay_mode: driverPayMode,
+      driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
+      driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+    };
+    try {
+      return { metrics: calculateTripMetrics(input), error: null as string | null };
+    } catch (err) {
+      return { metrics: null, error: err instanceof Error ? err.message : "Помилка розрахунку" };
+    }
+  }, [
+    vehicleId,
+    tripDate,
+    startOdometer,
+    endOdometer,
+    fuelConsumption,
+    fuelPrice,
+    depreciation,
+    daysCount,
+    dailyTaxes,
+    freightUah,
+    driverPayMode,
+    driverPayUah,
+    driverPayUahPerDay,
+    extraCostsUah,
+  ]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -138,6 +193,20 @@ export default function NewTripPage() {
       setIsPending(false);
     }
   };
+
+  const extraCostsNum = parseNum(extraCostsUah) ?? 0;
+  const statusIcon =
+    previewMetrics.metrics?.status === "profit"
+      ? "✅"
+      : previewMetrics.metrics?.status === "breakeven"
+        ? "⚠️"
+        : "❌";
+  const statusLabel =
+    previewMetrics.metrics?.status === "profit"
+      ? "Прибуток"
+      : previewMetrics.metrics?.status === "breakeven"
+        ? "Нуль"
+        : "Збиток";
 
   return (
     <div className="container py-6 max-w-3xl">
@@ -422,6 +491,77 @@ export default function NewTripPage() {
           </CardContent>
         </Card>
       </form>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Результат</CardTitle>
+          <CardDescription>
+            Попередній розрахунок за поточними полями форми
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {previewMetrics.error ? (
+            <p className="text-sm text-destructive">{previewMetrics.error}</p>
+          ) : previewMetrics.metrics ? (
+            <div className="space-y-3 text-sm">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Відстань</span>
+                  <span>{previewMetrics.metrics.distance_km} км</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Паливо витрачено</span>
+                  <span>{previewMetrics.metrics.fuel_used_l} л</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Витрати на паливо</span>
+                  <span>{previewMetrics.metrics.fuel_cost_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Амортизація</span>
+                  <span>{previewMetrics.metrics.depreciation_cost_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Податки</span>
+                  <span>{previewMetrics.metrics.taxes_cost_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Водій</span>
+                  <span>{previewMetrics.metrics.driver_cost_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Інші витрати</span>
+                  <span>{extraCostsNum} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
+                  <span className="text-muted-foreground">Всього витрат</span>
+                  <span>{previewMetrics.metrics.total_costs_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
+                  <span className="text-muted-foreground">Прибуток</span>
+                  <span>{previewMetrics.metrics.profit_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">Прибуток/км</span>
+                  <span>{previewMetrics.metrics.profit_per_km_uah} грн</span>
+                </div>
+                <div className="flex justify-between gap-2 py-1.5 border-b">
+                  <span className="text-muted-foreground">ROI</span>
+                  <span>{previewMetrics.metrics.roi_percent}%</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2 font-medium">
+                <span>{statusIcon}</span>
+                <span>{statusLabel}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Заповніть пробіг (початок і кінець) для розрахунку
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
