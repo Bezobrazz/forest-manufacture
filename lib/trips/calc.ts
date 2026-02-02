@@ -6,6 +6,7 @@ export type TripInput = {
   id?: string;
   user_id: string;
   vehicle_id: string;
+  name?: string | null;
   trip_date: string;
   start_odometer_km: number | null;
   end_odometer_km: number | null;

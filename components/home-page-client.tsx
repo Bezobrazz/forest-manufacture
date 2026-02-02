@@ -39,6 +39,7 @@ import {
   Box,
   ShoppingCart,
   Car,
+  MapPin,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -214,6 +215,12 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
                 <DropdownMenuItem className="cursor-pointer">
                   <Car className="h-4 w-4 mr-2" />
                   <span>Транспорт</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/trips" className="w-full">
+                <DropdownMenuItem className="cursor-pointer">
+                  <MapPin className="h-4 w-4 mr-2" />
+                  <span>Поїздки</span>
                 </DropdownMenuItem>
               </Link>
               <Link href="/transactions/suppliers" className="w-full">

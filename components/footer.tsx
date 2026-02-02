@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Package, Users, BarChart, Boxes, CheckSquare, DollarSign, Truck, ShoppingCart, Car } from "lucide-react";
+import { Package, Users, BarChart, Boxes, CheckSquare, DollarSign, Truck, ShoppingCart, Car, MapPin } from "lucide-react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -98,6 +98,15 @@ export function Footer() {
                 >
                   <Car className="h-4 w-4" />
                   Транспорт
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/trips"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Поїздки
                 </Link>
               </li>
               <li>

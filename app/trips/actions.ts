@@ -10,6 +10,40 @@ export type CreateTripPayload = Omit<TripInput, "user_id" | "id"> & {
   user_id?: string;
 };
 
+export async function getTrips(): Promise<
+  Array<{
+    id: string;
+    name: string | null;
+    trip_date: string;
+    vehicle_id: string;
+    distance_km: number | null;
+    profit_uah: number | null;
+    roi_percent: number | null;
+  }>
+> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("trips")
+    .select("id, name, trip_date, vehicle_id, distance_km, profit_uah, roi_percent")
+    .eq("user_id", user.id)
+    .order("trip_date", { ascending: false });
+  if (error) {
+    console.error("Error fetching trips:", error);
+    return [];
+  }
+  return (data ?? []) as Array<{
+    id: string;
+    name: string | null;
+    trip_date: string;
+    vehicle_id: string;
+    distance_km: number | null;
+    profit_uah: number | null;
+    roi_percent: number | null;
+  }>;
+}
+
 export async function createTrip(
   payload: CreateTripPayload
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -38,6 +72,7 @@ export async function createTrip(
   const row = {
     user_id: user.id,
     vehicle_id: payload.vehicle_id,
+    name: payload.name?.trim() ?? null,
     trip_date: payload.trip_date,
     start_odometer_km: payload.start_odometer_km ?? null,
     end_odometer_km: payload.end_odometer_km ?? null,
@@ -101,6 +136,7 @@ export async function updateTrip(
 
   const row = {
     vehicle_id: payload.vehicle_id,
+    name: payload.name?.trim() ?? null,
     trip_date: payload.trip_date,
     start_odometer_km: payload.start_odometer_km ?? null,
     end_odometer_km: payload.end_odometer_km ?? null,
