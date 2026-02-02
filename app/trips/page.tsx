@@ -46,6 +46,11 @@ function formatDate(s: string) {
 }
 
 
+const tripTypeLabels: Record<string, string> = {
+  raw: "Сировина",
+  commerce: "Комерція",
+};
+
 function tripStatus(profit: number | null): { icon: string; label: string } {
   if (profit == null) return { icon: "—", label: "—" };
   if (profit > 0) return { icon: "✅", label: "Прибуток" };
@@ -265,6 +270,7 @@ export default function TripsPage() {
                   <TableRow>
                     <TableHead>Дата</TableHead>
                     <TableHead>Транспорт</TableHead>
+                    <TableHead>Тип</TableHead>
                     <TableHead className="text-right">Відстань</TableHead>
                     <TableHead className="text-right">Фрахт</TableHead>
                     <TableHead className="text-right">Витрати</TableHead>
@@ -286,6 +292,9 @@ export default function TripsPage() {
                         {formatDate(t.trip_date)}
                       </TableCell>
                       <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
+                      <TableCell>
+                        {t.trip_type ? tripTypeLabels[t.trip_type] ?? t.trip_type : "—"}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatKm(t.distance_km)}
                       </TableCell>

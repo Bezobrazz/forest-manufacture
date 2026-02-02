@@ -15,6 +15,7 @@ export type TripListItem = {
   id: string;
   name: string | null;
   trip_date: string;
+  trip_type: string | null;
   vehicle_id: string;
   vehicle: { name: string } | null;
   distance_km: number | null;
@@ -34,7 +35,7 @@ export async function getTrips(): Promise<TripListItem[]> {
   if (!user) return [];
   const { data, error } = await supabase
     .from("trips")
-    .select("id, name, trip_date, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
+    .select("id, name, trip_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
     .eq("user_id", user.id)
     .order("trip_date", { ascending: false });
   if (error) {
@@ -50,6 +51,7 @@ export type TripDetail = {
   vehicle_id: string;
   name: string | null;
   trip_date: string;
+  trip_type: string | null;
   start_odometer_km: number | null;
   end_odometer_km: number | null;
   fuel_consumption_l_per_100km: number | null;
@@ -104,6 +106,7 @@ export async function createTrip(
     name: payload.name ?? "",
     trip_date: payload.trip_date,
     vehicle_id: payload.vehicle_id,
+    trip_type: payload.trip_type ?? "raw",
     start_odometer_km: payload.start_odometer_km,
     end_odometer_km: payload.end_odometer_km,
     fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
@@ -126,6 +129,7 @@ export async function createTrip(
       first.name?.[0] ??
       first.trip_date?.[0] ??
       first.vehicle_id?.[0] ??
+      first.trip_type?.[0] ??
       parsed.error.message;
     return { ok: false, error: msg };
   }
@@ -151,6 +155,7 @@ export async function createTrip(
     vehicle_id: d.vehicle_id,
     name: d.name ?? null,
     trip_date: d.trip_date,
+    trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,
     fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,
@@ -200,6 +205,7 @@ export async function updateTrip(
     name: payload.name ?? "",
     trip_date: payload.trip_date,
     vehicle_id: payload.vehicle_id,
+    trip_type: payload.trip_type ?? "raw",
     start_odometer_km: payload.start_odometer_km,
     end_odometer_km: payload.end_odometer_km,
     fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
@@ -222,6 +228,7 @@ export async function updateTrip(
       first.name?.[0] ??
       first.trip_date?.[0] ??
       first.vehicle_id?.[0] ??
+      first.trip_type?.[0] ??
       parsed.error.message;
     return { ok: false, error: msg };
   }
@@ -246,6 +253,7 @@ export async function updateTrip(
     vehicle_id: d.vehicle_id,
     name: d.name ?? null,
     trip_date: d.trip_date,
+    trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,
     fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,

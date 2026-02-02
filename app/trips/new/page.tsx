@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createTrip, type CreateTripPayload } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
-import { calculateTripMetrics, type DriverPayMode } from "@/lib/trips/calc";
+import { calculateTripMetrics, type DriverPayMode, type TripType } from "@/lib/trips/calc";
 import {
   Card,
   CardContent,
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
@@ -33,6 +34,11 @@ import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
   per_day: "За день",
+};
+
+const tripTypeLabels: Record<TripType, string> = {
+  raw: "Сировина",
+  commerce: "Комерція",
 };
 
 function parseNum(value: string): number | null {
@@ -71,6 +77,7 @@ export default function NewTripPage() {
 
   const [name, setName] = useState("");
   const [tripDate, setTripDate] = useState("");
+  const [tripType, setTripType] = useState<TripType>("raw");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
@@ -113,6 +120,7 @@ export default function NewTripPage() {
       user_id: "",
       vehicle_id: vehicleId,
       trip_date: tripDate,
+      trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -134,6 +142,7 @@ export default function NewTripPage() {
   }, [
     vehicleId,
     tripDate,
+    tripType,
     startOdometer,
     endOdometer,
     fuelConsumption,
@@ -154,6 +163,7 @@ export default function NewTripPage() {
       name: name.trim(),
       trip_date: tripDate.trim(),
       vehicle_id: vehicleId,
+      trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -176,6 +186,7 @@ export default function NewTripPage() {
         first.name?.[0] ??
         first.trip_date?.[0] ??
         first.vehicle_id?.[0] ??
+        first.trip_type?.[0] ??
         parsed.error.message;
       toast.error(msg);
       return;
@@ -185,6 +196,7 @@ export default function NewTripPage() {
       name: name.trim(),
       trip_date: tripDate.trim(),
       vehicle_id: vehicleId,
+      trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -278,6 +290,21 @@ export default function NewTripPage() {
                 />
               </Field>
             </div>
+            <Field id="trip_type" label="Тип поїздки *">
+              <ToggleGroup
+                type="single"
+                value={tripType}
+                onValueChange={(v) => v && setTripType(v as TripType)}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="raw" aria-label="Сировина">
+                  {tripTypeLabels.raw}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="commerce" aria-label="Комерція">
+                  {tripTypeLabels.commerce}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
             <Field id="vehicle" label="Транспорт *">
               <Select
                 value={vehicleId}

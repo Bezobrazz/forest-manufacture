@@ -2,12 +2,15 @@ export type VehicleType = "van" | "truck";
 
 export type DriverPayMode = "per_trip" | "per_day";
 
+export type TripType = "raw" | "commerce";
+
 export type TripInput = {
   id?: string;
   user_id: string;
   vehicle_id: string;
   name?: string | null;
   trip_date: string;
+  trip_type: TripType;
   start_odometer_km: number | null;
   end_odometer_km: number | null;
   fuel_consumption_l_per_100km: number | null;

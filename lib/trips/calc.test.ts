@@ -6,6 +6,7 @@ const baseInput: TripInput = {
   user_id: "u1",
   vehicle_id: "v1",
   trip_date: "2025-02-02",
+  trip_type: "raw",
   start_odometer_km: 0,
   end_odometer_km: 100,
   fuel_consumption_l_per_100km: 10,

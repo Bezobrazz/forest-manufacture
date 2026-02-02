@@ -10,7 +10,7 @@ import {
   type TripDetail,
 } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
-import type { DriverPayMode } from "@/lib/trips/calc";
+import type { DriverPayMode, TripType } from "@/lib/trips/calc";
 import {
   Card,
   CardContent,
@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
@@ -38,6 +39,11 @@ import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/for
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
   per_day: "За день",
+};
+
+const tripTypeLabels: Record<TripType, string> = {
+  raw: "Сировина",
+  commerce: "Комерція",
 };
 
 function parseNum(value: string): number | null {
@@ -74,6 +80,7 @@ function fillStateFromTrip(
   return {
     name: trip.name?.trim() ?? "",
     tripDate: trip.trip_date ?? "",
+    tripType: (trip.trip_type === "commerce" ? "commerce" : "raw") as TripType,
     vehicleId: trip.vehicle_id ?? "",
     startOdometer: trip.start_odometer_km != null ? String(trip.start_odometer_km) : "",
     endOdometer: trip.end_odometer_km != null ? String(trip.end_odometer_km) : "",
@@ -103,6 +110,7 @@ export default function TripDetailPage() {
 
   const [name, setName] = useState("");
   const [tripDate, setTripDate] = useState("");
+  const [tripType, setTripType] = useState<TripType>("raw");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
@@ -127,6 +135,7 @@ export default function TripDetailPage() {
         const s = fillStateFromTrip(t);
         setName(s.name);
         setTripDate(s.tripDate);
+        setTripType(s.tripType);
         setVehicleId(s.vehicleId);
         setStartOdometer(s.startOdometer);
         setEndOdometer(s.endOdometer);
@@ -153,6 +162,7 @@ export default function TripDetailPage() {
       name: name.trim(),
       trip_date: tripDate.trim(),
       vehicle_id: vehicleId,
+      trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -184,6 +194,7 @@ export default function TripDetailPage() {
       name: name.trim(),
       trip_date: tripDate.trim(),
       vehicle_id: vehicleId,
+      trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -287,6 +298,21 @@ export default function TripDetailPage() {
                 />
               </Field>
             </div>
+            <Field id="trip_type" label="Тип поїздки *">
+              <ToggleGroup
+                type="single"
+                value={tripType}
+                onValueChange={(v) => v && setTripType(v as TripType)}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="raw" aria-label="Сировина">
+                  {tripTypeLabels.raw}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="commerce" aria-label="Комерція">
+                  {tripTypeLabels.commerce}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
             <Field id="vehicle" label="Транспорт *">
               <Select value={vehicleId} onValueChange={setVehicleId}>
                 <SelectTrigger id="vehicle">

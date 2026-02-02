@@ -13,6 +13,10 @@ export const tripFormSchema = z
     name: z.string().min(1, "Вкажіть назву поїздки").max(500).transform((s) => s.trim()),
     trip_date: z.string().min(1, "Вкажіть дату поїздки"),
     vehicle_id: z.string().min(1, "Оберіть транспорт"),
+    trip_type: z.enum(["raw", "commerce"], {
+      required_error: "Оберіть тип поїздки",
+      invalid_type_error: "Оберіть тип поїздки",
+    }),
     start_odometer_km: optionalNum(),
     end_odometer_km: optionalNum(),
     fuel_consumption_l_per_100km: optionalNum(),
