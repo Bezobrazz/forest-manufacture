@@ -2,6 +2,7 @@
 
 import { createServerSupabaseClient, getServerUser } from "@/lib/supabase/server-auth";
 import type { VehicleType } from "@/lib/trips/calc";
+import { vehicleFormSchema } from "@/lib/vehicles/schemas";
 
 export type Vehicle = {
   id: string;
@@ -54,15 +55,24 @@ export async function createVehicle(
     return { ok: false, error: "Необхідно авторизуватися" };
   }
 
+  const parsed = vehicleFormSchema.safeParse(payload);
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      first.name?.[0] ?? first.type?.[0] ?? parsed.error.message;
+    return { ok: false, error: msg };
+  }
+
+  const d = parsed.data;
   const { error } = await supabase.from("vehicles").insert({
     user_id: user.id,
-    name: payload.name.trim(),
-    type: payload.type,
+    name: d.name,
+    type: d.type,
     default_fuel_consumption_l_per_100km:
-      payload.default_fuel_consumption_l_per_100km ?? null,
+      d.default_fuel_consumption_l_per_100km ?? null,
     default_depreciation_uah_per_km:
-      payload.default_depreciation_uah_per_km ?? null,
-    default_daily_taxes_uah: payload.default_daily_taxes_uah ?? null,
+      d.default_depreciation_uah_per_km ?? null,
+    default_daily_taxes_uah: d.default_daily_taxes_uah ?? null,
   });
 
   if (error) {

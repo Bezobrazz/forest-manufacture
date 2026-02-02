@@ -5,6 +5,7 @@ import {
   calculateTripMetrics,
   type TripInput,
 } from "@/lib/trips/calc";
+import { tripFormSchema } from "@/lib/trips/schemas";
 
 export type CreateTripPayload = Omit<TripInput, "user_id" | "id"> & {
   user_id?: string;
@@ -26,6 +27,7 @@ export type TripListItem = {
   roi_percent: number | null;
 };
 
+/** Повертає список рейсів із snapshot-полями (distance_km, total_costs_uah, profit_uah тощо). Звіти та підсумки використовують ці збережені значення без перерахунку на льоту. */
 export async function getTrips(): Promise<TripListItem[]> {
   const supabase = await createServerSupabaseClient();
   const user = await getServerUser();
@@ -98,8 +100,38 @@ export async function createTrip(
     return { ok: false, error: "Необхідно авторизуватися" };
   }
 
+  const parsed = tripFormSchema.safeParse({
+    name: payload.name ?? "",
+    trip_date: payload.trip_date,
+    vehicle_id: payload.vehicle_id,
+    start_odometer_km: payload.start_odometer_km,
+    end_odometer_km: payload.end_odometer_km,
+    fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
+    fuel_price_uah_per_l: payload.fuel_price_uah_per_l,
+    depreciation_uah_per_km: payload.depreciation_uah_per_km,
+    days_count: payload.days_count,
+    daily_taxes_uah: payload.daily_taxes_uah,
+    freight_uah: payload.freight_uah,
+    driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
+    driver_pay_uah: payload.driver_pay_uah,
+    driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
+    extra_costs_uah: payload.extra_costs_uah,
+    notes: payload.notes,
+  });
+
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      first.end_odometer_km?.[0] ??
+      first.name?.[0] ??
+      first.trip_date?.[0] ??
+      first.vehicle_id?.[0] ??
+      parsed.error.message;
+    return { ok: false, error: msg };
+  }
+
   const input: TripInput = {
-    ...payload,
+    ...parsed.data,
     user_id: user.id,
   };
 
@@ -113,24 +145,25 @@ export async function createTrip(
     };
   }
 
+  const d = parsed.data;
   const row = {
     user_id: user.id,
-    vehicle_id: payload.vehicle_id,
-    name: payload.name?.trim() ?? null,
-    trip_date: payload.trip_date,
-    start_odometer_km: payload.start_odometer_km ?? null,
-    end_odometer_km: payload.end_odometer_km ?? null,
-    fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km ?? null,
-    fuel_price_uah_per_l: payload.fuel_price_uah_per_l ?? null,
-    depreciation_uah_per_km: payload.depreciation_uah_per_km ?? null,
-    days_count: (payload.days_count ?? 0) < 1 ? 1 : (payload.days_count ?? 1),
-    daily_taxes_uah: payload.daily_taxes_uah ?? 150,
-    freight_uah: payload.freight_uah ?? 0,
-    driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
-    driver_pay_uah: payload.driver_pay_uah ?? 0,
-    driver_pay_uah_per_day: payload.driver_pay_uah_per_day ?? 0,
-    extra_costs_uah: payload.extra_costs_uah ?? 0,
-    notes: payload.notes ?? null,
+    vehicle_id: d.vehicle_id,
+    name: d.name ?? null,
+    trip_date: d.trip_date,
+    start_odometer_km: d.start_odometer_km ?? null,
+    end_odometer_km: d.end_odometer_km ?? null,
+    fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,
+    fuel_price_uah_per_l: d.fuel_price_uah_per_l ?? null,
+    depreciation_uah_per_km: d.depreciation_uah_per_km ?? null,
+    days_count: d.days_count,
+    daily_taxes_uah: d.daily_taxes_uah ?? 150,
+    freight_uah: d.freight_uah ?? 0,
+    driver_pay_mode: d.driver_pay_mode,
+    driver_pay_uah: d.driver_pay_uah ?? 0,
+    driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
+    extra_costs_uah: d.extra_costs_uah ?? 0,
+    notes: d.notes ?? null,
     distance_km: metrics.distance_km,
     fuel_used_l: metrics.fuel_used_l,
     fuel_cost_uah: metrics.fuel_cost_uah,
@@ -163,8 +196,39 @@ export async function updateTrip(
     return { ok: false, error: "Необхідно авторизуватися" };
   }
 
+  const parsed = tripFormSchema.safeParse({
+    name: payload.name ?? "",
+    trip_date: payload.trip_date,
+    vehicle_id: payload.vehicle_id,
+    start_odometer_km: payload.start_odometer_km,
+    end_odometer_km: payload.end_odometer_km,
+    fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
+    fuel_price_uah_per_l: payload.fuel_price_uah_per_l,
+    depreciation_uah_per_km: payload.depreciation_uah_per_km,
+    days_count: payload.days_count,
+    daily_taxes_uah: payload.daily_taxes_uah,
+    freight_uah: payload.freight_uah,
+    driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
+    driver_pay_uah: payload.driver_pay_uah,
+    driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
+    extra_costs_uah: payload.extra_costs_uah,
+    notes: payload.notes,
+  });
+
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      first.end_odometer_km?.[0] ??
+      first.name?.[0] ??
+      first.trip_date?.[0] ??
+      first.vehicle_id?.[0] ??
+      parsed.error.message;
+    return { ok: false, error: msg };
+  }
+
+  const d = parsed.data;
   const input: TripInput = {
-    ...payload,
+    ...d,
     user_id: user.id,
   };
 
@@ -179,22 +243,22 @@ export async function updateTrip(
   }
 
   const row = {
-    vehicle_id: payload.vehicle_id,
-    name: payload.name?.trim() ?? null,
-    trip_date: payload.trip_date,
-    start_odometer_km: payload.start_odometer_km ?? null,
-    end_odometer_km: payload.end_odometer_km ?? null,
-    fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km ?? null,
-    fuel_price_uah_per_l: payload.fuel_price_uah_per_l ?? null,
-    depreciation_uah_per_km: payload.depreciation_uah_per_km ?? null,
-    days_count: (payload.days_count ?? 0) < 1 ? 1 : (payload.days_count ?? 1),
-    daily_taxes_uah: payload.daily_taxes_uah ?? 150,
-    freight_uah: payload.freight_uah ?? 0,
-    driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
-    driver_pay_uah: payload.driver_pay_uah ?? 0,
-    driver_pay_uah_per_day: payload.driver_pay_uah_per_day ?? 0,
-    extra_costs_uah: payload.extra_costs_uah ?? 0,
-    notes: payload.notes ?? null,
+    vehicle_id: d.vehicle_id,
+    name: d.name ?? null,
+    trip_date: d.trip_date,
+    start_odometer_km: d.start_odometer_km ?? null,
+    end_odometer_km: d.end_odometer_km ?? null,
+    fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,
+    fuel_price_uah_per_l: d.fuel_price_uah_per_l ?? null,
+    depreciation_uah_per_km: d.depreciation_uah_per_km ?? null,
+    days_count: d.days_count,
+    daily_taxes_uah: d.daily_taxes_uah ?? 150,
+    freight_uah: d.freight_uah ?? 0,
+    driver_pay_mode: d.driver_pay_mode,
+    driver_pay_uah: d.driver_pay_uah ?? 0,
+    driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
+    extra_costs_uah: d.extra_costs_uah ?? 0,
+    notes: d.notes ?? null,
     distance_km: metrics.distance_km,
     fuel_used_l: metrics.fuel_used_l,
     fuel_cost_uah: metrics.fuel_cost_uah,

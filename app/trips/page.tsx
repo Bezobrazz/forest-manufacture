@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { ArrowLeft, MapPin, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatUah, formatKm, formatPercent } from "@/lib/format";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
 
@@ -44,10 +45,6 @@ function formatDate(s: string) {
   });
 }
 
-function formatNum(n: number | null): string {
-  if (n == null) return "—";
-  return String(n);
-}
 
 function tripStatus(profit: number | null): { icon: string; label: string } {
   if (profit == null) return { icon: "—", label: "—" };
@@ -125,8 +122,6 @@ export default function TripsPage() {
       avgRoiPercent: countRoi > 0 ? sumRoiPercent / countRoi : null,
     };
   }, [filteredTrips]);
-
-  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   return (
     <div className="container py-6 space-y-6">
@@ -292,19 +287,19 @@ export default function TripsPage() {
                       </TableCell>
                       <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {t.distance_km != null ? `${t.distance_km} км` : "—"}
+                        {formatKm(t.distance_km)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatNum(t.freight_uah)} грн
+                        {formatUah(t.freight_uah)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatNum(t.total_costs_uah)} грн
+                        {formatUah(t.total_costs_uah)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatNum(t.profit_uah)} грн
+                        {formatUah(t.profit_uah)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {t.roi_percent != null ? `${t.roi_percent}%` : "—"}
+                        {formatPercent(t.roi_percent)}
                       </TableCell>
                       <TableCell>
                         <span title={status.label}>{status.icon}</span>
@@ -336,47 +331,43 @@ export default function TripsPage() {
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Фрахт (дохід)</span>
                     <span className="tabular-nums font-medium">
-                      {round2(totals.sumFreightUah)} грн
+                      {formatUah(totals.sumFreightUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Паливо</span>
                     <span className="tabular-nums">
-                      {round2(totals.sumFuelCostUah)} грн
+                      {formatUah(totals.sumFuelCostUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Водій</span>
                     <span className="tabular-nums">
-                      {round2(totals.sumDriverCostUah)} грн
+                      {formatUah(totals.sumDriverCostUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Всього витрат</span>
                     <span className="tabular-nums font-medium">
-                      {round2(totals.sumTotalCostsUah)} грн
+                      {formatUah(totals.sumTotalCostsUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Прибуток</span>
                     <span className="tabular-nums font-medium">
-                      {round2(totals.sumProfitUah)} грн
+                      {formatUah(totals.sumProfitUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Середній прибуток/км</span>
                     <span className="tabular-nums">
-                      {totals.avgProfitPerKmUah != null
-                        ? `${round2(totals.avgProfitPerKmUah)} грн`
-                        : "—"}
+                      {formatUah(totals.avgProfitPerKmUah)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 py-2 border-b">
                     <span className="text-muted-foreground">Середній ROI</span>
                     <span className="tabular-nums">
-                      {totals.avgRoiPercent != null
-                        ? `${round2(totals.avgRoiPercent)}%`
-                        : "—"}
+                      {formatPercent(totals.avgRoiPercent)}
                     </span>
                   </div>
                 </div>

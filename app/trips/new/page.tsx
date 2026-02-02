@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
+import { tripFormSchema } from "@/lib/trips/schemas";
+import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -148,16 +150,34 @@ export default function NewTripPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Вкажіть назву поїздки");
-      return;
-    }
-    if (!tripDate.trim()) {
-      toast.error("Вкажіть дату поїздки");
-      return;
-    }
-    if (!vehicleId) {
-      toast.error("Оберіть транспорт");
+    const payloadForValidation = {
+      name: name.trim(),
+      trip_date: tripDate.trim(),
+      vehicle_id: vehicleId,
+      start_odometer_km: parseNum(startOdometer),
+      end_odometer_km: parseNum(endOdometer),
+      fuel_consumption_l_per_100km: parseNum(fuelConsumption),
+      fuel_price_uah_per_l: parseNum(fuelPrice),
+      depreciation_uah_per_km: parseNum(depreciation),
+      days_count: parseNum(daysCount) ?? 1,
+      daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
+      freight_uah: parseNum(freightUah) ?? 0,
+      driver_pay_mode: driverPayMode,
+      driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
+      driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+      notes: notes.trim() || null,
+    };
+    const parsed = tripFormSchema.safeParse(payloadForValidation);
+    if (!parsed.success) {
+      const first = parsed.error.flatten().fieldErrors;
+      const msg =
+        first.end_odometer_km?.[0] ??
+        first.name?.[0] ??
+        first.trip_date?.[0] ??
+        first.vehicle_id?.[0] ??
+        parsed.error.message;
+      toast.error(msg);
       return;
     }
     setIsPending(true);
@@ -288,22 +308,20 @@ export default function NewTripPage() {
                 <Field id="start_odometer" label="Початок (км)">
                   <Input
                     id="start_odometer"
-                    type="number"
-                    min={0}
-                    step={0.1}
+                    type="text"
+                    inputMode="decimal"
                     value={startOdometer}
-                    onChange={(e) => setStartOdometer(e.target.value)}
+                    onChange={(e) => setStartOdometer(parseNumericInput(e.target.value))}
                     placeholder="0"
                   />
                 </Field>
                 <Field id="end_odometer" label="Кінець (км)">
                   <Input
                     id="end_odometer"
-                    type="number"
-                    min={0}
-                    step={0.1}
+                    type="text"
+                    inputMode="decimal"
                     value={endOdometer}
-                    onChange={(e) => setEndOdometer(e.target.value)}
+                    onChange={(e) => setEndOdometer(parseNumericInput(e.target.value))}
                     placeholder="0"
                   />
                 </Field>
@@ -321,33 +339,30 @@ export default function NewTripPage() {
                 <Field id="fuel_consumption" label="Витрата (л/100 км)">
                   <Input
                     id="fuel_consumption"
-                    type="number"
-                    min={0}
-                    step={0.1}
+                    type="text"
+                    inputMode="decimal"
                     value={fuelConsumption}
-                    onChange={(e) => setFuelConsumption(e.target.value)}
+                    onChange={(e) => setFuelConsumption(parseNumericInput(e.target.value))}
                     placeholder="12"
                   />
                 </Field>
                 <Field id="fuel_price" label="Ціна за л (грн)">
                   <Input
                     id="fuel_price"
-                    type="number"
-                    min={0}
-                    step={0.01}
+                    type="text"
+                    inputMode="decimal"
                     value={fuelPrice}
-                    onChange={(e) => setFuelPrice(e.target.value)}
+                    onChange={(e) => setFuelPrice(parseNumericInput(e.target.value))}
                     placeholder="0"
                   />
                 </Field>
                 <Field id="depreciation" label="Амортизація (грн/км)">
                   <Input
                     id="depreciation"
-                    type="number"
-                    min={0}
-                    step={0.1}
+                    type="text"
+                    inputMode="decimal"
                     value={depreciation}
-                    onChange={(e) => setDepreciation(e.target.value)}
+                    onChange={(e) => setDepreciation(parseNumericInput(e.target.value))}
                     placeholder="1.2"
                   />
                 </Field>
@@ -365,32 +380,33 @@ export default function NewTripPage() {
                 <Field id="days_count" label="Кількість днів">
                   <Input
                     id="days_count"
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="numeric"
                     value={daysCount}
-                    onChange={(e) => setDaysCount(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setDaysCount(v || "1");
+                    }}
                     placeholder="1"
                   />
                 </Field>
                 <Field id="daily_taxes" label="Щоденні податки (грн)">
                   <Input
                     id="daily_taxes"
-                    type="number"
-                    min={0}
-                    step={1}
+                    type="text"
+                    inputMode="decimal"
                     value={dailyTaxes}
-                    onChange={(e) => setDailyTaxes(e.target.value)}
+                    onChange={(e) => setDailyTaxes(parseNumericInput(e.target.value))}
                     placeholder="150"
                   />
                 </Field>
                 <Field id="freight_uah" label="Фрахт — дохід (грн)">
                   <Input
                     id="freight_uah"
-                    type="number"
-                    min={0}
-                    step={0.01}
+                    type="text"
+                    inputMode="decimal"
                     value={freightUah}
-                    onChange={(e) => setFreightUah(e.target.value)}
+                    onChange={(e) => setFreightUah(parseNumericInput(e.target.value))}
                     placeholder="0"
                   />
                 </Field>
@@ -423,11 +439,10 @@ export default function NewTripPage() {
                   <Field id="driver_pay_uah" label="Сума за рейс (грн)">
                     <Input
                       id="driver_pay_uah"
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      type="text"
+                      inputMode="decimal"
                       value={driverPayUah}
-                      onChange={(e) => setDriverPayUah(e.target.value)}
+                      onChange={(e) => setDriverPayUah(parseNumericInput(e.target.value))}
                       placeholder="0"
                     />
                   </Field>
@@ -435,11 +450,10 @@ export default function NewTripPage() {
                   <Field id="driver_pay_uah_per_day" label="Сума за день (грн)">
                     <Input
                       id="driver_pay_uah_per_day"
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      type="text"
+                      inputMode="decimal"
                       value={driverPayUahPerDay}
-                      onChange={(e) => setDriverPayUahPerDay(e.target.value)}
+                      onChange={(e) => setDriverPayUahPerDay(parseNumericInput(e.target.value))}
                       placeholder="0"
                     />
                   </Field>
@@ -454,11 +468,10 @@ export default function NewTripPage() {
               <Field id="extra_costs_uah" label="Інші витрати (грн)">
                 <Input
                   id="extra_costs_uah"
-                  type="number"
-                  min={0}
-                  step={0.01}
+                  type="text"
+                  inputMode="decimal"
                   value={extraCostsUah}
-                  onChange={(e) => setExtraCostsUah(e.target.value)}
+                  onChange={(e) => setExtraCostsUah(parseNumericInput(e.target.value))}
                   placeholder="0"
                 />
               </Field>
@@ -507,47 +520,47 @@ export default function NewTripPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Відстань</span>
-                  <span>{previewMetrics.metrics.distance_km} км</span>
+                  <span className="tabular-nums">{formatKm(previewMetrics.metrics.distance_km)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Паливо витрачено</span>
-                  <span>{previewMetrics.metrics.fuel_used_l} л</span>
+                  <span className="tabular-nums">{formatL(previewMetrics.metrics.fuel_used_l)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Витрати на паливо</span>
-                  <span>{previewMetrics.metrics.fuel_cost_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.fuel_cost_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Амортизація</span>
-                  <span>{previewMetrics.metrics.depreciation_cost_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.depreciation_cost_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Податки</span>
-                  <span>{previewMetrics.metrics.taxes_cost_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.taxes_cost_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Водій</span>
-                  <span>{previewMetrics.metrics.driver_cost_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.driver_cost_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Інші витрати</span>
-                  <span>{extraCostsNum} грн</span>
+                  <span className="tabular-nums">{formatUah(extraCostsNum)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
                   <span className="text-muted-foreground">Всього витрат</span>
-                  <span>{previewMetrics.metrics.total_costs_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.total_costs_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
                   <span className="text-muted-foreground">Прибуток</span>
-                  <span>{previewMetrics.metrics.profit_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">Прибуток/км</span>
-                  <span>{previewMetrics.metrics.profit_per_km_uah} грн</span>
+                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_per_km_uah)}</span>
                 </div>
                 <div className="flex justify-between gap-2 py-1.5 border-b">
                   <span className="text-muted-foreground">ROI</span>
-                  <span>{previewMetrics.metrics.roi_percent}%</span>
+                  <span className="tabular-nums">{formatPercent(previewMetrics.metrics.roi_percent)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-2 font-medium">

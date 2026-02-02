@@ -4,6 +4,8 @@ import { useState } from "react";
 import { createVehicle, type CreateVehiclePayload } from "@/app/vehicles/actions";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
 import type { VehicleType } from "@/lib/trips/calc";
+import { vehicleFormSchema } from "@/lib/vehicles/schemas";
+import { parseNumericInput } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,20 +60,23 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Введіть назву транспорту");
-      return;
-    }
-    setIsPending(true);
-    const payload: CreateVehiclePayload = {
+    const payload = {
       name: name.trim(),
       type,
       default_fuel_consumption_l_per_100km: parseNum(fuel),
-      default_daily_taxes_uah: parseNum(dailyTaxes),
       default_depreciation_uah_per_km: parseNum(depreciation),
+      default_daily_taxes_uah: parseNum(dailyTaxes),
     };
+    const parsed = vehicleFormSchema.safeParse(payload);
+    if (!parsed.success) {
+      const first = parsed.error.flatten().fieldErrors;
+      const msg = first.name?.[0] ?? first.type?.[0] ?? parsed.error.message;
+      toast.error(msg);
+      return;
+    }
+    setIsPending(true);
     try {
-      const result = await createVehicle(payload);
+      const result = await createVehicle(parsed.data);
       if (result.ok) {
         toast.success("Транспорт додано");
         setName("");
@@ -124,11 +129,10 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
         <Label htmlFor="vehicle-fuel">Витрата палива (л/100 км)</Label>
         <Input
           id="vehicle-fuel"
-          type="number"
-          min={0}
-          step={0.1}
+          type="text"
+          inputMode="decimal"
           value={fuel}
-          onChange={(e) => setFuel(e.target.value)}
+          onChange={(e) => setFuel(parseNumericInput(e.target.value))}
           placeholder="12"
         />
       </div>
@@ -136,11 +140,10 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
         <Label htmlFor="vehicle-dailyTaxes">Щоденні податки (грн)</Label>
         <Input
           id="vehicle-dailyTaxes"
-          type="number"
-          min={0}
-          step={1}
+          type="text"
+          inputMode="decimal"
           value={dailyTaxes}
-          onChange={(e) => setDailyTaxes(e.target.value)}
+          onChange={(e) => setDailyTaxes(parseNumericInput(e.target.value))}
           placeholder="150"
         />
       </div>
@@ -148,11 +151,10 @@ export function VehicleForm({ onVehicleAdded }: VehicleFormProps) {
         <Label htmlFor="vehicle-depreciation">Амортизація (грн/км)</Label>
         <Input
           id="vehicle-depreciation"
-          type="number"
-          min={0}
-          step={0.1}
+          type="text"
+          inputMode="decimal"
           value={depreciation}
-          onChange={(e) => setDepreciation(e.target.value)}
+          onChange={(e) => setDepreciation(parseNumericInput(e.target.value))}
           placeholder="1.2"
         />
       </div>
