@@ -15,6 +15,8 @@ export type TripListItem = {
   id: string;
   name: string | null;
   trip_date: string;
+  trip_start_date: string | null;
+  trip_end_date: string | null;
   trip_type: string | null;
   vehicle_id: string;
   vehicle: { name: string } | null;
@@ -35,9 +37,9 @@ export async function getTrips(): Promise<TripListItem[]> {
   if (!user) return [];
   const { data, error } = await supabase
     .from("trips")
-    .select("id, name, trip_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
+    .select("id, name, trip_date, trip_start_date, trip_end_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
     .eq("user_id", user.id)
-    .order("trip_date", { ascending: false });
+    .order("trip_start_date", { ascending: false });
   if (error) {
     console.error("Error fetching trips:", error);
     return [];
@@ -51,6 +53,8 @@ export type TripDetail = {
   vehicle_id: string;
   name: string | null;
   trip_date: string;
+  trip_start_date: string | null;
+  trip_end_date: string | null;
   trip_type: string | null;
   start_odometer_km: number | null;
   end_odometer_km: number | null;
@@ -104,7 +108,8 @@ export async function createTrip(
 
   const parsed = tripFormSchema.safeParse({
     name: payload.name ?? "",
-    trip_date: payload.trip_date,
+    trip_start_date: payload.trip_start_date ?? "",
+    trip_end_date: payload.trip_end_date ?? "",
     vehicle_id: payload.vehicle_id,
     trip_type: payload.trip_type ?? "raw",
     start_odometer_km: payload.start_odometer_km,
@@ -127,7 +132,8 @@ export async function createTrip(
     const msg =
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
-      first.trip_date?.[0] ??
+      first.trip_start_date?.[0] ??
+      first.trip_end_date?.[0] ??
       first.vehicle_id?.[0] ??
       first.trip_type?.[0] ??
       parsed.error.message;
@@ -154,7 +160,9 @@ export async function createTrip(
     user_id: user.id,
     vehicle_id: d.vehicle_id,
     name: d.name ?? null,
-    trip_date: d.trip_date,
+    trip_date: d.trip_start_date,
+    trip_start_date: d.trip_start_date,
+    trip_end_date: d.trip_end_date,
     trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,
@@ -203,7 +211,8 @@ export async function updateTrip(
 
   const parsed = tripFormSchema.safeParse({
     name: payload.name ?? "",
-    trip_date: payload.trip_date,
+    trip_start_date: payload.trip_start_date ?? "",
+    trip_end_date: payload.trip_end_date ?? "",
     vehicle_id: payload.vehicle_id,
     trip_type: payload.trip_type ?? "raw",
     start_odometer_km: payload.start_odometer_km,
@@ -226,7 +235,8 @@ export async function updateTrip(
     const msg =
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
-      first.trip_date?.[0] ??
+      first.trip_start_date?.[0] ??
+      first.trip_end_date?.[0] ??
       first.vehicle_id?.[0] ??
       first.trip_type?.[0] ??
       parsed.error.message;
@@ -252,7 +262,9 @@ export async function updateTrip(
   const row = {
     vehicle_id: d.vehicle_id,
     name: d.name ?? null,
-    trip_date: d.trip_date,
+    trip_date: d.trip_start_date,
+    trip_start_date: d.trip_start_date,
+    trip_end_date: d.trip_end_date,
     trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,

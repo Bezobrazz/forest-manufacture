@@ -79,7 +79,8 @@ function fillStateFromTrip(
 ): Record<string, string> {
   return {
     name: trip.name?.trim() ?? "",
-    tripDate: trip.trip_date ?? "",
+    tripStartDate: trip.trip_start_date ?? trip.trip_date ?? "",
+    tripEndDate: trip.trip_end_date ?? trip.trip_date ?? "",
     tripType: (trip.trip_type === "commerce" ? "commerce" : "raw") as TripType,
     vehicleId: trip.vehicle_id ?? "",
     startOdometer: trip.start_odometer_km != null ? String(trip.start_odometer_km) : "",
@@ -109,7 +110,8 @@ export default function TripDetailPage() {
   const [isPending, setIsPending] = useState(false);
 
   const [name, setName] = useState("");
-  const [tripDate, setTripDate] = useState("");
+  const [tripStartDate, setTripStartDate] = useState("");
+  const [tripEndDate, setTripEndDate] = useState("");
   const [tripType, setTripType] = useState<TripType>("raw");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
@@ -134,7 +136,8 @@ export default function TripDetailPage() {
       if (t) {
         const s = fillStateFromTrip(t);
         setName(s.name);
-        setTripDate(s.tripDate);
+        setTripStartDate(s.tripStartDate);
+        setTripEndDate(s.tripEndDate);
         setTripType(s.tripType);
         setVehicleId(s.vehicleId);
         setStartOdometer(s.startOdometer);
@@ -160,7 +163,8 @@ export default function TripDetailPage() {
     if (!tripId) return;
     const payloadForValidation = {
       name: name.trim(),
-      trip_date: tripDate.trim(),
+      trip_start_date: tripStartDate.trim(),
+      trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
@@ -183,7 +187,8 @@ export default function TripDetailPage() {
       const msg =
         first.end_odometer_km?.[0] ??
         first.name?.[0] ??
-        first.trip_date?.[0] ??
+        first.trip_start_date?.[0] ??
+        first.trip_end_date?.[0] ??
         first.vehicle_id?.[0] ??
         parsed.error.message;
       toast.error(msg);
@@ -192,7 +197,8 @@ export default function TripDetailPage() {
     setIsPending(true);
     const payload: CreateTripPayload = {
       name: name.trim(),
-      trip_date: tripDate.trim(),
+      trip_start_date: tripStartDate.trim(),
+      trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
@@ -288,12 +294,23 @@ export default function TripDetailPage() {
                   required
                 />
               </Field>
-              <Field id="trip_date" label="Дата *">
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="trip_start_date" label="Дата початку поїздки *">
                 <Input
-                  id="trip_date"
+                  id="trip_start_date"
                   type="date"
-                  value={tripDate}
-                  onChange={(e) => setTripDate(e.target.value)}
+                  value={tripStartDate}
+                  onChange={(e) => setTripStartDate(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field id="trip_end_date" label="Дата кінця поїздки *">
+                <Input
+                  id="trip_end_date"
+                  type="date"
+                  value={tripEndDate}
+                  onChange={(e) => setTripEndDate(e.target.value)}
                   required
                 />
               </Field>

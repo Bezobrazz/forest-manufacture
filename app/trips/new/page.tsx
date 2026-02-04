@@ -76,7 +76,12 @@ export default function NewTripPage() {
   const [isPending, setIsPending] = useState(false);
 
   const [name, setName] = useState("");
-  const [tripDate, setTripDate] = useState("");
+  const [tripStartDate, setTripStartDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [tripEndDate, setTripEndDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
   const [tripType, setTripType] = useState<TripType>("raw");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
@@ -119,7 +124,8 @@ export default function NewTripPage() {
     const input = {
       user_id: "",
       vehicle_id: vehicleId,
-      trip_date: tripDate,
+      trip_start_date: tripStartDate,
+      trip_end_date: tripEndDate,
       trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
       end_odometer_km: parseNum(endOdometer),
@@ -141,7 +147,8 @@ export default function NewTripPage() {
     }
   }, [
     vehicleId,
-    tripDate,
+    tripStartDate,
+    tripEndDate,
     tripType,
     startOdometer,
     endOdometer,
@@ -161,7 +168,8 @@ export default function NewTripPage() {
     e.preventDefault();
     const payloadForValidation = {
       name: name.trim(),
-      trip_date: tripDate.trim(),
+      trip_start_date: tripStartDate.trim(),
+      trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
@@ -184,7 +192,8 @@ export default function NewTripPage() {
       const msg =
         first.end_odometer_km?.[0] ??
         first.name?.[0] ??
-        first.trip_date?.[0] ??
+        first.trip_start_date?.[0] ??
+        first.trip_end_date?.[0] ??
         first.vehicle_id?.[0] ??
         first.trip_type?.[0] ??
         parsed.error.message;
@@ -194,7 +203,8 @@ export default function NewTripPage() {
     setIsPending(true);
     const payload: CreateTripPayload = {
       name: name.trim(),
-      trip_date: tripDate.trim(),
+      trip_start_date: tripStartDate.trim(),
+      trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
       start_odometer_km: parseNum(startOdometer),
@@ -268,7 +278,7 @@ export default function NewTripPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Основне: назва, дата, транспорт */}
+            {/* Основне: назва, дати, транспорт */}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field id="trip_name" label="Назва поїздки *">
                 <Input
@@ -280,12 +290,23 @@ export default function NewTripPage() {
                   required
                 />
               </Field>
-              <Field id="trip_date" label="Дата *">
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="trip_start_date" label="Дата початку поїздки *">
                 <Input
-                  id="trip_date"
+                  id="trip_start_date"
                   type="date"
-                  value={tripDate}
-                  onChange={(e) => setTripDate(e.target.value)}
+                  value={tripStartDate}
+                  onChange={(e) => setTripStartDate(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field id="trip_end_date" label="Дата кінця поїздки *">
+                <Input
+                  id="trip_end_date"
+                  type="date"
+                  value={tripEndDate}
+                  onChange={(e) => setTripEndDate(e.target.value)}
                   required
                 />
               </Field>

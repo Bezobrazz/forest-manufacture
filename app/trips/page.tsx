@@ -45,6 +45,19 @@ function formatDate(s: string) {
   });
 }
 
+function formatTripDateRange(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  fallback: string | null
+): string {
+  if (start && end && start !== end) {
+    return `${formatDate(start)} — ${formatDate(end)}`;
+  }
+  if (start) return formatDate(start);
+  if (fallback) return formatDate(fallback);
+  return "—";
+}
+
 
 const tripTypeLabels: Record<string, string> = {
   raw: "Сировина",
@@ -204,12 +217,15 @@ export default function TripsPage() {
                 </div>
                 <div className="space-y-1.5 min-w-[160px]">
                   <Label className="text-xs text-muted-foreground">Транспорт</Label>
-                  <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+                  <Select
+                    value={vehicleFilter || "__all__"}
+                    onValueChange={(v) => setVehicleFilter(v === "__all__" ? "" : v)}
+                  >
                     <SelectTrigger id="vehicle-filter">
                       <SelectValue placeholder="Усі" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Усі</SelectItem>
+                      <SelectItem value="__all__">Усі</SelectItem>
                       {vehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id}>
                           {v.name}
@@ -221,14 +237,16 @@ export default function TripsPage() {
                 <div className="space-y-1.5 min-w-[140px]">
                   <Label className="text-xs text-muted-foreground">Статус</Label>
                   <Select
-                    value={statusFilter}
-                    onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+                    value={statusFilter || "__all__"}
+                    onValueChange={(v) =>
+                      setStatusFilter((v === "__all__" ? "" : v) as StatusFilter)
+                    }
                   >
                     <SelectTrigger id="status-filter">
                       <SelectValue placeholder="Усі" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Усі</SelectItem>
+                      <SelectItem value="__all__">Усі</SelectItem>
                       <SelectItem value="profit">✅ Прибуток</SelectItem>
                       <SelectItem value="breakeven">⚠️ Нуль</SelectItem>
                       <SelectItem value="loss">❌ Збиток</SelectItem>
@@ -289,7 +307,7 @@ export default function TripsPage() {
                       onClick={() => router.push(`/trips/${t.id}`)}
                     >
                       <TableCell className="font-medium">
-                        {formatDate(t.trip_date)}
+                        {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
                       </TableCell>
                       <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
                       <TableCell>

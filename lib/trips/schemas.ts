@@ -11,7 +11,8 @@ function optionalNum() {
 export const tripFormSchema = z
   .object({
     name: z.string().min(1, "Вкажіть назву поїздки").max(500).transform((s) => s.trim()),
-    trip_date: z.string().min(1, "Вкажіть дату поїздки"),
+    trip_start_date: z.string().min(1, "Вкажіть дату початку поїздки"),
+    trip_end_date: z.string().min(1, "Вкажіть дату кінця поїздки"),
     vehicle_id: z.string().min(1, "Оберіть транспорт"),
     trip_type: z.enum(["raw", "commerce"], {
       required_error: "Оберіть тип поїздки",
@@ -47,6 +48,13 @@ export const tripFormSchema = z
       return end >= start;
     },
     { message: "Кінець пробігу не може бути меншим за початок", path: ["end_odometer_km"] }
+  )
+  .refine(
+    (data) => {
+      if (!data.trip_start_date || !data.trip_end_date) return true;
+      return data.trip_end_date >= data.trip_start_date;
+    },
+    { message: "Дата кінця не може бути раніше за дату початку", path: ["trip_end_date"] }
   );
 
 export type TripFormValues = z.infer<typeof tripFormSchema>;

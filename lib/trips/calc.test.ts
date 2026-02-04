@@ -5,7 +5,8 @@ import { calculateTripMetrics, type TripInput } from "./calc";
 const baseInput: TripInput = {
   user_id: "u1",
   vehicle_id: "v1",
-  trip_date: "2025-02-02",
+  trip_start_date: "2025-02-02",
+  trip_end_date: "2025-02-02",
   trip_type: "raw",
   start_odometer_km: 0,
   end_odometer_km: 100,
