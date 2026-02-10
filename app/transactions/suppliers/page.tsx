@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   getSupplierDeliveries,
   getSuppliers,
@@ -283,6 +283,42 @@ export default function SupplierTransactionsPage() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  const paginatedGroupsByDate = useMemo(() => {
+    const groups: Array<{
+      dateStr: string;
+      displayDate: string;
+      deliveries: typeof paginatedDeliveries;
+      sum: number;
+    }> = [];
+    let current: typeof groups[0] | null = null;
+    for (const delivery of paginatedDeliveries) {
+      const dateStr = delivery.created_at
+        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+        : "";
+      const qty = Number(delivery.quantity);
+      const price =
+        delivery.price_per_unit != null
+          ? Math.round(Number(delivery.price_per_unit) * 100) / 100
+          : 0;
+      const rowSum = Math.round(qty * price * 100) / 100;
+      if (!current || current.dateStr !== dateStr) {
+        current = {
+          dateStr,
+          displayDate: dateStr
+            ? formatDate(dateStr + "T12:00:00.000Z")
+            : "—",
+          deliveries: [],
+          sum: 0,
+        };
+        groups.push(current);
+      }
+      current.deliveries.push(delivery);
+      current.sum += rowSum;
+    }
+    groups.forEach((g) => (g.sum = Math.round(g.sum * 100) / 100));
+    return groups;
+  }, [paginatedDeliveries]);
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -1027,109 +1063,125 @@ export default function SupplierTransactionsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedDeliveries.map((delivery) => {
-                        const quantity = Number(delivery.quantity);
-                        const pricePerUnit =
-                          delivery.price_per_unit != null
-                            ? Math.round(
-                                Number(delivery.price_per_unit) * 100
-                              ) / 100
-                            : null;
-                        const total =
-                          pricePerUnit != null
-                            ? Math.round(quantity * pricePerUnit * 100) / 100
-                            : null;
+                      {paginatedGroupsByDate.map((group) => (
+                        <React.Fragment key={group.dateStr}>
+                          {group.deliveries.map((delivery) => {
+                            const quantity = Number(delivery.quantity);
+                            const pricePerUnit =
+                              delivery.price_per_unit != null
+                                ? Math.round(
+                                    Number(delivery.price_per_unit) * 100
+                                  ) / 100
+                                : null;
+                            const total =
+                              pricePerUnit != null
+                                ? Math.round(quantity * pricePerUnit * 100) / 100
+                                : null;
 
-                        return (
-                          <TableRow key={delivery.id}>
-                            <TableCell className="whitespace-nowrap">
-                              {formatDate(delivery.created_at)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Truck className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium">
-                                  {delivery.supplier?.name ||
-                                    "Невідомий постачальник"}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Package className="h-4 w-4 text-muted-foreground" />
-                                <span>
-                                  {delivery.product?.name ||
-                                    "Невідомий продукт"}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {delivery.material_quantity != null &&
-                              Number(delivery.material_quantity) > 0 ? (
-                                formatNumberWithUnit(
-                                  Math.round(
-                                    Number(delivery.material_quantity) * 100
-                                  ) / 100,
-                                  "шт"
-                                )
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="secondary">
-                                {formatNumberWithUnit(quantity, "шт")}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {pricePerUnit ? (
-                                <span>
-                                  {formatNumber(pricePerUnit, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{" "}
-                                  ₴
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {total ? (
-                                <span className="font-semibold">
-                                  {formatNumber(total, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{" "}
-                                  ₴
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <EditSupplierDeliveryDialog
-                                  delivery={delivery}
-                                  onDeliveryUpdated={async () => {
-                                    const updatedDeliveries =
-                                      await getSupplierDeliveries();
-                                    setDeliveries(updatedDeliveries);
-                                  }}
-                                />
-                                <DeleteSupplierDeliveryButton
-                                  delivery={delivery}
-                                  onDeliveryDeleted={async () => {
-                                    const updatedDeliveries =
-                                      await getSupplierDeliveries();
-                                    setDeliveries(updatedDeliveries);
-                                  }}
-                                />
-                              </div>
+                            return (
+                              <TableRow key={delivery.id}>
+                                <TableCell className="whitespace-nowrap">
+                                  {formatDate(delivery.created_at)}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Truck className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">
+                                      {delivery.supplier?.name ||
+                                        "Невідомий постачальник"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-muted-foreground" />
+                                    <span>
+                                      {delivery.product?.name ||
+                                        "Невідомий продукт"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {delivery.material_quantity != null &&
+                                  Number(delivery.material_quantity) > 0 ? (
+                                    formatNumberWithUnit(
+                                      Math.round(
+                                        Number(delivery.material_quantity) * 100
+                                      ) / 100,
+                                      "шт"
+                                    )
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge variant="secondary">
+                                    {formatNumberWithUnit(quantity, "шт")}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {pricePerUnit ? (
+                                    <span>
+                                      {formatNumber(pricePerUnit, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}{" "}
+                                      ₴
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {total ? (
+                                    <span className="font-semibold">
+                                      {formatNumber(total, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}{" "}
+                                      ₴
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <EditSupplierDeliveryDialog
+                                      delivery={delivery}
+                                      onDeliveryUpdated={async () => {
+                                        const updatedDeliveries =
+                                          await getSupplierDeliveries();
+                                        setDeliveries(updatedDeliveries);
+                                      }}
+                                    />
+                                    <DeleteSupplierDeliveryButton
+                                      delivery={delivery}
+                                      onDeliveryDeleted={async () => {
+                                        const updatedDeliveries =
+                                          await getSupplierDeliveries();
+                                        setDeliveries(updatedDeliveries);
+                                      }}
+                                    />
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow key={`subtotal-${group.dateStr}`} className="bg-muted/40 font-medium">
+                            <TableCell colSpan={9} className="text-center">
+                              Підсумок за {group.displayDate}:{" "}
+                              <span className="font-semibold">
+                                {formatNumber(group.sum, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                ₴
+                              </span>
                             </TableCell>
                           </TableRow>
-                        );
-                      })}
+                        </React.Fragment>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
