@@ -529,6 +529,33 @@ export async function getProducts(): Promise<Product[]> {
   }
 }
 
+export async function getProductsByCategoryName(
+  categoryName: string
+): Promise<Product[]> {
+  try {
+    const supabase = createServerClient();
+    const { data: categories } = await supabase
+      .from("product_categories")
+      .select("id")
+      .eq("name", categoryName);
+    const categoryIds = (categories ?? []).map((c) => c.id);
+    if (categoryIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, category:product_categories(*)")
+      .in("category_id", categoryIds)
+      .order("name");
+    if (error) {
+      console.error("Error fetching products by category:", error);
+      return [];
+    }
+    return (data ?? []) as Product[];
+  } catch (error) {
+    console.error("Error in getProductsByCategoryName:", error);
+    return [];
+  }
+}
+
 // Оновлюємо функцію getProductCategories для кращої обробки помилок
 export async function getProductCategories(): Promise<ProductCategory[]> {
   try {
@@ -2610,7 +2637,6 @@ export async function getWarehouses(): Promise<Warehouse[]> {
   }
 }
 
-// Отримання транзакцій з постачальниками
 export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   try {
     const supabase = createServerClient();
@@ -2621,7 +2647,8 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
         `
         *,
         supplier:suppliers(*),
-        product:products(*, category:product_categories(*)),
+        product:products!supplier_deliveries_product_id_fkey(*, category:product_categories(*)),
+        material_product:products!supplier_deliveries_material_product_id_fkey(*, category:product_categories(*)),
         warehouse:warehouses(*)
       `
       )
@@ -2639,7 +2666,6 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   }
 }
 
-// Створення транзакції закупівлі у постачальника
 export async function createSupplierDelivery(formData: FormData) {
   try {
     const supabase = createServerClient();
@@ -2652,6 +2678,20 @@ export async function createSupplierDelivery(formData: FormData) {
       ? Number(formData.get("price_per_unit"))
       : null;
     const deliveryDate = formData.get("delivery_date") as string;
+    const materialProductIdRaw = formData.get("material_product_id");
+    const materialProductId =
+      materialProductIdRaw !== null &&
+      materialProductIdRaw !== undefined &&
+      String(materialProductIdRaw).trim() !== ""
+        ? Number(materialProductIdRaw)
+        : null;
+    const materialQuantityRaw = formData.get("material_quantity");
+    const materialQuantity =
+      materialQuantityRaw !== null &&
+      materialQuantityRaw !== undefined &&
+      String(materialQuantityRaw).trim() !== ""
+        ? Number(materialQuantityRaw)
+        : null;
 
     if (!supplierId || !productId || !warehouseId || !quantity) {
       return {
@@ -2667,31 +2707,43 @@ export async function createSupplierDelivery(formData: FormData) {
       };
     }
 
-    // Формуємо дату для created_at
-    let createdAt = new Date().toISOString();
+    if (
+      materialQuantity !== null &&
+      (materialQuantity < 0 || (materialProductId === null || materialProductId === 0))
+    ) {
+      return {
+        success: false,
+        error: "При вказанні кількості матеріалів оберіть товар з категорії «Матеріали»",
+      };
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      supplier_id: supplierId,
+      product_id: productId,
+      warehouse_id: warehouseId,
+      quantity: quantity,
+      price_per_unit: pricePerUnit,
+      created_at: new Date().toISOString(),
+    };
     if (deliveryDate) {
-      // Якщо вказана дата, використовуємо її, але зберігаємо час поточний
-      const date = new Date(deliveryDate);
-      const now = new Date();
-      date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
-      createdAt = date.toISOString();
+      insertPayload.created_at = new Date(
+        deliveryDate + "T12:00:00.000Z"
+      ).toISOString();
+    }
+    if (materialProductId != null && materialQuantity != null && materialQuantity > 0) {
+      insertPayload.material_product_id = materialProductId;
+      insertPayload.material_quantity = materialQuantity;
     }
 
     const { data, error } = await supabase
       .from("supplier_deliveries")
-      .insert({
-        supplier_id: supplierId,
-        product_id: productId,
-        warehouse_id: warehouseId,
-        quantity: quantity,
-        price_per_unit: pricePerUnit,
-        created_at: createdAt,
-      })
+      .insert(insertPayload)
       .select(
         `
         *,
         supplier:suppliers(*),
-        product:products(*, category:product_categories(*)),
+        product:products!supplier_deliveries_product_id_fkey(*, category:product_categories(*)),
+        material_product:products!supplier_deliveries_material_product_id_fkey(*, category:product_categories(*)),
         warehouse:warehouses(*)
       `
       )
@@ -2702,7 +2754,47 @@ export async function createSupplierDelivery(formData: FormData) {
       return { success: false, error: error.message };
     }
 
+    const materialQty = Number(materialQuantity ?? 0);
+    const materialPid = materialProductId ?? 0;
+    if (materialQty > 0 && materialPid) {
+      const { error: txError } = await supabase.from("inventory_transactions").insert({
+        product_id: materialPid,
+        quantity: materialQty,
+        transaction_type: "shipment",
+        reference_id: data?.id ?? null,
+        warehouse_id: warehouseId,
+        notes: `Видача матеріалів постачальнику (поставка #${data?.id ?? ""})`,
+      });
+      if (txError) {
+        console.error("Error creating material shipment transaction:", txError);
+        return {
+          success: false,
+          error: "Не вдалося списати матеріали зі складу. Транзакцію не створено.",
+        };
+      }
+
+      const balanceDelta = materialQty - quantity;
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("materials_balance")
+        .eq("id", supplierId)
+        .single();
+      const currentBalance = Number(supplierRow?.materials_balance ?? 0);
+      const { error: balanceError } = await supabase
+        .from("suppliers")
+        .update({ materials_balance: currentBalance + balanceDelta })
+        .eq("id", supplierId);
+      if (balanceError) {
+        console.error("Error updating supplier materials balance:", balanceError);
+        return {
+          success: false,
+          error: "Не вдалося оновити баланс матеріалів постачальника.",
+        };
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
 
     return { success: true, data };
   } catch (error) {
@@ -2714,7 +2806,6 @@ export async function createSupplierDelivery(formData: FormData) {
   }
 }
 
-// Оновлення транзакції закупівлі
 export async function updateSupplierDelivery(formData: FormData) {
   try {
     const supabase = createServerClient();
@@ -2727,7 +2818,11 @@ export async function updateSupplierDelivery(formData: FormData) {
     const pricePerUnit = formData.get("price_per_unit")
       ? Number(formData.get("price_per_unit"))
       : null;
-    const deliveryDate = formData.get("delivery_date") as string;
+    const deliveryDateRaw = formData.get("delivery_date");
+    const deliveryDate =
+      typeof deliveryDateRaw === "string" && deliveryDateRaw.trim().length >= 10
+        ? deliveryDateRaw.trim().slice(0, 10)
+        : null;
 
     if (!deliveryId || !supplierId || !productId || !warehouseId || !quantity) {
       return {
@@ -2743,7 +2838,6 @@ export async function updateSupplierDelivery(formData: FormData) {
       };
     }
 
-    // Отримуємо поточну транзакцію для відкату змін у warehouse_inventory
     const { data: currentDelivery, error: getError } = await supabase
       .from("supplier_deliveries")
       .select("quantity, product_id, warehouse_id")
@@ -2757,25 +2851,18 @@ export async function updateSupplierDelivery(formData: FormData) {
       };
     }
 
-    // Формуємо дату для created_at
-    let createdAt: string | undefined = undefined;
-    if (deliveryDate) {
-      const date = new Date(deliveryDate);
-      const now = new Date();
-      date.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
-      createdAt = date.toISOString();
-    }
+    const createdAt = deliveryDate
+      ? new Date(deliveryDate + "T12:00:00.000Z").toISOString()
+      : undefined;
 
-    // Оновлюємо транзакцію
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       supplier_id: supplierId,
       product_id: productId,
       warehouse_id: warehouseId,
       quantity: quantity,
       price_per_unit: pricePerUnit,
     };
-
-    if (createdAt) {
+    if (createdAt !== undefined) {
       updateData.created_at = createdAt;
     }
 
@@ -2787,7 +2874,8 @@ export async function updateSupplierDelivery(formData: FormData) {
         `
         *,
         supplier:suppliers(*),
-        product:products(*, category:product_categories(*)),
+        product:products!supplier_deliveries_product_id_fkey(*, category:product_categories(*)),
+        material_product:products!supplier_deliveries_material_product_id_fkey(*, category:product_categories(*)),
         warehouse:warehouses(*)
       `
       )
@@ -2798,7 +2886,6 @@ export async function updateSupplierDelivery(formData: FormData) {
       return { success: false, error: error.message };
     }
 
-    // Оновлюємо inventory_transaction та warehouse_inventory
     const { data: inventoryTransaction } = await supabase
       .from("inventory_transactions")
       .select("id")
@@ -2807,17 +2894,14 @@ export async function updateSupplierDelivery(formData: FormData) {
       .single();
 
     if (inventoryTransaction) {
-      // Обчислюємо різницю для коректного оновлення warehouse_inventory
       const oldQuantity = Number(currentDelivery.quantity);
       const newQuantity = Number(quantity);
       const quantityDiff = newQuantity - oldQuantity;
 
-      // Якщо змінився склад або продукт, відкатуємо старі зміни та застосовуємо нові
       const warehouseChanged = currentDelivery.warehouse_id !== warehouseId;
       const productChanged = currentDelivery.product_id !== productId;
 
       if (warehouseChanged || productChanged) {
-        // Відкатуємо старі зміни
         if (currentDelivery.warehouse_id && currentDelivery.product_id) {
           const { data: oldInventory } = await supabase
             .from("warehouse_inventory")
@@ -2839,7 +2923,6 @@ export async function updateSupplierDelivery(formData: FormData) {
           }
         }
 
-        // Застосовуємо нові зміни
         const { data: newInventory } = await supabase
           .from("warehouse_inventory")
           .select("quantity")
@@ -2858,7 +2941,6 @@ export async function updateSupplierDelivery(formData: FormData) {
             .eq("warehouse_id", warehouseId)
             .eq("product_id", productId);
         } else {
-          // Якщо запису немає, створюємо новий
           await supabase
             .from("warehouse_inventory")
             .insert({
@@ -2868,8 +2950,7 @@ export async function updateSupplierDelivery(formData: FormData) {
               updated_at: new Date().toISOString(),
             });
         }
-      } else if (quantityDiff !== 0) {
-        // Якщо склад і продукт не змінилися, просто оновлюємо кількість на різницю
+        } else if (quantityDiff !== 0) {
         const { data: currentInventory } = await supabase
           .from("warehouse_inventory")
           .select("quantity")
@@ -2890,7 +2971,6 @@ export async function updateSupplierDelivery(formData: FormData) {
         }
       }
 
-      // Оновлюємо inventory_transaction
       const { error: updateTransactionError } = await supabase
         .from("inventory_transactions")
         .update({
@@ -2917,7 +2997,6 @@ export async function updateSupplierDelivery(formData: FormData) {
   }
 }
 
-// Видалення транзакції закупівлі
 export async function deleteSupplierDelivery(deliveryId: number) {
   try {
     const supabase = createServerClient();
@@ -2926,7 +3005,6 @@ export async function deleteSupplierDelivery(deliveryId: number) {
       return { success: false, error: "Необхідно вказати ID транзакції" };
     }
 
-    // Отримуємо інформацію про транзакцію перед видаленням
     const { data: delivery, error: getError } = await supabase
       .from("supplier_deliveries")
       .select("quantity, product_id, warehouse_id")
@@ -2937,7 +3015,6 @@ export async function deleteSupplierDelivery(deliveryId: number) {
       return { success: false, error: "Транзакцію не знайдено" };
     }
 
-    // Знаходимо та видаляємо відповідну inventory_transaction
     const { data: inventoryTransaction } = await supabase
       .from("inventory_transactions")
       .select("id")
@@ -2946,7 +3023,6 @@ export async function deleteSupplierDelivery(deliveryId: number) {
       .single();
 
     if (inventoryTransaction) {
-      // Відкатуємо зміни у warehouse_inventory (віднімаємо кількість)
       const { error: updateError } = await supabase.rpc(
         "update_warehouse_inventory_on_delete",
         {
@@ -2957,7 +3033,6 @@ export async function deleteSupplierDelivery(deliveryId: number) {
       );
 
       if (updateError) {
-        // Якщо функції немає, виконуємо вручну - отримуємо поточну кількість та віднімаємо
         const { data: currentInventory } = await supabase
           .from("warehouse_inventory")
           .select("quantity")
@@ -2982,7 +3057,6 @@ export async function deleteSupplierDelivery(deliveryId: number) {
         }
       }
 
-      // Видаляємо inventory_transaction
       const { error: deleteTransactionError } = await supabase
         .from("inventory_transactions")
         .delete()

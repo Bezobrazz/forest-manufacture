@@ -31,8 +31,7 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { Pencil, Calendar as CalendarIcon, Search, Truck, Package, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate, dateToYYYYMMDD } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { SupplierForm } from "@/components/supplier-form";
 
@@ -157,7 +156,7 @@ export function EditSupplierDeliveryDialog({
       }
       submitFormData.append(
         "delivery_date",
-        formData.delivery_date.toISOString().split("T")[0]
+        dateToYYYYMMDD(formData.delivery_date)
       );
 
       const result = await updateSupplierDelivery(submitFormData);
@@ -215,7 +214,6 @@ export function EditSupplierDeliveryDialog({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 py-4">
             <div className="grid gap-4 md:grid-cols-2">
-              {/* Дата */}
               <div className="space-y-2">
                 <Label htmlFor="edit-delivery-date">Дата закупівлі</Label>
                 <Popover>
@@ -252,7 +250,6 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Постачальник */}
               <div className="space-y-2">
                 <Label htmlFor="edit-supplier">Постачальник *</Label>
                 <Popover
@@ -337,7 +334,6 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Сировина */}
               <div className="space-y-2">
                 <Label htmlFor="edit-material">Сировина *</Label>
                 <Popover
@@ -407,7 +403,6 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Кількість */}
               <div className="space-y-2">
                 <Label htmlFor="edit-quantity">Кількість *</Label>
                 <Input
@@ -423,7 +418,6 @@ export function EditSupplierDeliveryDialog({
                 />
               </div>
 
-              {/* Ціна за одиницю */}
               <div className="space-y-2">
                 <Label htmlFor="edit-price">Ціна за одиницю (₴)</Label>
                 <Input
@@ -438,7 +432,6 @@ export function EditSupplierDeliveryDialog({
                 />
               </div>
 
-              {/* Склад */}
               <div className="space-y-2">
                 <Label htmlFor="edit-warehouse">Склад *</Label>
                 <Select

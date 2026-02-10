@@ -6,6 +6,7 @@ import {
   getSupplierDeliveries,
   getSuppliers,
   getMaterials,
+  getProductsByCategoryName,
   getWarehouses,
   createSupplierDelivery,
 } from "@/app/actions";
@@ -72,9 +73,9 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatDate,
-  formatDateTime,
   formatNumber,
   formatNumberWithUnit,
+  dateToYYYYMMDD,
 } from "@/lib/utils";
 import { toast } from "sonner";
 import type {
@@ -136,6 +137,7 @@ export default function SupplierTransactionsPage() {
   const [deliveries, setDeliveries] = useState<SupplierDelivery[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
+  const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +158,10 @@ export default function SupplierTransactionsPage() {
   const [materialPopoverOpen, setMaterialPopoverOpen] = useState(false);
   const [quantity, setQuantity] = useState<string>("");
   const [pricePerUnit, setPricePerUnit] = useState<string>("");
+  const [selectedMaterialProductId, setSelectedMaterialProductId] = useState<string>("");
+  const [materialProductSearchQuery, setMaterialProductSearchQuery] = useState("");
+  const [materialProductPopoverOpen, setMaterialProductPopoverOpen] = useState(false);
+  const [materialQuantity, setMaterialQuantity] = useState<string>("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
@@ -166,16 +172,18 @@ export default function SupplierTransactionsPage() {
     setDatabaseError(false);
 
     try {
-      const [deliveriesData, suppliersData, materialsData, warehousesData] =
+      const [deliveriesData, suppliersData, materialsData, productsMaterialsData, warehousesData] =
         await Promise.all([
           getSupplierDeliveries(),
           getSuppliers(),
           getMaterials(),
+          getProductsByCategoryName("Матеріали"),
           getWarehouses(),
         ]);
       setDeliveries(deliveriesData);
       setSuppliers(suppliersData);
       setMaterials(materialsData);
+      setProductsMaterialsCategory(productsMaterialsData);
       setWarehouses(warehousesData);
 
       const mainWarehouse = warehousesData.find((w) =>
@@ -304,6 +312,14 @@ export default function SupplierTransactionsPage() {
     );
   }, [materialsSyrovyna, materialSearchQuery]);
 
+  const filteredMaterialProducts = useMemo(() => {
+    if (!materialProductSearchQuery.trim()) return productsMaterialsCategory;
+    const query = materialProductSearchQuery.toLowerCase();
+    return productsMaterialsCategory.filter((p) =>
+      p.name.toLowerCase().includes(query)
+    );
+  }, [productsMaterialsCategory, materialProductSearchQuery]);
+
   const purchaseTotal = useMemo(() => {
     const qty = Number(quantity) || 0;
     const price = Number(pricePerUnit) || 0;
@@ -339,10 +355,14 @@ export default function SupplierTransactionsPage() {
         formData.append("price_per_unit", pricePerUnit);
       }
       if (deliveryDate) {
-        formData.append(
-          "delivery_date",
-          deliveryDate.toISOString().split("T")[0]
-        );
+        formData.append("delivery_date", dateToYYYYMMDD(deliveryDate));
+      }
+      if (selectedMaterialProductId && materialQuantity.trim()) {
+        const mQty = Number(materialQuantity);
+        if (mQty > 0) {
+          formData.append("material_product_id", selectedMaterialProductId);
+          formData.append("material_quantity", materialQuantity);
+        }
       }
 
       const result = await createSupplierDelivery(formData);
@@ -357,6 +377,9 @@ export default function SupplierTransactionsPage() {
         setMaterialSearchQuery("");
         setQuantity("");
         setPricePerUnit("");
+        setSelectedMaterialProductId("");
+        setMaterialProductSearchQuery("");
+        setMaterialQuantity("");
         setDeliveryDate(new Date());
       } else {
         toast.error(result.error || "Помилка при створенні транзакції");
@@ -413,7 +436,6 @@ export default function SupplierTransactionsPage() {
         </div>
       </div>
 
-      {/* Форма закупівлі */}
       {!isLoading && !databaseError && (
         <Card>
           <CardHeader>
@@ -427,7 +449,6 @@ export default function SupplierTransactionsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {/* Дата */}
               <div className="space-y-2">
                 <Label htmlFor="delivery-date">Дата закупівлі</Label>
                 <Popover>
@@ -464,7 +485,6 @@ export default function SupplierTransactionsPage() {
                 </Popover>
               </div>
 
-              {/* Постачальник */}
               <div className="space-y-2">
                 <Label htmlFor="supplier">Постачальник *</Label>
                 <Popover
@@ -556,7 +576,6 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              {/* Сировина */}
               <div className="space-y-2">
                 <Label htmlFor="material">Сировина *</Label>
                 <Popover
@@ -633,7 +652,83 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              {/* Кількість */}
+              <div className="space-y-2">
+                <Label htmlFor="material-product">Матеріали</Label>
+                <Popover
+                  open={materialProductPopoverOpen}
+                  onOpenChange={setMaterialProductPopoverOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="material-product"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {selectedMaterialProductId
+                        ? productsMaterialsCategory.find(
+                            (p) => p.id === Number(selectedMaterialProductId)
+                          )?.name || "Оберіть матеріали"
+                        : "Оберіть матеріали"}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <div className="p-2">
+                      <Input
+                        placeholder="Пошук матеріалів..."
+                        value={materialProductSearchQuery}
+                        onChange={(e) =>
+                          setMaterialProductSearchQuery(e.target.value)
+                        }
+                        className="mb-2"
+                      />
+                      <div className="max-h-[200px] overflow-auto">
+                        {filteredMaterialProducts.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            Матеріалів не знайдено
+                          </div>
+                        ) : (
+                          filteredMaterialProducts.map((product) => (
+                            <div
+                              key={product.id}
+                              className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
+                              onClick={() => {
+                                setSelectedMaterialProductId(
+                                  product.id.toString()
+                                );
+                                setMaterialProductSearchQuery("");
+                                setMaterialProductPopoverOpen(false);
+                              }}
+                            >
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex-1 font-medium">
+                                {product.name}
+                              </div>
+                              {selectedMaterialProductId ===
+                                product.id.toString() && (
+                                <span className="text-primary">✓</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedMaterialProductId && (
+                  <Input
+                    type="number"
+                    placeholder="Кількість матеріалів"
+                    value={materialQuantity}
+                    onChange={(e) => setMaterialQuantity(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    className="mt-2"
+                  />
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="quantity">Кількість *</Label>
                 <Input
@@ -647,7 +742,6 @@ export default function SupplierTransactionsPage() {
                 />
               </div>
 
-              {/* Ціна за одиницю */}
               <div className="space-y-2">
                 <Label htmlFor="price">Ціна за одиницю (₴)</Label>
                 <Input
@@ -662,7 +756,6 @@ export default function SupplierTransactionsPage() {
               </div>
             </div>
 
-            {/* Сума закупівлі */}
             {purchaseTotal > 0 && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="flex items-center justify-between">
@@ -678,7 +771,6 @@ export default function SupplierTransactionsPage() {
               </div>
             )}
 
-            {/* Кнопка додавання */}
             <div className="mt-6">
               <Button
                 onClick={handleAddTransaction}
@@ -848,7 +940,7 @@ export default function SupplierTransactionsPage() {
                         return (
                           <TableRow key={delivery.id}>
                             <TableCell className="whitespace-nowrap">
-                              {formatDateTime(delivery.created_at)}
+                              {formatDate(delivery.created_at)}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
