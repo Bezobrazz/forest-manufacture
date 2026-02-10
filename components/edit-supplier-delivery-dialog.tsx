@@ -57,7 +57,12 @@ export function EditSupplierDeliveryDialog({
     product_id: delivery.product_id.toString(),
     warehouse_id: delivery.warehouse_id.toString(),
     quantity: delivery.quantity.toString(),
-    price_per_unit: delivery.price_per_unit?.toString() || "",
+    price_per_unit:
+      delivery.price_per_unit != null
+        ? (
+            Math.round(Number(delivery.price_per_unit) * 100) / 100
+          ).toString()
+        : "",
     delivery_date: delivery.created_at ? new Date(delivery.created_at) : new Date(),
   });
 
@@ -109,7 +114,12 @@ export function EditSupplierDeliveryDialog({
       product_id: delivery.product_id.toString(),
       warehouse_id: delivery.warehouse_id.toString(),
       quantity: delivery.quantity.toString(),
-      price_per_unit: delivery.price_per_unit?.toString() || "",
+      price_per_unit:
+        delivery.price_per_unit != null
+          ? (
+              Math.round(Number(delivery.price_per_unit) * 100) / 100
+            ).toString()
+          : "",
       delivery_date: delivery.created_at ? new Date(delivery.created_at) : new Date(),
     });
   }, [delivery]);

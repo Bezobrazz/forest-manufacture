@@ -240,20 +240,21 @@ export default function SupplierTransactionsPage() {
 
     filtered = [...filtered].sort((a, b) => {
       if (sortBy === "date") {
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      } else if (sortBy === "supplier") {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id as number) - (a.id as number);
+      }
+      if (sortBy === "supplier") {
         return (a.supplier?.name || "").localeCompare(
           b.supplier?.name || "",
           "uk"
         );
-      } else {
-        return (a.product?.name || "").localeCompare(
-          b.product?.name || "",
-          "uk"
-        );
       }
+      return (a.product?.name || "").localeCompare(
+        b.product?.name || "",
+        "uk"
+      );
     });
 
     return filtered;
@@ -397,11 +398,17 @@ export default function SupplierTransactionsPage() {
     (sum, delivery) => sum + Number(delivery.quantity),
     0
   );
-  const totalAmount = deliveries.reduce((sum, delivery) => {
-    const quantity = Number(delivery.quantity);
-    const price = delivery.price_per_unit ? Number(delivery.price_per_unit) : 0;
-    return sum + quantity * price;
-  }, 0);
+  const totalAmount =
+    Math.round(
+      deliveries.reduce((sum, delivery) => {
+        const quantity = Number(delivery.quantity);
+        const price =
+          delivery.price_per_unit != null
+            ? Math.round(Number(delivery.price_per_unit) * 100) / 100
+            : 0;
+        return sum + quantity * price;
+      }, 0) * 100
+    ) / 100;
 
   return (
     <div className="container py-6 space-y-6">
@@ -930,12 +937,16 @@ export default function SupplierTransactionsPage() {
                     <TableBody>
                       {paginatedDeliveries.map((delivery) => {
                         const quantity = Number(delivery.quantity);
-                        const pricePerUnit = delivery.price_per_unit
-                          ? Number(delivery.price_per_unit)
-                          : null;
-                        const total = pricePerUnit
-                          ? quantity * pricePerUnit
-                          : null;
+                        const pricePerUnit =
+                          delivery.price_per_unit != null
+                            ? Math.round(
+                                Number(delivery.price_per_unit) * 100
+                              ) / 100
+                            : null;
+                        const total =
+                          pricePerUnit != null
+                            ? Math.round(quantity * pricePerUnit * 100) / 100
+                            : null;
 
                         return (
                           <TableRow key={delivery.id}>

@@ -2674,9 +2674,13 @@ export async function createSupplierDelivery(formData: FormData) {
     const productId = Number(formData.get("product_id"));
     const warehouseId = Number(formData.get("warehouse_id"));
     const quantity = Number(formData.get("quantity"));
-    const pricePerUnit = formData.get("price_per_unit")
-      ? Number(formData.get("price_per_unit"))
-      : null;
+    const pricePerUnitRaw = formData.get("price_per_unit");
+    const pricePerUnit =
+      pricePerUnitRaw !== null &&
+      pricePerUnitRaw !== undefined &&
+      String(pricePerUnitRaw).trim() !== ""
+        ? Math.round(Number(pricePerUnitRaw) * 100) / 100
+        : null;
     const deliveryDate = formData.get("delivery_date") as string;
     const materialProductIdRaw = formData.get("material_product_id");
     const materialProductId =
@@ -2815,9 +2819,13 @@ export async function updateSupplierDelivery(formData: FormData) {
     const productId = Number(formData.get("product_id"));
     const warehouseId = Number(formData.get("warehouse_id"));
     const quantity = Number(formData.get("quantity"));
-    const pricePerUnit = formData.get("price_per_unit")
-      ? Number(formData.get("price_per_unit"))
-      : null;
+    const pricePerUnitRaw = formData.get("price_per_unit");
+    const pricePerUnit =
+      pricePerUnitRaw !== null &&
+      pricePerUnitRaw !== undefined &&
+      String(pricePerUnitRaw).trim() !== ""
+        ? Math.round(Number(pricePerUnitRaw) * 100) / 100
+        : null;
     const deliveryDateRaw = formData.get("delivery_date");
     const deliveryDate =
       typeof deliveryDateRaw === "string" && deliveryDateRaw.trim().length >= 10
