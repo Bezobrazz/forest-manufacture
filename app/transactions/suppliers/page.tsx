@@ -291,13 +291,18 @@ export default function SupplierTransactionsPage() {
     );
   }, [suppliers, supplierSearchQuery]);
 
+  const materialsSyrovyna = useMemo(
+    () => materials.filter((m) => m.category?.name === "Сировина"),
+    [materials]
+  );
+
   const filteredMaterials = useMemo(() => {
-    if (!materialSearchQuery.trim()) return materials;
+    if (!materialSearchQuery.trim()) return materialsSyrovyna;
     const query = materialSearchQuery.toLowerCase();
-    return materials.filter((material) =>
+    return materialsSyrovyna.filter((material) =>
       material.name.toLowerCase().includes(query)
     );
-  }, [materials, materialSearchQuery]);
+  }, [materialsSyrovyna, materialSearchQuery]);
 
   const purchaseTotal = useMemo(() => {
     const qty = Number(quantity) || 0;

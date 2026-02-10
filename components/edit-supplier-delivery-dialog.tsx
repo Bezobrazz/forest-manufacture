@@ -124,7 +124,11 @@ export function EditSupplierDeliveryDialog({
     );
   });
 
-  const filteredMaterials = materials.filter((material) => {
+  const materialsSyrovyna = materials.filter(
+    (m) => m.category?.name === "Сировина"
+  );
+
+  const filteredMaterials = materialsSyrovyna.filter((material) => {
     if (!materialSearchQuery.trim()) return true;
     const query = materialSearchQuery.toLowerCase();
     return material.name.toLowerCase().includes(query);
