@@ -143,6 +143,10 @@ export default function SupplierTransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilterFrom, setDateFilterFrom] = useState<Date | undefined>(
+    undefined
+  );
+  const [dateFilterTo, setDateFilterTo] = useState<Date | undefined>(undefined);
   const [sortBy, setSortBy] = useState<"date" | "supplier" | "product">("date");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -226,16 +230,28 @@ export default function SupplierTransactionsPage() {
   const filteredAndSortedDeliveries = useMemo(() => {
     let filtered = deliveries.filter((delivery) => {
       const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
+      if (query) {
+        const supplierMatch =
+          delivery.supplier?.name.toLowerCase().includes(query) || false;
+        const productMatch =
+          delivery.product?.name.toLowerCase().includes(query) || false;
+        const warehouseMatch =
+          delivery.warehouse?.name.toLowerCase().includes(query) || false;
+        if (!supplierMatch && !productMatch && !warehouseMatch) return false;
+      }
 
-      const supplierMatch =
-        delivery.supplier?.name.toLowerCase().includes(query) || false;
-      const productMatch =
-        delivery.product?.name.toLowerCase().includes(query) || false;
-      const warehouseMatch =
-        delivery.warehouse?.name.toLowerCase().includes(query) || false;
-
-      return supplierMatch || productMatch || warehouseMatch;
+      const deliveryDateStr = delivery.created_at
+        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+        : "";
+      if (dateFilterFrom) {
+        const fromStr = dateToYYYYMMDD(dateFilterFrom);
+        if (deliveryDateStr < fromStr) return false;
+      }
+      if (dateFilterTo) {
+        const toStr = dateToYYYYMMDD(dateFilterTo);
+        if (deliveryDateStr > toStr) return false;
+      }
+      return true;
     });
 
     filtered = [...filtered].sort((a, b) => {
@@ -258,7 +274,7 @@ export default function SupplierTransactionsPage() {
     });
 
     return filtered;
-  }, [deliveries, searchQuery, sortBy]);
+  }, [deliveries, searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
 
   const totalPages = Math.ceil(
     filteredAndSortedDeliveries.length / itemsPerPage
@@ -288,7 +304,7 @@ export default function SupplierTransactionsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy]);
+  }, [searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
 
   const filteredSuppliers = useMemo(() => {
     if (!supplierSearchQuery.trim()) return suppliers;
@@ -394,13 +410,13 @@ export default function SupplierTransactionsPage() {
   };
 
   const totalDeliveries = deliveries.length;
-  const totalQuantity = deliveries.reduce(
+  const totalQuantity = filteredAndSortedDeliveries.reduce(
     (sum, delivery) => sum + Number(delivery.quantity),
     0
   );
   const totalAmount =
     Math.round(
-      deliveries.reduce((sum, delivery) => {
+      filteredAndSortedDeliveries.reduce((sum, delivery) => {
         const quantity = Number(delivery.quantity);
         const price =
           delivery.price_per_unit != null
@@ -803,7 +819,9 @@ export default function SupplierTransactionsPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Всього транзакцій</CardDescription>
-              <CardTitle className="text-2xl">{totalDeliveries}</CardTitle>
+              <CardTitle className="text-2xl">
+                {filteredAndSortedDeliveries.length}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -896,23 +914,97 @@ export default function SupplierTransactionsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Пошук по постачальнику, продукту або складу..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+            <div className="mb-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "min-w-[120px] justify-start text-left font-normal",
+                          !dateFilterFrom && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateFilterFrom
+                          ? formatDate(
+                              dateFilterFrom instanceof Date
+                                ? dateFilterFrom.toISOString()
+                                : new Date(dateFilterFrom).toISOString()
+                            )
+                          : "З дати"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateFilterFrom}
+                        onSelect={setDateFilterFrom}
+                        locale={uk}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "min-w-[120px] justify-start text-left font-normal",
+                          !dateFilterTo && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateFilterTo
+                          ? formatDate(
+                              dateFilterTo instanceof Date
+                                ? dateFilterTo.toISOString()
+                                : new Date(dateFilterTo).toISOString()
+                            )
+                          : "По дату"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateFilterTo}
+                        onSelect={setDateFilterTo}
+                        locale={uk}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {(dateFilterFrom || dateFilterTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDateFilterFrom(undefined);
+                        setDateFilterTo(undefined);
+                      }}
+                    >
+                      Скинути дати
+                    </Button>
+                  )}
+                </div>
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Пошук по постачальнику, продукту або складу..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
             {paginatedDeliveries.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
-                  {searchQuery
-                    ? "Не знайдено транзакцій за вашим запитом"
+                  {searchQuery || dateFilterFrom || dateFilterTo
+                    ? "Не знайдено транзакцій за обраними фільтрами"
                     : "Немає транзакцій з постачальниками"}
                 </p>
               </div>
