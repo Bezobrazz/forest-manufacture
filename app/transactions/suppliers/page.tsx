@@ -925,7 +925,7 @@ export default function SupplierTransactionsPage() {
                         <TableHead>Дата</TableHead>
                         <TableHead>Постачальник</TableHead>
                         <TableHead>Продукт</TableHead>
-                        <TableHead>Склад</TableHead>
+                        <TableHead className="text-right">Матеріали (передано)</TableHead>
                         <TableHead className="text-right">Кількість</TableHead>
                         <TableHead className="text-right">
                           Ціна за одиницю
@@ -971,8 +971,18 @@ export default function SupplierTransactionsPage() {
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              {delivery.warehouse?.name || "Невідомий склад"}
+                            <TableCell className="text-right">
+                              {delivery.material_quantity != null &&
+                              Number(delivery.material_quantity) > 0 ? (
+                                formatNumberWithUnit(
+                                  Math.round(
+                                    Number(delivery.material_quantity) * 100
+                                  ) / 100,
+                                  "шт"
+                                )
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Badge variant="secondary">

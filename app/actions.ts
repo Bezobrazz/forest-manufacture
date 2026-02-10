@@ -2831,6 +2831,20 @@ export async function updateSupplierDelivery(formData: FormData) {
       typeof deliveryDateRaw === "string" && deliveryDateRaw.trim().length >= 10
         ? deliveryDateRaw.trim().slice(0, 10)
         : null;
+    const materialProductIdRaw = formData.get("material_product_id");
+    const materialProductId =
+      materialProductIdRaw !== null &&
+      materialProductIdRaw !== undefined &&
+      String(materialProductIdRaw).trim() !== ""
+        ? Number(materialProductIdRaw)
+        : null;
+    const materialQuantityRaw = formData.get("material_quantity");
+    const materialQuantity =
+      materialQuantityRaw !== null &&
+      materialQuantityRaw !== undefined &&
+      String(materialQuantityRaw).trim() !== ""
+        ? Math.round(Number(materialQuantityRaw) * 100) / 100
+        : null;
 
     if (!deliveryId || !supplierId || !productId || !warehouseId || !quantity) {
       return {
@@ -2848,7 +2862,7 @@ export async function updateSupplierDelivery(formData: FormData) {
 
     const { data: currentDelivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id")
+      .select("quantity, product_id, warehouse_id, material_product_id, material_quantity")
       .eq("id", deliveryId)
       .single();
 
@@ -2869,6 +2883,8 @@ export async function updateSupplierDelivery(formData: FormData) {
       warehouse_id: warehouseId,
       quantity: quantity,
       price_per_unit: pricePerUnit,
+      material_product_id: materialProductId ?? null,
+      material_quantity: materialQuantity ?? null,
     };
     if (createdAt !== undefined) {
       updateData.created_at = createdAt;
@@ -2993,7 +3009,83 @@ export async function updateSupplierDelivery(formData: FormData) {
       }
     }
 
+    const oldRawQty = Number(currentDelivery.quantity);
+    const oldMaterialQty = Number(currentDelivery.material_quantity ?? 0);
+    const oldMaterialPid = currentDelivery.material_product_id ?? null;
+    const newMaterialQty = Number(materialQuantity ?? 0);
+    const newMaterialPid = materialProductId ?? null;
+
+    const { data: materialShipment } = await supabase
+      .from("inventory_transactions")
+      .select("id, product_id, quantity, warehouse_id")
+      .eq("transaction_type", "shipment")
+      .eq("reference_id", deliveryId)
+      .maybeSingle();
+
+    if (oldMaterialQty > 0 && oldMaterialPid && materialShipment) {
+      const { data: whInv } = await supabase
+        .from("warehouse_inventory")
+        .select("quantity")
+        .eq("warehouse_id", materialShipment.warehouse_id ?? warehouseId)
+        .eq("product_id", oldMaterialPid)
+        .single();
+      if (whInv) {
+        await supabase
+          .from("warehouse_inventory")
+          .update({
+            quantity: Number(whInv.quantity) + oldMaterialQty,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("warehouse_id", materialShipment.warehouse_id ?? warehouseId)
+          .eq("product_id", oldMaterialPid);
+      }
+      await supabase
+        .from("inventory_transactions")
+        .delete()
+        .eq("id", materialShipment.id);
+      const { data: supRow } = await supabase
+        .from("suppliers")
+        .select("materials_balance")
+        .eq("id", supplierId)
+        .single();
+      const curBal = Number(supRow?.materials_balance ?? 0);
+      await supabase
+        .from("suppliers")
+        .update({
+          materials_balance: curBal - (oldMaterialQty - oldRawQty),
+        })
+        .eq("id", supplierId);
+    }
+
+    if (newMaterialQty > 0 && newMaterialPid) {
+      const { error: txErr } = await supabase.from("inventory_transactions").insert({
+        product_id: newMaterialPid,
+        quantity: newMaterialQty,
+        transaction_type: "shipment",
+        reference_id: deliveryId,
+        warehouse_id: warehouseId,
+        notes: `Видача матеріалів постачальнику (поставка #${deliveryId})`,
+      });
+      if (txErr) {
+        console.error("Error creating material shipment on update:", txErr);
+      } else {
+        const { data: supRow2 } = await supabase
+          .from("suppliers")
+          .select("materials_balance")
+          .eq("id", supplierId)
+          .single();
+        const curBal2 = Number(supRow2?.materials_balance ?? 0);
+        await supabase
+          .from("suppliers")
+          .update({
+            materials_balance: curBal2 + (newMaterialQty - quantity),
+          })
+          .eq("id", supplierId);
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
 
     return { success: true, data };
   } catch (error) {
