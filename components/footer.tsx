@@ -1,5 +1,14 @@
 import Link from "next/link";
-import { Package, Users, BarChart, Boxes, CheckSquare, DollarSign, Truck, ShoppingCart, Car, MapPin } from "lucide-react";
+import {
+  Package,
+  Users,
+  BarChart,
+  Boxes,
+  CheckSquare,
+  DollarSign,
+  Truck,
+  ShoppingCart,
+} from "lucide-react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -46,6 +55,15 @@ export function Footer() {
                 >
                   <Package className="h-4 w-4" />
                   Продукція
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/materials"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <Package className="h-4 w-4" />
+                  Матеріали
                 </Link>
               </li>
             </ul>
@@ -151,4 +169,3 @@ export function Footer() {
     </footer>
   );
 }
-

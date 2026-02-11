@@ -3,7 +3,7 @@
 import type React from "react";
 import { useState, useEffect } from "react";
 import type { SupplierDelivery, Supplier, Product, Warehouse } from "@/lib/types";
-import { updateSupplierDelivery, getSuppliers, getMaterials, getWarehouses } from "@/app/actions";
+import { updateSupplierDelivery, getSuppliers, getMaterials, getProductsByCategoryName, getWarehouses } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,8 +31,7 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { Pencil, Calendar as CalendarIcon, Search, Truck, Package, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate, dateToYYYYMMDD } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { SupplierForm } from "@/components/supplier-form";
 
@@ -49,6 +48,7 @@ export function EditSupplierDeliveryDialog({
   const [isPending, setIsPending] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
+  const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
@@ -58,7 +58,19 @@ export function EditSupplierDeliveryDialog({
     product_id: delivery.product_id.toString(),
     warehouse_id: delivery.warehouse_id.toString(),
     quantity: delivery.quantity.toString(),
-    price_per_unit: delivery.price_per_unit?.toString() || "",
+    price_per_unit:
+      delivery.price_per_unit != null
+        ? (
+            Math.round(Number(delivery.price_per_unit) * 100) / 100
+          ).toString()
+        : "",
+    material_product_id: delivery.material_product_id?.toString() ?? "",
+    material_quantity:
+      delivery.material_quantity != null && Number(delivery.material_quantity) > 0
+        ? (
+            Math.round(Number(delivery.material_quantity) * 100) / 100
+          ).toString()
+        : "",
     delivery_date: delivery.created_at ? new Date(delivery.created_at) : new Date(),
   });
 
@@ -66,6 +78,8 @@ export function EditSupplierDeliveryDialog({
   const [supplierPopoverOpen, setSupplierPopoverOpen] = useState(false);
   const [materialSearchQuery, setMaterialSearchQuery] = useState("");
   const [materialPopoverOpen, setMaterialPopoverOpen] = useState(false);
+  const [materialProductSearchQuery, setMaterialProductSearchQuery] = useState("");
+  const [materialProductPopoverOpen, setMaterialProductPopoverOpen] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -77,13 +91,16 @@ export function EditSupplierDeliveryDialog({
   const loadData = async () => {
     setIsLoadingData(true);
     try {
-      const [suppliersData, materialsData, warehousesData] = await Promise.all([
-        getSuppliers(),
-        getMaterials(),
-        getWarehouses(),
-      ]);
+      const [suppliersData, materialsData, productsMaterialsData, warehousesData] =
+        await Promise.all([
+          getSuppliers(),
+          getMaterials(),
+          getProductsByCategoryName("Матеріали"),
+          getWarehouses(),
+        ]);
       setSuppliers(suppliersData);
       setMaterials(materialsData);
+      setProductsMaterialsCategory(productsMaterialsData);
       setWarehouses(warehousesData);
     } catch (error) {
       console.error("Помилка завантаження даних:", error);
@@ -110,7 +127,19 @@ export function EditSupplierDeliveryDialog({
       product_id: delivery.product_id.toString(),
       warehouse_id: delivery.warehouse_id.toString(),
       quantity: delivery.quantity.toString(),
-      price_per_unit: delivery.price_per_unit?.toString() || "",
+      price_per_unit:
+        delivery.price_per_unit != null
+          ? (
+              Math.round(Number(delivery.price_per_unit) * 100) / 100
+            ).toString()
+          : "",
+      material_product_id: delivery.material_product_id?.toString() ?? "",
+      material_quantity:
+        delivery.material_quantity != null && Number(delivery.material_quantity) > 0
+          ? (
+              Math.round(Number(delivery.material_quantity) * 100) / 100
+            ).toString()
+          : "",
       delivery_date: delivery.created_at ? new Date(delivery.created_at) : new Date(),
     });
   }, [delivery]);
@@ -124,10 +153,20 @@ export function EditSupplierDeliveryDialog({
     );
   });
 
-  const filteredMaterials = materials.filter((material) => {
+  const materialsSyrovyna = materials.filter(
+    (m) => m.category?.name === "Сировина"
+  );
+
+  const filteredMaterials = materialsSyrovyna.filter((material) => {
     if (!materialSearchQuery.trim()) return true;
     const query = materialSearchQuery.toLowerCase();
     return material.name.toLowerCase().includes(query);
+  });
+
+  const filteredMaterialProducts = productsMaterialsCategory.filter((p) => {
+    if (!materialProductSearchQuery.trim()) return true;
+    const query = materialProductSearchQuery.toLowerCase();
+    return p.name.toLowerCase().includes(query);
   });
 
   const handleChange = (
@@ -153,8 +192,15 @@ export function EditSupplierDeliveryDialog({
       }
       submitFormData.append(
         "delivery_date",
-        formData.delivery_date.toISOString().split("T")[0]
+        dateToYYYYMMDD(formData.delivery_date)
       );
+      if (formData.material_product_id && formData.material_quantity.trim()) {
+        const mQty = Number(formData.material_quantity);
+        if (mQty > 0) {
+          submitFormData.append("material_product_id", formData.material_product_id);
+          submitFormData.append("material_quantity", formData.material_quantity);
+        }
+      }
 
       const result = await updateSupplierDelivery(submitFormData);
 
@@ -211,7 +257,6 @@ export function EditSupplierDeliveryDialog({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 py-4">
             <div className="grid gap-4 md:grid-cols-2">
-              {/* Дата */}
               <div className="space-y-2">
                 <Label htmlFor="edit-delivery-date">Дата закупівлі</Label>
                 <Popover>
@@ -248,7 +293,6 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Постачальник */}
               <div className="space-y-2">
                 <Label htmlFor="edit-supplier">Постачальник *</Label>
                 <Popover
@@ -333,7 +377,6 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Сировина */}
               <div className="space-y-2">
                 <Label htmlFor="edit-material">Сировина *</Label>
                 <Popover
@@ -403,7 +446,87 @@ export function EditSupplierDeliveryDialog({
                 </Popover>
               </div>
 
-              {/* Кількість */}
+              <div className="space-y-2">
+                <Label htmlFor="edit-material-product">Матеріали (передано)</Label>
+                <Popover
+                  open={materialProductPopoverOpen}
+                  onOpenChange={setMaterialProductPopoverOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="edit-material-product"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {formData.material_product_id
+                        ? productsMaterialsCategory.find(
+                            (p) => p.id === Number(formData.material_product_id)
+                          )?.name || "Оберіть матеріали"
+                        : "Оберіть матеріали"}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <div className="p-2">
+                      <Input
+                        placeholder="Пошук матеріалів..."
+                        value={materialProductSearchQuery}
+                        onChange={(e) =>
+                          setMaterialProductSearchQuery(e.target.value)
+                        }
+                        className="mb-2"
+                      />
+                      <div className="max-h-[200px] overflow-auto">
+                        {filteredMaterialProducts.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            Матеріалів не знайдено
+                          </div>
+                        ) : (
+                          filteredMaterialProducts.map((product) => (
+                            <div
+                              key={product.id}
+                              className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
+                              onClick={() => {
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  material_product_id: product.id.toString(),
+                                }));
+                                setMaterialProductSearchQuery("");
+                                setMaterialProductPopoverOpen(false);
+                              }}
+                            >
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex-1 font-medium">{product.name}</div>
+                              {formData.material_product_id ===
+                                product.id.toString() && (
+                                <span className="text-primary">✓</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {formData.material_product_id && (
+                  <Input
+                    type="number"
+                    placeholder="Кількість матеріалів"
+                    value={formData.material_quantity}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        material_quantity: e.target.value,
+                      }))
+                    }
+                    min="0"
+                    step="0.01"
+                    className="mt-2"
+                  />
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="edit-quantity">Кількість *</Label>
                 <Input
@@ -419,7 +542,6 @@ export function EditSupplierDeliveryDialog({
                 />
               </div>
 
-              {/* Ціна за одиницю */}
               <div className="space-y-2">
                 <Label htmlFor="edit-price">Ціна за одиницю (₴)</Label>
                 <Input
@@ -434,7 +556,6 @@ export function EditSupplierDeliveryDialog({
                 />
               </div>
 
-              {/* Склад */}
               <div className="space-y-2">
                 <Label htmlFor="edit-warehouse">Склад *</Label>
                 <Select

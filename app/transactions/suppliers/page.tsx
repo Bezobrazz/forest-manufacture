@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   getSupplierDeliveries,
   getSuppliers,
   getMaterials,
+  getProductsByCategoryName,
   getWarehouses,
   createSupplierDelivery,
 } from "@/app/actions";
@@ -72,9 +73,9 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatDate,
-  formatDateTime,
   formatNumber,
   formatNumberWithUnit,
+  dateToYYYYMMDD,
 } from "@/lib/utils";
 import { toast } from "sonner";
 import type {
@@ -136,11 +137,16 @@ export default function SupplierTransactionsPage() {
   const [deliveries, setDeliveries] = useState<SupplierDelivery[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
+  const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilterFrom, setDateFilterFrom] = useState<Date | undefined>(
+    undefined
+  );
+  const [dateFilterTo, setDateFilterTo] = useState<Date | undefined>(undefined);
   const [sortBy, setSortBy] = useState<"date" | "supplier" | "product">("date");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -156,6 +162,10 @@ export default function SupplierTransactionsPage() {
   const [materialPopoverOpen, setMaterialPopoverOpen] = useState(false);
   const [quantity, setQuantity] = useState<string>("");
   const [pricePerUnit, setPricePerUnit] = useState<string>("");
+  const [selectedMaterialProductId, setSelectedMaterialProductId] = useState<string>("");
+  const [materialProductSearchQuery, setMaterialProductSearchQuery] = useState("");
+  const [materialProductPopoverOpen, setMaterialProductPopoverOpen] = useState(false);
+  const [materialQuantity, setMaterialQuantity] = useState<string>("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
@@ -166,16 +176,18 @@ export default function SupplierTransactionsPage() {
     setDatabaseError(false);
 
     try {
-      const [deliveriesData, suppliersData, materialsData, warehousesData] =
+      const [deliveriesData, suppliersData, materialsData, productsMaterialsData, warehousesData] =
         await Promise.all([
           getSupplierDeliveries(),
           getSuppliers(),
           getMaterials(),
+          getProductsByCategoryName("Матеріали"),
           getWarehouses(),
         ]);
       setDeliveries(deliveriesData);
       setSuppliers(suppliersData);
       setMaterials(materialsData);
+      setProductsMaterialsCategory(productsMaterialsData);
       setWarehouses(warehousesData);
 
       const mainWarehouse = warehousesData.find((w) =>
@@ -218,38 +230,51 @@ export default function SupplierTransactionsPage() {
   const filteredAndSortedDeliveries = useMemo(() => {
     let filtered = deliveries.filter((delivery) => {
       const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
+      if (query) {
+        const supplierMatch =
+          delivery.supplier?.name.toLowerCase().includes(query) || false;
+        const productMatch =
+          delivery.product?.name.toLowerCase().includes(query) || false;
+        const warehouseMatch =
+          delivery.warehouse?.name.toLowerCase().includes(query) || false;
+        if (!supplierMatch && !productMatch && !warehouseMatch) return false;
+      }
 
-      const supplierMatch =
-        delivery.supplier?.name.toLowerCase().includes(query) || false;
-      const productMatch =
-        delivery.product?.name.toLowerCase().includes(query) || false;
-      const warehouseMatch =
-        delivery.warehouse?.name.toLowerCase().includes(query) || false;
-
-      return supplierMatch || productMatch || warehouseMatch;
+      const deliveryDateStr = delivery.created_at
+        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+        : "";
+      if (dateFilterFrom) {
+        const fromStr = dateToYYYYMMDD(dateFilterFrom);
+        if (deliveryDateStr < fromStr) return false;
+      }
+      if (dateFilterTo) {
+        const toStr = dateToYYYYMMDD(dateFilterTo);
+        if (deliveryDateStr > toStr) return false;
+      }
+      return true;
     });
 
     filtered = [...filtered].sort((a, b) => {
       if (sortBy === "date") {
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      } else if (sortBy === "supplier") {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id as number) - (a.id as number);
+      }
+      if (sortBy === "supplier") {
         return (a.supplier?.name || "").localeCompare(
           b.supplier?.name || "",
           "uk"
         );
-      } else {
-        return (a.product?.name || "").localeCompare(
-          b.product?.name || "",
-          "uk"
-        );
       }
+      return (a.product?.name || "").localeCompare(
+        b.product?.name || "",
+        "uk"
+      );
     });
 
     return filtered;
-  }, [deliveries, searchQuery, sortBy]);
+  }, [deliveries, searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
 
   const totalPages = Math.ceil(
     filteredAndSortedDeliveries.length / itemsPerPage
@@ -258,6 +283,42 @@ export default function SupplierTransactionsPage() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  const paginatedGroupsByDate = useMemo(() => {
+    const groups: Array<{
+      dateStr: string;
+      displayDate: string;
+      deliveries: typeof paginatedDeliveries;
+      sum: number;
+    }> = [];
+    let current: typeof groups[0] | null = null;
+    for (const delivery of paginatedDeliveries) {
+      const dateStr = delivery.created_at
+        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+        : "";
+      const qty = Number(delivery.quantity);
+      const price =
+        delivery.price_per_unit != null
+          ? Math.round(Number(delivery.price_per_unit) * 100) / 100
+          : 0;
+      const rowSum = Math.round(qty * price * 100) / 100;
+      if (!current || current.dateStr !== dateStr) {
+        current = {
+          dateStr,
+          displayDate: dateStr
+            ? formatDate(dateStr + "T12:00:00.000Z")
+            : "—",
+          deliveries: [],
+          sum: 0,
+        };
+        groups.push(current);
+      }
+      current.deliveries.push(delivery);
+      current.sum += rowSum;
+    }
+    groups.forEach((g) => (g.sum = Math.round(g.sum * 100) / 100));
+    return groups;
+  }, [paginatedDeliveries]);
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -279,7 +340,7 @@ export default function SupplierTransactionsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy]);
+  }, [searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
 
   const filteredSuppliers = useMemo(() => {
     if (!supplierSearchQuery.trim()) return suppliers;
@@ -291,13 +352,26 @@ export default function SupplierTransactionsPage() {
     );
   }, [suppliers, supplierSearchQuery]);
 
+  const materialsSyrovyna = useMemo(
+    () => materials.filter((m) => m.category?.name === "Сировина"),
+    [materials]
+  );
+
   const filteredMaterials = useMemo(() => {
-    if (!materialSearchQuery.trim()) return materials;
+    if (!materialSearchQuery.trim()) return materialsSyrovyna;
     const query = materialSearchQuery.toLowerCase();
-    return materials.filter((material) =>
+    return materialsSyrovyna.filter((material) =>
       material.name.toLowerCase().includes(query)
     );
-  }, [materials, materialSearchQuery]);
+  }, [materialsSyrovyna, materialSearchQuery]);
+
+  const filteredMaterialProducts = useMemo(() => {
+    if (!materialProductSearchQuery.trim()) return productsMaterialsCategory;
+    const query = materialProductSearchQuery.toLowerCase();
+    return productsMaterialsCategory.filter((p) =>
+      p.name.toLowerCase().includes(query)
+    );
+  }, [productsMaterialsCategory, materialProductSearchQuery]);
 
   const purchaseTotal = useMemo(() => {
     const qty = Number(quantity) || 0;
@@ -334,10 +408,14 @@ export default function SupplierTransactionsPage() {
         formData.append("price_per_unit", pricePerUnit);
       }
       if (deliveryDate) {
-        formData.append(
-          "delivery_date",
-          deliveryDate.toISOString().split("T")[0]
-        );
+        formData.append("delivery_date", dateToYYYYMMDD(deliveryDate));
+      }
+      if (selectedMaterialProductId && materialQuantity.trim()) {
+        const mQty = Number(materialQuantity);
+        if (mQty > 0) {
+          formData.append("material_product_id", selectedMaterialProductId);
+          formData.append("material_quantity", materialQuantity);
+        }
       }
 
       const result = await createSupplierDelivery(formData);
@@ -352,6 +430,9 @@ export default function SupplierTransactionsPage() {
         setMaterialSearchQuery("");
         setQuantity("");
         setPricePerUnit("");
+        setSelectedMaterialProductId("");
+        setMaterialProductSearchQuery("");
+        setMaterialQuantity("");
         setDeliveryDate(new Date());
       } else {
         toast.error(result.error || "Помилка при створенні транзакції");
@@ -365,15 +446,21 @@ export default function SupplierTransactionsPage() {
   };
 
   const totalDeliveries = deliveries.length;
-  const totalQuantity = deliveries.reduce(
+  const totalQuantity = filteredAndSortedDeliveries.reduce(
     (sum, delivery) => sum + Number(delivery.quantity),
     0
   );
-  const totalAmount = deliveries.reduce((sum, delivery) => {
-    const quantity = Number(delivery.quantity);
-    const price = delivery.price_per_unit ? Number(delivery.price_per_unit) : 0;
-    return sum + quantity * price;
-  }, 0);
+  const totalAmount =
+    Math.round(
+      filteredAndSortedDeliveries.reduce((sum, delivery) => {
+        const quantity = Number(delivery.quantity);
+        const price =
+          delivery.price_per_unit != null
+            ? Math.round(Number(delivery.price_per_unit) * 100) / 100
+            : 0;
+        return sum + quantity * price;
+      }, 0) * 100
+    ) / 100;
 
   return (
     <div className="container py-6 space-y-6">
@@ -408,7 +495,6 @@ export default function SupplierTransactionsPage() {
         </div>
       </div>
 
-      {/* Форма закупівлі */}
       {!isLoading && !databaseError && (
         <Card>
           <CardHeader>
@@ -422,7 +508,6 @@ export default function SupplierTransactionsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {/* Дата */}
               <div className="space-y-2">
                 <Label htmlFor="delivery-date">Дата закупівлі</Label>
                 <Popover>
@@ -459,7 +544,6 @@ export default function SupplierTransactionsPage() {
                 </Popover>
               </div>
 
-              {/* Постачальник */}
               <div className="space-y-2">
                 <Label htmlFor="supplier">Постачальник *</Label>
                 <Popover
@@ -551,7 +635,6 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              {/* Сировина */}
               <div className="space-y-2">
                 <Label htmlFor="material">Сировина *</Label>
                 <Popover
@@ -628,7 +711,83 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              {/* Кількість */}
+              <div className="space-y-2">
+                <Label htmlFor="material-product">Матеріали</Label>
+                <Popover
+                  open={materialProductPopoverOpen}
+                  onOpenChange={setMaterialProductPopoverOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="material-product"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {selectedMaterialProductId
+                        ? productsMaterialsCategory.find(
+                            (p) => p.id === Number(selectedMaterialProductId)
+                          )?.name || "Оберіть матеріали"
+                        : "Оберіть матеріали"}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <div className="p-2">
+                      <Input
+                        placeholder="Пошук матеріалів..."
+                        value={materialProductSearchQuery}
+                        onChange={(e) =>
+                          setMaterialProductSearchQuery(e.target.value)
+                        }
+                        className="mb-2"
+                      />
+                      <div className="max-h-[200px] overflow-auto">
+                        {filteredMaterialProducts.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            Матеріалів не знайдено
+                          </div>
+                        ) : (
+                          filteredMaterialProducts.map((product) => (
+                            <div
+                              key={product.id}
+                              className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
+                              onClick={() => {
+                                setSelectedMaterialProductId(
+                                  product.id.toString()
+                                );
+                                setMaterialProductSearchQuery("");
+                                setMaterialProductPopoverOpen(false);
+                              }}
+                            >
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex-1 font-medium">
+                                {product.name}
+                              </div>
+                              {selectedMaterialProductId ===
+                                product.id.toString() && (
+                                <span className="text-primary">✓</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedMaterialProductId && (
+                  <Input
+                    type="number"
+                    placeholder="Кількість матеріалів"
+                    value={materialQuantity}
+                    onChange={(e) => setMaterialQuantity(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    className="mt-2"
+                  />
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="quantity">Кількість *</Label>
                 <Input
@@ -642,7 +801,6 @@ export default function SupplierTransactionsPage() {
                 />
               </div>
 
-              {/* Ціна за одиницю */}
               <div className="space-y-2">
                 <Label htmlFor="price">Ціна за одиницю (₴)</Label>
                 <Input
@@ -657,7 +815,6 @@ export default function SupplierTransactionsPage() {
               </div>
             </div>
 
-            {/* Сума закупівлі */}
             {purchaseTotal > 0 && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="flex items-center justify-between">
@@ -673,7 +830,6 @@ export default function SupplierTransactionsPage() {
               </div>
             )}
 
-            {/* Кнопка додавання */}
             <div className="mt-6">
               <Button
                 onClick={handleAddTransaction}
@@ -698,8 +854,18 @@ export default function SupplierTransactionsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Всього транзакцій</CardDescription>
-              <CardTitle className="text-2xl">{totalDeliveries}</CardTitle>
+              <CardDescription>Середня ціна</CardDescription>
+              <CardTitle className="text-2xl">
+                {totalQuantity > 0
+                  ? `${formatNumber(
+                      Math.round((totalAmount / totalQuantity) * 100) / 100,
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )} ₴`
+                  : "—"}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -792,23 +958,97 @@ export default function SupplierTransactionsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Пошук по постачальнику, продукту або складу..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+            <div className="mb-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "min-w-[120px] justify-start text-left font-normal",
+                          !dateFilterFrom && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateFilterFrom
+                          ? formatDate(
+                              dateFilterFrom instanceof Date
+                                ? dateFilterFrom.toISOString()
+                                : new Date(dateFilterFrom).toISOString()
+                            )
+                          : "З дати"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateFilterFrom}
+                        onSelect={setDateFilterFrom}
+                        locale={uk}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "min-w-[120px] justify-start text-left font-normal",
+                          !dateFilterTo && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateFilterTo
+                          ? formatDate(
+                              dateFilterTo instanceof Date
+                                ? dateFilterTo.toISOString()
+                                : new Date(dateFilterTo).toISOString()
+                            )
+                          : "По дату"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={dateFilterTo}
+                        onSelect={setDateFilterTo}
+                        locale={uk}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {(dateFilterFrom || dateFilterTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDateFilterFrom(undefined);
+                        setDateFilterTo(undefined);
+                      }}
+                    >
+                      Скинути дати
+                    </Button>
+                  )}
+                </div>
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Пошук по постачальнику, продукту або складу..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
             {paginatedDeliveries.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
-                  {searchQuery
-                    ? "Не знайдено транзакцій за вашим запитом"
+                  {searchQuery || dateFilterFrom || dateFilterTo
+                    ? "Не знайдено транзакцій за обраними фільтрами"
                     : "Немає транзакцій з постачальниками"}
                 </p>
               </div>
@@ -821,7 +1061,7 @@ export default function SupplierTransactionsPage() {
                         <TableHead>Дата</TableHead>
                         <TableHead>Постачальник</TableHead>
                         <TableHead>Продукт</TableHead>
-                        <TableHead>Склад</TableHead>
+                        <TableHead className="text-right">Матеріали (передано)</TableHead>
                         <TableHead className="text-right">Кількість</TableHead>
                         <TableHead className="text-right">
                           Ціна за одиницю
@@ -831,95 +1071,125 @@ export default function SupplierTransactionsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedDeliveries.map((delivery) => {
-                        const quantity = Number(delivery.quantity);
-                        const pricePerUnit = delivery.price_per_unit
-                          ? Number(delivery.price_per_unit)
-                          : null;
-                        const total = pricePerUnit
-                          ? quantity * pricePerUnit
-                          : null;
+                      {paginatedGroupsByDate.map((group) => (
+                        <React.Fragment key={group.dateStr}>
+                          {group.deliveries.map((delivery) => {
+                            const quantity = Number(delivery.quantity);
+                            const pricePerUnit =
+                              delivery.price_per_unit != null
+                                ? Math.round(
+                                    Number(delivery.price_per_unit) * 100
+                                  ) / 100
+                                : null;
+                            const total =
+                              pricePerUnit != null
+                                ? Math.round(quantity * pricePerUnit * 100) / 100
+                                : null;
 
-                        return (
-                          <TableRow key={delivery.id}>
-                            <TableCell className="whitespace-nowrap">
-                              {formatDateTime(delivery.created_at)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Truck className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium">
-                                  {delivery.supplier?.name ||
-                                    "Невідомий постачальник"}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Package className="h-4 w-4 text-muted-foreground" />
-                                <span>
-                                  {delivery.product?.name ||
-                                    "Невідомий продукт"}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {delivery.warehouse?.name || "Невідомий склад"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="secondary">
-                                {formatNumberWithUnit(quantity, "шт")}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {pricePerUnit ? (
-                                <span>
-                                  {formatNumber(pricePerUnit, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{" "}
-                                  ₴
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {total ? (
-                                <span className="font-semibold">
-                                  {formatNumber(total, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{" "}
-                                  ₴
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <EditSupplierDeliveryDialog
-                                  delivery={delivery}
-                                  onDeliveryUpdated={async () => {
-                                    const updatedDeliveries =
-                                      await getSupplierDeliveries();
-                                    setDeliveries(updatedDeliveries);
-                                  }}
-                                />
-                                <DeleteSupplierDeliveryButton
-                                  delivery={delivery}
-                                  onDeliveryDeleted={async () => {
-                                    const updatedDeliveries =
-                                      await getSupplierDeliveries();
-                                    setDeliveries(updatedDeliveries);
-                                  }}
-                                />
-                              </div>
+                            return (
+                              <TableRow key={delivery.id}>
+                                <TableCell className="whitespace-nowrap">
+                                  {formatDate(delivery.created_at)}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Truck className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">
+                                      {delivery.supplier?.name ||
+                                        "Невідомий постачальник"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-muted-foreground" />
+                                    <span>
+                                      {delivery.product?.name ||
+                                        "Невідомий продукт"}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {delivery.material_quantity != null &&
+                                  Number(delivery.material_quantity) > 0 ? (
+                                    formatNumberWithUnit(
+                                      Math.round(
+                                        Number(delivery.material_quantity) * 100
+                                      ) / 100,
+                                      "шт"
+                                    )
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge variant="secondary">
+                                    {formatNumberWithUnit(quantity, "шт")}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {pricePerUnit ? (
+                                    <span>
+                                      {formatNumber(pricePerUnit, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}{" "}
+                                      ₴
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {total ? (
+                                    <span className="font-semibold">
+                                      {formatNumber(total, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}{" "}
+                                      ₴
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <EditSupplierDeliveryDialog
+                                      delivery={delivery}
+                                      onDeliveryUpdated={async () => {
+                                        const updatedDeliveries =
+                                          await getSupplierDeliveries();
+                                        setDeliveries(updatedDeliveries);
+                                      }}
+                                    />
+                                    <DeleteSupplierDeliveryButton
+                                      delivery={delivery}
+                                      onDeliveryDeleted={async () => {
+                                        const updatedDeliveries =
+                                          await getSupplierDeliveries();
+                                        setDeliveries(updatedDeliveries);
+                                      }}
+                                    />
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow key={`subtotal-${group.dateStr}`} className="bg-muted/40 font-medium">
+                            <TableCell colSpan={9} className="text-center">
+                              Підсумок за {group.displayDate}:{" "}
+                              <span className="font-semibold">
+                                {formatNumber(group.sum, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                ₴
+                              </span>
                             </TableCell>
                           </TableRow>
-                        );
-                      })}
+                        </React.Fragment>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
