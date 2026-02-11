@@ -8,6 +8,8 @@ import {
   DollarSign,
   Truck,
   ShoppingCart,
+  Car,
+  MapPin,
 } from "lucide-react";
 
 export function Footer() {
