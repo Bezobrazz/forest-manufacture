@@ -854,9 +854,17 @@ export default function SupplierTransactionsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Всього транзакцій</CardDescription>
+              <CardDescription>Середня ціна</CardDescription>
               <CardTitle className="text-2xl">
-                {filteredAndSortedDeliveries.length}
+                {totalQuantity > 0
+                  ? `${formatNumber(
+                      Math.round((totalAmount / totalQuantity) * 100) / 100,
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )} ₴`
+                  : "—"}
               </CardTitle>
             </CardHeader>
           </Card>
