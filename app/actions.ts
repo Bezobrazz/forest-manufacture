@@ -12,6 +12,7 @@ import type {
   Task,
   Supplier,
   SupplierDelivery,
+  SupplierAdvanceTransaction,
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
@@ -2666,6 +2667,27 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   }
 }
 
+export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceTransaction[]> {
+  try {
+    const supabase = createServerClient();
+
+    const { data, error } = await supabase
+      .from("supplier_advance_transactions")
+      .select("*, supplier:suppliers(*)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching supplier advance transactions:", error);
+      return [];
+    }
+
+    return data as SupplierAdvanceTransaction[];
+  } catch (error) {
+    console.error("Error in getSupplierAdvanceTransactions:", error);
+    return [];
+  }
+}
+
 export async function createSupplierDelivery(formData: FormData) {
   try {
     const supabase = createServerClient();
@@ -2860,6 +2882,24 @@ export async function addSupplierAdvance(formData: FormData) {
 
     const currentAdvance = Number(supplierRow?.advance ?? 0);
     const newAdvance = Math.round((currentAdvance + advanceAmount) * 100) / 100;
+
+    const deliveryDate = formData.get("delivery_date") as string;
+    const createdAt = deliveryDate
+      ? new Date(deliveryDate + "T12:00:00.000Z").toISOString()
+      : new Date().toISOString();
+
+    const { error: insertError } = await supabase
+      .from("supplier_advance_transactions")
+      .insert({
+        supplier_id: supplierId,
+        amount: advanceAmount,
+        created_at: createdAt,
+      });
+
+    if (insertError) {
+      console.error("Error inserting supplier advance transaction:", insertError);
+      return { success: false, error: insertError.message };
+    }
 
     const { error } = await supabase
       .from("suppliers")

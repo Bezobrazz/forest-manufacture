@@ -117,3 +117,11 @@ export interface SupplierDelivery {
   material_product?: Product | null;
   warehouse?: Warehouse;
 }
+
+export interface SupplierAdvanceTransaction {
+  id: number;
+  supplier_id: number;
+  amount: number;
+  created_at: string;
+  supplier?: Supplier;
+}

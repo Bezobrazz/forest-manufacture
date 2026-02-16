@@ -4,6 +4,7 @@ import Link from "next/link";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   getSupplierDeliveries,
+  getSupplierAdvanceTransactions,
   getSuppliers,
   getMaterials,
   getProductsByCategoryName,
@@ -26,6 +27,7 @@ import {
   DollarSign,
   Plus,
   Calendar as CalendarIcon,
+  Banknote,
 } from "lucide-react";
 import {
   Dialog,
@@ -82,6 +84,7 @@ import {
 import { toast } from "sonner";
 import type {
   SupplierDelivery,
+  SupplierAdvanceTransaction,
   Supplier,
   Product,
   Warehouse,
@@ -135,8 +138,15 @@ function LoadingSkeleton() {
   );
 }
 
+type SupplierTransactionItem =
+  | { type: "delivery"; data: SupplierDelivery }
+  | { type: "advance"; data: SupplierAdvanceTransaction };
+
 export default function SupplierTransactionsPage() {
   const [deliveries, setDeliveries] = useState<SupplierDelivery[]>([]);
+  const [advanceTransactions, setAdvanceTransactions] = useState<
+    SupplierAdvanceTransaction[]
+  >([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
   const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<
@@ -187,18 +197,21 @@ export default function SupplierTransactionsPage() {
     try {
       const [
         deliveriesData,
+        advanceData,
         suppliersData,
         materialsData,
         productsMaterialsData,
         warehousesData,
       ] = await Promise.all([
         getSupplierDeliveries(),
+        getSupplierAdvanceTransactions(),
         getSuppliers(),
         getMaterials(),
         getProductsByCategoryName("Матеріали"),
         getWarehouses(),
       ]);
       setDeliveries(deliveriesData);
+      setAdvanceTransactions(advanceData);
       setSuppliers(suppliersData);
       setMaterials(materialsData);
       setProductsMaterialsCategory(productsMaterialsData);
@@ -241,56 +254,113 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  const filteredAndSortedDeliveries = useMemo(() => {
-    let filtered = deliveries.filter((delivery) => {
+  const filteredAndSortedTransactions = useMemo(() => {
+    const deliveryItems: SupplierTransactionItem[] = deliveries.map(
+      (d) => ({ type: "delivery", data: d } as SupplierTransactionItem),
+    );
+    const advanceItems: SupplierTransactionItem[] = advanceTransactions.map(
+      (a) => ({ type: "advance", data: a } as SupplierTransactionItem),
+    );
+    const combined = [...deliveryItems, ...advanceItems];
+
+    let filtered = combined.filter((item) => {
+      const created_at =
+        item.type === "delivery"
+          ? (item.data as SupplierDelivery).created_at
+          : (item.data as SupplierAdvanceTransaction).created_at;
       const query = searchQuery.toLowerCase().trim();
       if (query) {
-        const supplierMatch =
-          delivery.supplier?.name.toLowerCase().includes(query) || false;
+        const supplierName =
+          item.type === "delivery"
+            ? (item.data as SupplierDelivery).supplier?.name?.toLowerCase() || ""
+            : (item.data as SupplierAdvanceTransaction).supplier?.name?.toLowerCase() || "";
         const productMatch =
-          delivery.product?.name.toLowerCase().includes(query) || false;
+          item.type === "delivery" &&
+          (item.data as SupplierDelivery).product?.name
+            ?.toLowerCase()
+            .includes(query);
         const warehouseMatch =
-          delivery.warehouse?.name.toLowerCase().includes(query) || false;
-        if (!supplierMatch && !productMatch && !warehouseMatch) return false;
+          item.type === "delivery" &&
+          (item.data as SupplierDelivery).warehouse?.name
+            ?.toLowerCase()
+            .includes(query);
+        const advanceMatch =
+          item.type === "advance" && query.includes("аванс");
+        if (
+          !supplierName.includes(query) &&
+          !productMatch &&
+          !warehouseMatch &&
+          !advanceMatch
+        )
+          return false;
       }
 
-      const deliveryDateStr = delivery.created_at
-        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+      const dateStr = created_at
+        ? new Date(created_at).toISOString().slice(0, 10)
         : "";
       if (dateFilterFrom) {
         const fromStr = dateToYYYYMMDD(dateFilterFrom);
-        if (deliveryDateStr < fromStr) return false;
+        if (dateStr < fromStr) return false;
       }
       if (dateFilterTo) {
         const toStr = dateToYYYYMMDD(dateFilterTo);
-        if (deliveryDateStr > toStr) return false;
+        if (dateStr > toStr) return false;
       }
       return true;
     });
 
     filtered = [...filtered].sort((a, b) => {
+      const dateA =
+        a.type === "delivery"
+          ? (a.data as SupplierDelivery).created_at
+          : (a.data as SupplierAdvanceTransaction).created_at;
+      const dateB =
+        b.type === "delivery"
+          ? (b.data as SupplierDelivery).created_at
+          : (b.data as SupplierAdvanceTransaction).created_at;
+      const supplierA =
+        a.type === "delivery"
+          ? (a.data as SupplierDelivery).supplier?.name || ""
+          : (a.data as SupplierAdvanceTransaction).supplier?.name || "";
+      const supplierB =
+        b.type === "delivery"
+          ? (b.data as SupplierDelivery).supplier?.name || ""
+          : (b.data as SupplierAdvanceTransaction).supplier?.name || "";
+      const productA =
+        a.type === "delivery"
+          ? (a.data as SupplierDelivery).product?.name || ""
+          : "";
+      const productB =
+        b.type === "delivery"
+          ? (b.data as SupplierDelivery).product?.name || ""
+          : "";
+
       if (sortBy === "date") {
-        const timeA = new Date(a.created_at).getTime();
-        const timeB = new Date(b.created_at).getTime();
+        const timeA = new Date(dateA).getTime();
+        const timeB = new Date(dateB).getTime();
         if (timeB !== timeA) return timeB - timeA;
-        return (b.id as number) - (a.id as number);
+        return (b.data.id as number) - (a.data.id as number);
       }
       if (sortBy === "supplier") {
-        return (a.supplier?.name || "").localeCompare(
-          b.supplier?.name || "",
-          "uk",
-        );
+        return supplierA.localeCompare(supplierB, "uk");
       }
-      return (a.product?.name || "").localeCompare(b.product?.name || "", "uk");
+      return productA.localeCompare(productB, "uk");
     });
 
     return filtered;
-  }, [deliveries, searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
+  }, [
+    deliveries,
+    advanceTransactions,
+    searchQuery,
+    sortBy,
+    dateFilterFrom,
+    dateFilterTo,
+  ]);
 
   const totalPages = Math.ceil(
-    filteredAndSortedDeliveries.length / itemsPerPage,
+    filteredAndSortedTransactions.length / itemsPerPage,
   );
-  const paginatedDeliveries = filteredAndSortedDeliveries.slice(
+  const paginatedTransactions = filteredAndSortedTransactions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
@@ -299,35 +369,45 @@ export default function SupplierTransactionsPage() {
     const groups: Array<{
       dateStr: string;
       displayDate: string;
-      deliveries: typeof paginatedDeliveries;
+      items: SupplierTransactionItem[];
       sum: number;
     }> = [];
     let current: (typeof groups)[0] | null = null;
-    for (const delivery of paginatedDeliveries) {
-      const dateStr = delivery.created_at
-        ? new Date(delivery.created_at).toISOString().slice(0, 10)
+    for (const item of paginatedTransactions) {
+      const created_at =
+        item.type === "delivery"
+          ? (item.data as SupplierDelivery).created_at
+          : (item.data as SupplierAdvanceTransaction).created_at;
+      const dateStr = created_at
+        ? new Date(created_at).toISOString().slice(0, 10)
         : "";
-      const qty = Number(delivery.quantity);
-      const price =
-        delivery.price_per_unit != null
-          ? Math.round(Number(delivery.price_per_unit) * 100) / 100
-          : 0;
-      const rowSum = Math.round(qty * price * 100) / 100;
+      let rowSum = 0;
+      if (item.type === "delivery") {
+        const d = item.data as SupplierDelivery;
+        const qty = Number(d.quantity);
+        const price =
+          d.price_per_unit != null
+            ? Math.round(Number(d.price_per_unit) * 100) / 100
+            : 0;
+        rowSum = Math.round(qty * price * 100) / 100;
+      } else {
+        rowSum = Math.round(Number((item.data as SupplierAdvanceTransaction).amount) * 100) / 100;
+      }
       if (!current || current.dateStr !== dateStr) {
         current = {
           dateStr,
           displayDate: dateStr ? formatDate(dateStr + "T12:00:00.000Z") : "—",
-          deliveries: [],
+          items: [],
           sum: 0,
         };
         groups.push(current);
       }
-      current.deliveries.push(delivery);
+      current.items.push(item);
       current.sum += rowSum;
     }
     groups.forEach((g) => (g.sum = Math.round(g.sum * 100) / 100));
     return groups;
-  }, [paginatedDeliveries]);
+  }, [paginatedTransactions]);
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -420,13 +500,20 @@ export default function SupplierTransactionsPage() {
         const formData = new FormData();
         formData.append("supplier_id", selectedSupplierId);
         formData.append("advance", advanceAmount);
+        if (deliveryDate) {
+          formData.append("delivery_date", dateToYYYYMMDD(deliveryDate));
+        }
 
         const result = await addSupplierAdvance(formData);
 
         if (result.success) {
           toast.success("Аванс успішно додано");
-          const suppliersData = await getSuppliers();
+          const [suppliersData, advanceData] = await Promise.all([
+            getSuppliers(),
+            getSupplierAdvanceTransactions(),
+          ]);
           setSuppliers(suppliersData);
+          setAdvanceTransactions(advanceData);
           setSelectedSupplierId("");
           setSupplierSearchQuery("");
           setAdvanceAmount("");
@@ -507,20 +594,27 @@ export default function SupplierTransactionsPage() {
     }
   };
 
-  const totalDeliveries = deliveries.length;
-  const totalQuantity = filteredAndSortedDeliveries.reduce(
-    (sum, delivery) => sum + Number(delivery.quantity),
+  const totalTransactions = deliveries.length + advanceTransactions.length;
+  const totalQuantity = filteredAndSortedTransactions.reduce(
+    (sum, item) =>
+      item.type === "delivery"
+        ? sum + Number((item.data as SupplierDelivery).quantity)
+        : sum,
     0,
   );
   const totalAmount =
     Math.round(
-      filteredAndSortedDeliveries.reduce((sum, delivery) => {
-        const quantity = Number(delivery.quantity);
-        const price =
-          delivery.price_per_unit != null
-            ? Math.round(Number(delivery.price_per_unit) * 100) / 100
-            : 0;
-        return sum + quantity * price;
+      filteredAndSortedTransactions.reduce((sum, item) => {
+        if (item.type === "delivery") {
+          const d = item.data as SupplierDelivery;
+          const quantity = Number(d.quantity);
+          const price =
+            d.price_per_unit != null
+              ? Math.round(Number(d.price_per_unit) * 100) / 100
+              : 0;
+          return sum + quantity * price;
+        }
+        return sum + Number((item.data as SupplierAdvanceTransaction).amount);
       }, 0) * 100,
     ) / 100;
 
@@ -543,10 +637,10 @@ export default function SupplierTransactionsPage() {
               </h1>
             </div>
             <Badge variant="secondary" className="text-sm w-fit">
-              {totalDeliveries}{" "}
-              {totalDeliveries === 1
+              {totalTransactions}{" "}
+              {totalTransactions === 1
                 ? "транзакція"
-                : totalDeliveries < 5
+                : totalTransactions < 5
                   ? "транзакції"
                   : "транзакцій"}
             </Badge>
@@ -974,7 +1068,7 @@ export default function SupplierTransactionsPage() {
         </Card>
       )}
 
-      {!isLoading && !databaseError && totalDeliveries > 0 && (
+      {!isLoading && !databaseError && totalTransactions > 0 && (
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-3">
@@ -1030,9 +1124,9 @@ export default function SupplierTransactionsPage() {
                   Список транзакцій
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm mt-1">
-                  {filteredAndSortedDeliveries.length === totalDeliveries
-                    ? `Показано всі ${totalDeliveries} транзакцій`
-                    : `Показано ${filteredAndSortedDeliveries.length} з ${totalDeliveries} транзакцій`}
+                  {filteredAndSortedTransactions.length === totalTransactions
+                    ? `Показано всі ${totalTransactions} транзакцій`
+                    : `Показано ${filteredAndSortedTransactions.length} з ${totalTransactions} транзакцій`}
                   {totalPages > 1 && (
                     <span className="block sm:inline">
                       {" • "}
@@ -1160,7 +1254,7 @@ export default function SupplierTransactionsPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Пошук по постачальнику, продукту або складу..."
+                    placeholder="Пошук по постачальнику, продукту, складу або авансу..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -1168,7 +1262,7 @@ export default function SupplierTransactionsPage() {
                 </div>
               </div>
             </div>
-            {paginatedDeliveries.length === 0 ? (
+            {paginatedTransactions.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
                   {searchQuery || dateFilterFrom || dateFilterTo
@@ -1199,7 +1293,71 @@ export default function SupplierTransactionsPage() {
                     <TableBody>
                       {paginatedGroupsByDate.map((group) => (
                         <React.Fragment key={group.dateStr}>
-                          {group.deliveries.map((delivery) => {
+                          {group.items.map((item) => {
+                            if (item.type === "advance") {
+                              const adv = item.data as SupplierAdvanceTransaction;
+                              const amount = Math.round(
+                                Number(adv.amount) * 100,
+                              ) / 100;
+                              return (
+                                <TableRow
+                                  key={`adv-${adv.id}`}
+                                  className="bg-muted/20"
+                                >
+                                  <TableCell className="whitespace-nowrap">
+                                    {formatDate(adv.created_at)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <Banknote className="h-4 w-4 text-muted-foreground" />
+                                      <span className="font-medium">
+                                        {adv.supplier?.name ||
+                                          "Невідомий постачальник"}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <Banknote className="h-4 w-4 text-muted-foreground" />
+                                      <span className="text-muted-foreground">
+                                        Аванс
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="font-semibold">
+                                      {formatNumber(amount, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}{" "}
+                                      ₴
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            }
+
+                            const delivery = item.data as SupplierDelivery;
                             const quantity = Number(delivery.quantity);
                             const pricePerUnit =
                               delivery.price_per_unit != null
@@ -1214,7 +1372,7 @@ export default function SupplierTransactionsPage() {
                                 : null;
 
                             return (
-                              <TableRow key={delivery.id}>
+                              <TableRow key={`del-${delivery.id}`}>
                                 <TableCell className="whitespace-nowrap">
                                   {formatDate(delivery.created_at)}
                                 </TableCell>
@@ -1292,17 +1450,25 @@ export default function SupplierTransactionsPage() {
                                     <EditSupplierDeliveryDialog
                                       delivery={delivery}
                                       onDeliveryUpdated={async () => {
-                                        const updatedDeliveries =
-                                          await getSupplierDeliveries();
+                                        const [updatedDeliveries, updatedAdvance] =
+                                          await Promise.all([
+                                            getSupplierDeliveries(),
+                                            getSupplierAdvanceTransactions(),
+                                          ]);
                                         setDeliveries(updatedDeliveries);
+                                        setAdvanceTransactions(updatedAdvance);
                                       }}
                                     />
                                     <DeleteSupplierDeliveryButton
                                       delivery={delivery}
                                       onDeliveryDeleted={async () => {
-                                        const updatedDeliveries =
-                                          await getSupplierDeliveries();
+                                        const [updatedDeliveries, updatedAdvance] =
+                                          await Promise.all([
+                                            getSupplierDeliveries(),
+                                            getSupplierAdvanceTransactions(),
+                                          ]);
                                         setDeliveries(updatedDeliveries);
+                                        setAdvanceTransactions(updatedAdvance);
                                       }}
                                     />
                                   </div>
