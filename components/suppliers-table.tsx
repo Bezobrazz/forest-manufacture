@@ -11,9 +11,10 @@ import {
 } from "@/components/ui/table";
 import { EditSupplierDialog } from "@/components/edit-supplier-dialog";
 import { DeleteSupplierButton } from "@/components/delete-supplier-button";
-import { Phone, FileText, Package } from "lucide-react";
+import { Phone, FileText, Package, Banknote } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Supplier } from "@/lib/types";
+import { formatNumber } from "@/lib/utils";
 
 interface SuppliersTableProps {
   suppliers: Supplier[];
@@ -64,6 +65,7 @@ export function SuppliersTable({
               <TableHead className="min-w-[140px] sm:w-[180px]">Телефон</TableHead>
               <TableHead className="min-w-[150px]">Примітки</TableHead>
               <TableHead className="min-w-[120px] text-right">Матеріали на балансі</TableHead>
+              <TableHead className="min-w-[100px] text-right">Аванс</TableHead>
               <TableHead className="min-w-[80px] w-[100px] text-right">Дії</TableHead>
             </TableRow>
           </TableHeader>
@@ -102,6 +104,23 @@ export function SuppliersTable({
                       <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <span className="font-medium tabular-nums">
                         {supplier.materials_balance}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="min-w-[100px] text-right">
+                  {typeof supplier.advance === "number" &&
+                  supplier.advance !== 0 ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="font-medium tabular-nums">
+                        {formatNumber(supplier.advance, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        ₴
                       </span>
                     </div>
                   ) : (
