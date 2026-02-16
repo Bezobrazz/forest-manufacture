@@ -6,7 +6,7 @@ interface TelegramConfig {
 }
 
 export async function getTelegramConfig(): Promise<TelegramConfig | null> {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("settings")

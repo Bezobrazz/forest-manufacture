@@ -21,7 +21,7 @@ import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data: oldInventoryData, error: oldInventoryError } = await supabase
       .from("inventory")
@@ -78,7 +78,7 @@ export async function getInventory(): Promise<Inventory[]> {
   } catch (error) {
     console.error("Error in getInventory:", error);
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       const { data, error } = await supabase
         .from("inventory")
         .select("*, product:products(*, category:product_categories(*))")
@@ -102,7 +102,7 @@ export async function getInventoryTransactions(): Promise<
   InventoryTransaction[]
 > {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("inventory_transactions")
@@ -145,7 +145,7 @@ export async function updateInventoryQuantity(
     `Початок оновлення інвентаря для продукту ${productId}, нова кількість: ${quantity}`
   );
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data: currentInventory, error: getError } = await supabase
       .from("inventory")
@@ -251,7 +251,7 @@ export async function updateInventoryQuantity(
 // Відвантаження продукції зі складу
 export async function shipInventory(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const productId = Number.parseInt(formData.get("product_id") as string);
     const quantity = Number.parseFloat(formData.get("quantity") as string);
@@ -358,7 +358,7 @@ export async function shipInventory(formData: FormData) {
 
 export async function updateProduction(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = Number.parseInt(formData.get("shift_id") as string);
     const productId = Number.parseInt(formData.get("product_id") as string);
@@ -433,7 +433,7 @@ export async function updateProduction(formData: FormData) {
 
 export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
@@ -461,7 +461,7 @@ export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
 
 export async function getShifts(): Promise<ShiftWithDetails[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
@@ -488,7 +488,7 @@ export async function getShifts(): Promise<ShiftWithDetails[]> {
 
 export async function getEmployees(): Promise<Employee[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("employees")
@@ -510,7 +510,7 @@ export async function getEmployees(): Promise<Employee[]> {
 // Оновлюємо функцію getProducts для кращої обробки помилок
 export async function getProducts(): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("products")
@@ -534,7 +534,7 @@ export async function getProductsByCategoryName(
   categoryName: string
 ): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: categories } = await supabase
       .from("product_categories")
       .select("id")
@@ -560,7 +560,7 @@ export async function getProductsByCategoryName(
 // Оновлюємо функцію getProductCategories для кращої обробки помилок
 export async function getProductCategories(): Promise<ProductCategory[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("product_categories")
@@ -587,7 +587,7 @@ export async function getProductionStats(
   productionByCategory: Record<string, number>;
 }> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Визначаємо початкову дату в залежності від періоду
     const now = new Date();
@@ -691,7 +691,7 @@ export async function getProductionStats(
 
 export async function addEmployeeToShift(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = Number(formData.get("shift_id"));
     const employeeId = formData.get("employee_id");
@@ -732,7 +732,7 @@ export async function addEmployeeToShift(formData: FormData) {
 
 export async function createProductCategory(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name");
 
@@ -771,7 +771,7 @@ export async function createProductCategory(formData: FormData) {
 export async function completeShift(shiftId: number) {
   try {
     console.log("Starting completeShift function with shiftId:", shiftId);
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       console.error("No shiftId provided");
@@ -1053,7 +1053,7 @@ ${Object.entries(productsByCategory)
 
 export async function createShift(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
@@ -1125,7 +1125,7 @@ export async function createShiftWithEmployees(
   employeeIds: number[]
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
@@ -1217,7 +1217,7 @@ export async function createShiftWithEmployees(
 
 export async function updateShiftOpenedAt(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = formData.get("shift_id");
     const opened_at = formData.get("opened_at");
@@ -1277,7 +1277,7 @@ export async function updateShiftOpenedAt(formData: FormData) {
 
 export async function deleteProductCategory(categoryId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!categoryId) {
       return { success: false, error: "Необхідно вказати ID категорії" };
@@ -1342,7 +1342,7 @@ export async function deleteProductCategory(categoryId: number) {
 
 export async function deleteProduct(productId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!productId) {
       return { success: false, error: "Необхідно вказати ID продукту" };
@@ -1378,7 +1378,7 @@ export async function deleteProduct(productId: number) {
 
 export async function deleteShift(shiftId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       return { success: false, error: "Необхідно вказати ID зміни" };
@@ -1568,7 +1568,7 @@ export async function deleteShift(shiftId: number) {
 
 export async function updateProduct(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name");
@@ -1643,7 +1643,7 @@ export async function updateProduct(formData: FormData) {
 
 export async function createEmployee(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const position = formData.get("position") as string;
@@ -1683,7 +1683,7 @@ export async function createEmployee(formData: FormData) {
 
 export async function createProduct(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -1749,7 +1749,7 @@ export async function removeEmployeeFromShift(
   employeeId: number
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId || !employeeId) {
       return {
@@ -1792,7 +1792,7 @@ export async function getShiftDetails(
   shiftId: number
 ): Promise<ShiftWithDetails | null> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       console.error("Shift ID is required");
@@ -1848,7 +1848,7 @@ export async function getShiftDetails(
 
 export async function manuallyUpdateInventoryFromProduction() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // 1. Отримуємо всі дані про виробництво
     const { data: productionData, error: productionError } = await supabase
@@ -1964,7 +1964,7 @@ export async function manuallyUpdateInventoryFromProduction() {
 
 export async function getTasks() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
@@ -1986,7 +1986,7 @@ export async function createTask(
   task: Omit<Task, "id" | "created_at" | "completed_at">
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .insert([task])
@@ -2007,7 +2007,7 @@ export async function createTask(
 
 export async function updateTaskStatus(taskId: number, status: Task["status"]) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .update({
@@ -2035,7 +2035,7 @@ export async function updateTaskStatus(taskId: number, status: Task["status"]) {
 
 export async function deleteTask(taskId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase.from("tasks").delete().eq("id", taskId);
 
     if (error) {
@@ -2055,7 +2055,7 @@ export async function deleteTask(taskId: number) {
 
 export async function getActiveTasks() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
@@ -2077,7 +2077,7 @@ export async function getActiveTasks() {
 
 export async function getExpenseCategories() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expense_categories")
@@ -2101,7 +2101,7 @@ export async function createExpenseCategory(
   description: string | null
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expense_categories")
@@ -2123,7 +2123,7 @@ export async function createExpenseCategory(
 
 export async function deleteExpenseCategory(id: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { error } = await supabase
       .from("expense_categories")
@@ -2148,7 +2148,7 @@ export async function updateExpenseCategory(
   description: string | null
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!name.trim()) {
       throw new Error("Назва категорії не може бути порожньою");
@@ -2175,7 +2175,7 @@ export async function updateExpenseCategory(
 
 export async function getExpenses() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expenses")
@@ -2209,7 +2209,7 @@ export async function createExpense(
       throw new Error("Некоректні дані для створення витрати");
     }
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Перевіряємо існування категорії
     const { data: category, error: categoryError } = await supabase
@@ -2254,7 +2254,7 @@ export async function createExpense(
 
 export async function deleteExpense(id: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { error } = await supabase.from("expenses").delete().eq("id", id);
 
@@ -2281,7 +2281,7 @@ export async function updateExpense(
       throw new Error("Некоректні дані для оновлення витрати");
     }
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Перевіряємо існування категорії
     const { data: category, error: categoryError } = await supabase
@@ -2324,7 +2324,7 @@ export async function updateExpense(
 
 export async function updateEmployee(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name") as string;
@@ -2375,7 +2375,7 @@ export async function updateTask(
 ) {
   try {
     console.log("Updating task:", { taskId, data });
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Спочатку отримаємо поточну задачу
     const { data: currentTask, error: fetchError } = await supabase
@@ -2425,7 +2425,7 @@ export async function updateTask(
 // Отримання списку постачальників
 export async function getSuppliers(): Promise<Supplier[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("suppliers")
@@ -2447,7 +2447,7 @@ export async function getSuppliers(): Promise<Supplier[]> {
 // Створення постачальника
 export async function createSupplier(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const phone = formData.get("phone") as string;
@@ -2488,7 +2488,7 @@ export async function createSupplier(formData: FormData) {
 // Оновлення постачальника
 export async function updateSupplier(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name") as string;
@@ -2531,7 +2531,7 @@ export async function updateSupplier(formData: FormData) {
 // Видалення постачальника
 export async function deleteSupplier(supplierId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!supplierId) {
       return { success: false, error: "Необхідно вказати ID постачальника" };
@@ -2566,7 +2566,7 @@ export async function createSuppliersBatch(
   }>
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!suppliers || suppliers.length === 0) {
       return {
@@ -2619,7 +2619,7 @@ export async function createSuppliersBatch(
 // Отримання складів
 export async function getWarehouses(): Promise<Warehouse[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("warehouses")
@@ -2640,7 +2640,7 @@ export async function getWarehouses(): Promise<Warehouse[]> {
 
 export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("supplier_deliveries")
@@ -2669,7 +2669,7 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
 
 export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceTransaction[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("supplier_advance_transactions")
@@ -2690,7 +2690,7 @@ export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceT
 
 export async function createSupplierDelivery(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const supplierId = Number(formData.get("supplier_id"));
     const productId = Number(formData.get("product_id"));
@@ -2855,7 +2855,7 @@ export async function createSupplierDelivery(formData: FormData) {
 
 export async function addSupplierAdvance(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const supplierId = Number(formData.get("supplier_id"));
     const advanceAmount = Number(formData.get("advance"));
@@ -2926,7 +2926,7 @@ export async function addSupplierAdvance(formData: FormData) {
 
 export async function updateSupplierDelivery(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const deliveryId = Number(formData.get("delivery_id"));
     const supplierId = Number(formData.get("supplier_id"));
@@ -3238,7 +3238,7 @@ export async function updateSupplierDelivery(formData: FormData) {
 
 export async function deleteSupplierDelivery(deliveryId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!deliveryId) {
       return { success: false, error: "Необхідно вказати ID транзакції" };
@@ -3351,7 +3351,7 @@ export async function deleteSupplierDelivery(deliveryId: number) {
 // Отримання виробничих матеріалів
 export async function getMaterials(): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("products")
@@ -3374,7 +3374,7 @@ export async function getMaterials(): Promise<Product[]> {
 // Створення виробничого матеріалу
 export async function createMaterial(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -3434,7 +3434,7 @@ export async function createMaterial(formData: FormData) {
 // Оновлення виробничого матеріалу
 export async function updateMaterial(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name");
@@ -3505,7 +3505,7 @@ export async function updateMaterial(formData: FormData) {
 // Видалення виробничого матеріалу
 export async function deleteMaterial(materialId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!materialId) {
       return { success: false, error: "Необхідно вказати ID матеріалу" };
@@ -3547,7 +3547,7 @@ export async function getRecentShifts(limit = 10) {
   return unstable_cache(
     async () => {
       try {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         const { data, error } = await supabase
           .from("shifts")
@@ -3585,7 +3585,7 @@ export async function getActiveShiftsCount() {
   return unstable_cache(
     async () => {
       try {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         const { data, error } = await supabase
           .from("shifts")
@@ -3616,7 +3616,7 @@ export async function getEmployeesCount() {
   return unstable_cache(
     async () => {
       try {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         const { data, error } = await supabase
           .from("employees")
@@ -3646,7 +3646,7 @@ export async function getProductsCount() {
   return unstable_cache(
     async () => {
       try {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         const { data, error } = await supabase
           .from("products")
@@ -3677,7 +3677,7 @@ export async function getMaterialsCount() {
   return unstable_cache(
     async () => {
       try {
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         const { data, error } = await supabase
           .from("products")
@@ -3709,7 +3709,7 @@ export async function getTotalInventory() {
     async () => {
       try {
         // Використовуємо ту саму логіку, що і getInventory(), щоб отримати всі товари на складі
-        const supabase = createServerClient();
+        const supabase = await createServerClient();
 
         // Отримуємо готову продукцію зі старої таблиці inventory
         const { data: oldInventoryData, error: oldInventoryError } = await supabase
