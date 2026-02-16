@@ -2810,6 +2810,59 @@ export async function createSupplierDelivery(formData: FormData) {
   }
 }
 
+export async function addSupplierAdvance(formData: FormData) {
+  try {
+    const supabase = createServerClient();
+
+    const supplierId = Number(formData.get("supplier_id"));
+    const advanceAmount = Number(formData.get("advance"));
+
+    if (!supplierId) {
+      return {
+        success: false,
+        error: "Оберіть постачальника",
+      };
+    }
+
+    if (!advanceAmount || advanceAmount <= 0) {
+      return {
+        success: false,
+        error: "Введіть коректну суму авансу",
+      };
+    }
+
+    const { data: supplierRow } = await supabase
+      .from("suppliers")
+      .select("advance")
+      .eq("id", supplierId)
+      .single();
+
+    const currentAdvance = Number(supplierRow?.advance ?? 0);
+    const newAdvance = Math.round((currentAdvance + advanceAmount) * 100) / 100;
+
+    const { error } = await supabase
+      .from("suppliers")
+      .update({ advance: newAdvance })
+      .eq("id", supplierId);
+
+    if (error) {
+      console.error("Error updating supplier advance:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in addSupplierAdvance:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при додаванні авансу",
+    };
+  }
+}
+
 export async function updateSupplierDelivery(formData: FormData) {
   try {
     const supabase = createServerClient();

@@ -9,6 +9,7 @@ import {
   getProductsByCategoryName,
   getWarehouses,
   createSupplierDelivery,
+  addSupplierAdvance,
 } from "@/app/actions";
 import {
   Card,
@@ -47,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -137,14 +139,16 @@ export default function SupplierTransactionsPage() {
   const [deliveries, setDeliveries] = useState<SupplierDelivery[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
-  const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<Product[]>([]);
+  const [productsMaterialsCategory, setProductsMaterialsCategory] = useState<
+    Product[]
+  >([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilterFrom, setDateFilterFrom] = useState<Date | undefined>(
-    undefined
+    undefined,
   );
   const [dateFilterTo, setDateFilterTo] = useState<Date | undefined>(undefined);
   const [sortBy, setSortBy] = useState<"date" | "supplier" | "product">("date");
@@ -152,7 +156,7 @@ export default function SupplierTransactionsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [deliveryDate, setDeliveryDate] = useState<Date | undefined>(
-    new Date()
+    new Date(),
   );
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [supplierSearchQuery, setSupplierSearchQuery] = useState("");
@@ -162,13 +166,18 @@ export default function SupplierTransactionsPage() {
   const [materialPopoverOpen, setMaterialPopoverOpen] = useState(false);
   const [quantity, setQuantity] = useState<string>("");
   const [pricePerUnit, setPricePerUnit] = useState<string>("");
-  const [selectedMaterialProductId, setSelectedMaterialProductId] = useState<string>("");
-  const [materialProductSearchQuery, setMaterialProductSearchQuery] = useState("");
-  const [materialProductPopoverOpen, setMaterialProductPopoverOpen] = useState(false);
+  const [selectedMaterialProductId, setSelectedMaterialProductId] =
+    useState<string>("");
+  const [materialProductSearchQuery, setMaterialProductSearchQuery] =
+    useState("");
+  const [materialProductPopoverOpen, setMaterialProductPopoverOpen] =
+    useState(false);
   const [materialQuantity, setMaterialQuantity] = useState<string>("");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
+  const [isAdvanceMode, setIsAdvanceMode] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState<string>("");
 
   const loadData = async () => {
     setIsLoading(true);
@@ -176,14 +185,19 @@ export default function SupplierTransactionsPage() {
     setDatabaseError(false);
 
     try {
-      const [deliveriesData, suppliersData, materialsData, productsMaterialsData, warehousesData] =
-        await Promise.all([
-          getSupplierDeliveries(),
-          getSuppliers(),
-          getMaterials(),
-          getProductsByCategoryName("Матеріали"),
-          getWarehouses(),
-        ]);
+      const [
+        deliveriesData,
+        suppliersData,
+        materialsData,
+        productsMaterialsData,
+        warehousesData,
+      ] = await Promise.all([
+        getSupplierDeliveries(),
+        getSuppliers(),
+        getMaterials(),
+        getProductsByCategoryName("Матеріали"),
+        getWarehouses(),
+      ]);
       setDeliveries(deliveriesData);
       setSuppliers(suppliersData);
       setMaterials(materialsData);
@@ -191,7 +205,7 @@ export default function SupplierTransactionsPage() {
       setWarehouses(warehousesData);
 
       const mainWarehouse = warehousesData.find((w) =>
-        w.name.toLowerCase().includes("main")
+        w.name.toLowerCase().includes("main"),
       );
       if (mainWarehouse) {
         setSelectedWarehouseId(mainWarehouse.id.toString());
@@ -264,24 +278,21 @@ export default function SupplierTransactionsPage() {
       if (sortBy === "supplier") {
         return (a.supplier?.name || "").localeCompare(
           b.supplier?.name || "",
-          "uk"
+          "uk",
         );
       }
-      return (a.product?.name || "").localeCompare(
-        b.product?.name || "",
-        "uk"
-      );
+      return (a.product?.name || "").localeCompare(b.product?.name || "", "uk");
     });
 
     return filtered;
   }, [deliveries, searchQuery, sortBy, dateFilterFrom, dateFilterTo]);
 
   const totalPages = Math.ceil(
-    filteredAndSortedDeliveries.length / itemsPerPage
+    filteredAndSortedDeliveries.length / itemsPerPage,
   );
   const paginatedDeliveries = filteredAndSortedDeliveries.slice(
     (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    currentPage * itemsPerPage,
   );
 
   const paginatedGroupsByDate = useMemo(() => {
@@ -291,7 +302,7 @@ export default function SupplierTransactionsPage() {
       deliveries: typeof paginatedDeliveries;
       sum: number;
     }> = [];
-    let current: typeof groups[0] | null = null;
+    let current: (typeof groups)[0] | null = null;
     for (const delivery of paginatedDeliveries) {
       const dateStr = delivery.created_at
         ? new Date(delivery.created_at).toISOString().slice(0, 10)
@@ -305,9 +316,7 @@ export default function SupplierTransactionsPage() {
       if (!current || current.dateStr !== dateStr) {
         current = {
           dateStr,
-          displayDate: dateStr
-            ? formatDate(dateStr + "T12:00:00.000Z")
-            : "—",
+          displayDate: dateStr ? formatDate(dateStr + "T12:00:00.000Z") : "—",
           deliveries: [],
           sum: 0,
         };
@@ -348,20 +357,20 @@ export default function SupplierTransactionsPage() {
     return suppliers.filter(
       (supplier) =>
         supplier.name.toLowerCase().includes(query) ||
-        supplier.phone?.toLowerCase().includes(query)
+        supplier.phone?.toLowerCase().includes(query),
     );
   }, [suppliers, supplierSearchQuery]);
 
   const materialsSyrovyna = useMemo(
     () => materials.filter((m) => m.category?.name === "Сировина"),
-    [materials]
+    [materials],
   );
 
   const filteredMaterials = useMemo(() => {
     if (!materialSearchQuery.trim()) return materialsSyrovyna;
     const query = materialSearchQuery.toLowerCase();
     return materialsSyrovyna.filter((material) =>
-      material.name.toLowerCase().includes(query)
+      material.name.toLowerCase().includes(query),
     );
   }, [materialsSyrovyna, materialSearchQuery]);
 
@@ -369,7 +378,7 @@ export default function SupplierTransactionsPage() {
     if (!materialProductSearchQuery.trim()) return productsMaterialsCategory;
     const query = materialProductSearchQuery.toLowerCase();
     return productsMaterialsCategory.filter((p) =>
-      p.name.toLowerCase().includes(query)
+      p.name.toLowerCase().includes(query),
     );
   }, [productsMaterialsCategory, materialProductSearchQuery]);
 
@@ -379,7 +388,60 @@ export default function SupplierTransactionsPage() {
     return qty * price;
   }, [quantity, pricePerUnit]);
 
+  const handleAdvanceModeChange = (checked: boolean) => {
+    setIsAdvanceMode(checked);
+    if (checked) {
+      setSelectedMaterialId("");
+      setMaterialSearchQuery("");
+      setQuantity("");
+      setPricePerUnit("");
+      setSelectedMaterialProductId("");
+      setMaterialProductSearchQuery("");
+      setMaterialQuantity("");
+    } else {
+      setAdvanceAmount("");
+    }
+  };
+
   const handleAddTransaction = async () => {
+    if (isAdvanceMode) {
+      if (!selectedSupplierId) {
+        toast.error("Оберіть постачальника");
+        return;
+      }
+      const amount = Number(advanceAmount);
+      if (!amount || amount <= 0) {
+        toast.error("Введіть коректну суму авансу");
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const formData = new FormData();
+        formData.append("supplier_id", selectedSupplierId);
+        formData.append("advance", advanceAmount);
+
+        const result = await addSupplierAdvance(formData);
+
+        if (result.success) {
+          toast.success("Аванс успішно додано");
+          const suppliersData = await getSuppliers();
+          setSuppliers(suppliersData);
+          setSelectedSupplierId("");
+          setSupplierSearchQuery("");
+          setAdvanceAmount("");
+        } else {
+          toast.error(result.error || "Помилка при додаванні авансу");
+        }
+      } catch (err) {
+        console.error("Помилка при додаванні авансу:", err);
+        toast.error("Сталася непередбачена помилка");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (!selectedSupplierId || !selectedMaterialId) {
       toast.error("Заповніть всі обов'язкові поля");
       return;
@@ -448,7 +510,7 @@ export default function SupplierTransactionsPage() {
   const totalDeliveries = deliveries.length;
   const totalQuantity = filteredAndSortedDeliveries.reduce(
     (sum, delivery) => sum + Number(delivery.quantity),
-    0
+    0,
   );
   const totalAmount =
     Math.round(
@@ -459,7 +521,7 @@ export default function SupplierTransactionsPage() {
             ? Math.round(Number(delivery.price_per_unit) * 100) / 100
             : 0;
         return sum + quantity * price;
-      }, 0) * 100
+      }, 0) * 100,
     ) / 100;
 
   return (
@@ -485,8 +547,8 @@ export default function SupplierTransactionsPage() {
               {totalDeliveries === 1
                 ? "транзакція"
                 : totalDeliveries < 5
-                ? "транзакції"
-                : "транзакцій"}
+                  ? "транзакції"
+                  : "транзакцій"}
             </Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm sm:text-base hidden sm:block">
@@ -517,7 +579,7 @@ export default function SupplierTransactionsPage() {
                       variant={"outline"}
                       className={cn(
                         "w-full justify-start text-left font-normal",
-                        !deliveryDate && "text-muted-foreground"
+                        !deliveryDate && "text-muted-foreground",
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
@@ -525,7 +587,7 @@ export default function SupplierTransactionsPage() {
                         formatDate(
                           deliveryDate instanceof Date
                             ? deliveryDate.toISOString()
-                            : new Date(deliveryDate).toISOString()
+                            : new Date(deliveryDate).toISOString(),
                         )
                       ) : (
                         <span>Оберіть дату</span>
@@ -559,7 +621,7 @@ export default function SupplierTransactionsPage() {
                     >
                       {selectedSupplierId
                         ? suppliers.find(
-                            (s) => s.id === Number(selectedSupplierId)
+                            (s) => s.id === Number(selectedSupplierId),
                           )?.name || "Оберіть постачальника"
                         : "Оберіть постачальника"}
                       <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -635,7 +697,12 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div
+                className={cn(
+                  "space-y-2",
+                  isAdvanceMode && "opacity-50 pointer-events-none",
+                )}
+              >
                 <Label htmlFor="material">Сировина *</Label>
                 <Popover
                   open={materialPopoverOpen}
@@ -647,10 +714,11 @@ export default function SupplierTransactionsPage() {
                       variant="outline"
                       role="combobox"
                       className="w-full justify-between"
+                      disabled={isAdvanceMode}
                     >
                       {selectedMaterialId
                         ? materials.find(
-                            (m) => m.id === Number(selectedMaterialId)
+                            (m) => m.id === Number(selectedMaterialId),
                           )?.name || "Оберіть сировину"
                         : "Оберіть сировину"}
                       <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -711,7 +779,12 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div
+                className={cn(
+                  "space-y-2",
+                  isAdvanceMode && "opacity-50 pointer-events-none",
+                )}
+              >
                 <Label htmlFor="material-product">Матеріали</Label>
                 <Popover
                   open={materialProductPopoverOpen}
@@ -723,10 +796,11 @@ export default function SupplierTransactionsPage() {
                       variant="outline"
                       role="combobox"
                       className="w-full justify-between"
+                      disabled={isAdvanceMode}
                     >
                       {selectedMaterialProductId
                         ? productsMaterialsCategory.find(
-                            (p) => p.id === Number(selectedMaterialProductId)
+                            (p) => p.id === Number(selectedMaterialProductId),
                           )?.name || "Оберіть матеріали"
                         : "Оберіть матеріали"}
                       <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -754,7 +828,7 @@ export default function SupplierTransactionsPage() {
                               className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
                               onClick={() => {
                                 setSelectedMaterialProductId(
-                                  product.id.toString()
+                                  product.id.toString(),
                                 );
                                 setMaterialProductSearchQuery("");
                                 setMaterialProductPopoverOpen(false);
@@ -788,7 +862,12 @@ export default function SupplierTransactionsPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div
+                className={cn(
+                  "space-y-2",
+                  isAdvanceMode && "opacity-50 pointer-events-none",
+                )}
+              >
                 <Label htmlFor="quantity">Кількість *</Label>
                 <Input
                   id="quantity"
@@ -798,10 +877,16 @@ export default function SupplierTransactionsPage() {
                   onChange={(e) => setQuantity(e.target.value)}
                   min="0"
                   step="0.01"
+                  disabled={isAdvanceMode}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div
+                className={cn(
+                  "space-y-2",
+                  isAdvanceMode && "opacity-50 pointer-events-none",
+                )}
+              >
                 <Label htmlFor="price">Ціна за одиницю (₴)</Label>
                 <Input
                   id="price"
@@ -811,11 +896,45 @@ export default function SupplierTransactionsPage() {
                   onChange={(e) => setPricePerUnit(e.target.value)}
                   min="0"
                   step="0.01"
+                  disabled={isAdvanceMode}
+                />
+              </div>
+
+              <div className="space-y-2 flex flex-col justify-end">
+                <Label>Аванс</Label>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="advance-mode"
+                    checked={isAdvanceMode}
+                    onCheckedChange={handleAdvanceModeChange}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {isAdvanceMode ? "Увімкнено" : "Вимкнено"}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "space-y-2",
+                  !isAdvanceMode && "opacity-50 pointer-events-none",
+                )}
+              >
+                <Label htmlFor="advance">Сума авансу (₴) *</Label>
+                <Input
+                  id="advance"
+                  type="number"
+                  placeholder="0.00"
+                  value={advanceAmount}
+                  onChange={(e) => setAdvanceAmount(e.target.value)}
+                  min="0"
+                  step="0.01"
+                  disabled={!isAdvanceMode}
                 />
               </div>
             </div>
 
-            {purchaseTotal > 0 && (
+            {!isAdvanceMode && purchaseTotal > 0 && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Сума закупівлі:</span>
@@ -838,6 +957,11 @@ export default function SupplierTransactionsPage() {
               >
                 {isSubmitting ? (
                   <>Додавання...</>
+                ) : isAdvanceMode ? (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Додати аванс
+                  </>
                 ) : (
                   <>
                     <Plus className="mr-2 h-4 w-4" />
@@ -862,7 +986,7 @@ export default function SupplierTransactionsPage() {
                       {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
-                      }
+                      },
                     )} ₴`
                   : "—"}
               </CardTitle>
@@ -968,7 +1092,7 @@ export default function SupplierTransactionsPage() {
                         size="sm"
                         className={cn(
                           "min-w-[120px] justify-start text-left font-normal",
-                          !dateFilterFrom && "text-muted-foreground"
+                          !dateFilterFrom && "text-muted-foreground",
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -976,7 +1100,7 @@ export default function SupplierTransactionsPage() {
                           ? formatDate(
                               dateFilterFrom instanceof Date
                                 ? dateFilterFrom.toISOString()
-                                : new Date(dateFilterFrom).toISOString()
+                                : new Date(dateFilterFrom).toISOString(),
                             )
                           : "З дати"}
                       </Button>
@@ -997,7 +1121,7 @@ export default function SupplierTransactionsPage() {
                         size="sm"
                         className={cn(
                           "min-w-[120px] justify-start text-left font-normal",
-                          !dateFilterTo && "text-muted-foreground"
+                          !dateFilterTo && "text-muted-foreground",
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -1005,7 +1129,7 @@ export default function SupplierTransactionsPage() {
                           ? formatDate(
                               dateFilterTo instanceof Date
                                 ? dateFilterTo.toISOString()
-                                : new Date(dateFilterTo).toISOString()
+                                : new Date(dateFilterTo).toISOString(),
                             )
                           : "По дату"}
                       </Button>
@@ -1061,7 +1185,9 @@ export default function SupplierTransactionsPage() {
                         <TableHead>Дата</TableHead>
                         <TableHead>Постачальник</TableHead>
                         <TableHead>Продукт</TableHead>
-                        <TableHead className="text-right">Матеріали (передано)</TableHead>
+                        <TableHead className="text-right">
+                          Матеріали (передано)
+                        </TableHead>
                         <TableHead className="text-right">Кількість</TableHead>
                         <TableHead className="text-right">
                           Ціна за одиницю
@@ -1078,12 +1204,13 @@ export default function SupplierTransactionsPage() {
                             const pricePerUnit =
                               delivery.price_per_unit != null
                                 ? Math.round(
-                                    Number(delivery.price_per_unit) * 100
+                                    Number(delivery.price_per_unit) * 100,
                                   ) / 100
                                 : null;
                             const total =
                               pricePerUnit != null
-                                ? Math.round(quantity * pricePerUnit * 100) / 100
+                                ? Math.round(quantity * pricePerUnit * 100) /
+                                  100
                                 : null;
 
                             return (
@@ -1114,12 +1241,15 @@ export default function SupplierTransactionsPage() {
                                   Number(delivery.material_quantity) > 0 ? (
                                     formatNumberWithUnit(
                                       Math.round(
-                                        Number(delivery.material_quantity) * 100
+                                        Number(delivery.material_quantity) *
+                                          100,
                                       ) / 100,
-                                      "шт"
+                                      "шт",
                                     )
                                   ) : (
-                                    <span className="text-muted-foreground">—</span>
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -1137,7 +1267,9 @@ export default function SupplierTransactionsPage() {
                                       ₴
                                     </span>
                                   ) : (
-                                    <span className="text-muted-foreground">—</span>
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -1150,7 +1282,9 @@ export default function SupplierTransactionsPage() {
                                       ₴
                                     </span>
                                   ) : (
-                                    <span className="text-muted-foreground">—</span>
+                                    <span className="text-muted-foreground">
+                                      —
+                                    </span>
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -1176,7 +1310,10 @@ export default function SupplierTransactionsPage() {
                               </TableRow>
                             );
                           })}
-                          <TableRow key={`subtotal-${group.dateStr}`} className="bg-muted/40 font-medium">
+                          <TableRow
+                            key={`subtotal-${group.dateStr}`}
+                            className="bg-muted/40 font-medium"
+                          >
                             <TableCell colSpan={9} className="text-center">
                               Підсумок за {group.displayDate}:{" "}
                               <span className="font-semibold">
@@ -1213,7 +1350,7 @@ export default function SupplierTransactionsPage() {
                         </PaginationItem>
                         {Array.from(
                           { length: totalPages },
-                          (_, i) => i + 1
+                          (_, i) => i + 1,
                         ).map((page) => {
                           const showPage =
                             page === 1 ||
@@ -1275,7 +1412,10 @@ export default function SupplierTransactionsPage() {
           </CardContent>
         </Card>
       )}
-      <Dialog open={addSupplierDialogOpen} onOpenChange={setAddSupplierDialogOpen}>
+      <Dialog
+        open={addSupplierDialogOpen}
+        onOpenChange={setAddSupplierDialogOpen}
+      >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Додати нового постачальника</DialogTitle>

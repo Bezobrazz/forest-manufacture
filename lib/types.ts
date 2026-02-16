@@ -91,6 +91,7 @@ export interface Supplier {
   name: string;
   phone: string | null;
   notes: string | null;
+  advance?: number;
   materials_balance?: number;
   created_at: string;
 }
