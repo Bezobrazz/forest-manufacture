@@ -390,8 +390,6 @@ export default function SupplierTransactionsPage() {
             ? Math.round(Number(d.price_per_unit) * 100) / 100
             : 0;
         rowSum = Math.round(qty * price * 100) / 100;
-      } else {
-        rowSum = Math.round(Number((item.data as SupplierAdvanceTransaction).amount) * 100) / 100;
       }
       if (!current || current.dateStr !== dateStr) {
         current = {
@@ -605,16 +603,14 @@ export default function SupplierTransactionsPage() {
   const totalAmount =
     Math.round(
       filteredAndSortedTransactions.reduce((sum, item) => {
-        if (item.type === "delivery") {
-          const d = item.data as SupplierDelivery;
-          const quantity = Number(d.quantity);
-          const price =
-            d.price_per_unit != null
-              ? Math.round(Number(d.price_per_unit) * 100) / 100
-              : 0;
-          return sum + quantity * price;
-        }
-        return sum + Number((item.data as SupplierAdvanceTransaction).amount);
+        if (item.type !== "delivery") return sum;
+        const d = item.data as SupplierDelivery;
+        const quantity = Number(d.quantity);
+        const price =
+          d.price_per_unit != null
+            ? Math.round(Number(d.price_per_unit) * 100) / 100
+            : 0;
+        return sum + quantity * price;
       }, 0) * 100,
     ) / 100;
 
