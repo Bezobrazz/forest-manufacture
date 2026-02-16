@@ -2797,6 +2797,27 @@ export async function createSupplierDelivery(formData: FormData) {
       }
     }
 
+    const purchaseAmount =
+      pricePerUnit != null
+        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
+        : 0;
+    if (purchaseAmount > 0) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance - purchaseAmount) * 100) / 100;
+      const { error: advanceError } = await supabase
+        .from("suppliers")
+        .update({ advance: newAdvance })
+        .eq("id", supplierId);
+      if (advanceError) {
+        console.error("Error updating supplier advance:", advanceError);
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
     revalidatePath("/suppliers");
 
@@ -2915,7 +2936,7 @@ export async function updateSupplierDelivery(formData: FormData) {
 
     const { data: currentDelivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id, material_product_id, material_quantity")
+      .select("quantity, product_id, warehouse_id, material_product_id, material_quantity, price_per_unit")
       .eq("id", deliveryId)
       .single();
 
@@ -3137,6 +3158,31 @@ export async function updateSupplierDelivery(formData: FormData) {
       }
     }
 
+    const oldPrice = Number(currentDelivery.price_per_unit ?? 0);
+    const oldQty = Number(currentDelivery.quantity);
+    const oldAmount = Math.round(oldQty * oldPrice * 100) / 100;
+    const newAmount =
+      pricePerUnit != null
+        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
+        : 0;
+    const advanceDelta = oldAmount - newAmount;
+    if (advanceDelta !== 0) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance + advanceDelta) * 100) / 100;
+      const { error: advanceError } = await supabase
+        .from("suppliers")
+        .update({ advance: newAdvance })
+        .eq("id", supplierId);
+      if (advanceError) {
+        console.error("Error updating supplier advance:", advanceError);
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
     revalidatePath("/suppliers");
 
@@ -3160,12 +3206,30 @@ export async function deleteSupplierDelivery(deliveryId: number) {
 
     const { data: delivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id")
+      .select("quantity, product_id, warehouse_id, supplier_id, price_per_unit")
       .eq("id", deliveryId)
       .single();
 
     if (getError || !delivery) {
       return { success: false, error: "Транзакцію не знайдено" };
+    }
+
+    const purchaseAmount =
+      delivery.price_per_unit != null
+        ? Math.round(Number(delivery.quantity) * Number(delivery.price_per_unit) * 100) / 100
+        : 0;
+    if (purchaseAmount > 0 && delivery.supplier_id) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", delivery.supplier_id)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance + purchaseAmount) * 100) / 100;
+      await supabase
+        .from("suppliers")
+        .update({ advance: newAdvance })
+        .eq("id", delivery.supplier_id);
     }
 
     const { data: inventoryTransaction } = await supabase
@@ -3232,6 +3296,7 @@ export async function deleteSupplierDelivery(deliveryId: number) {
     }
 
     revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
 
     return { success: true };
   } catch (error) {
