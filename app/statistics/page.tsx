@@ -31,9 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
+  dateToYYYYMMDD,
   formatNumber,
   formatNumberWithUnit,
+  getDateRangeForPeriod,
   formatPercentage,
 } from "@/lib/utils";
 import {
@@ -69,7 +72,6 @@ export default function StatisticsPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        console.log("Завантаження даних статистики...");
         const [stats, shiftsData, productsData, categoriesData] =
           await Promise.all([
             getProductionStats(period, selectedYear),
@@ -77,13 +79,6 @@ export default function StatisticsPage() {
             getProducts(),
             getProductCategories(),
           ]);
-
-        console.log("Дані завантажено:", {
-          stats,
-          shiftsCount: shiftsData?.length || 0,
-          productsCount: productsData?.length || 0,
-          categoriesCount: categoriesData?.length || 0,
-        });
 
         setProductionStats(stats);
         setProducts(productsData || []);
@@ -93,7 +88,6 @@ export default function StatisticsPage() {
           (shift) => shift.status === "completed"
         ) as ShiftWithDetails[];
         setShifts(completedShifts);
-        console.log("Завершені зміни:", completedShifts.length);
       } catch (error) {
         console.error("Помилка при завантаженні даних:", error);
         setProductionStats({ totalProduction: 0, productionByCategory: {} });
@@ -102,7 +96,6 @@ export default function StatisticsPage() {
         setShifts([]);
       } finally {
         setIsLoading(false);
-        console.log("Завантаження завершено");
       }
     };
 
@@ -111,15 +104,32 @@ export default function StatisticsPage() {
 
   const { totalProduction, productionByCategory } = productionStats;
 
+  const neutralPalette = [
+    "hsl(215, 32%, 48%)",
+    "hsl(180, 28%, 44%)",
+    "hsl(260, 30%, 52%)",
+    "hsl(35, 36%, 48%)",
+    "hsl(200, 28%, 42%)",
+    "hsl(280, 28%, 50%)",
+    "hsl(150, 30%, 46%)",
+    "hsl(240, 32%, 50%)",
+  ];
+
   const categoryColors: Record<string, string> = {
     "Без категорії": "hsl(var(--muted))",
   };
 
-  categories.forEach((category, index) => {
-    const hues = [200, 150, 100, 50, 300, 250, 350];
-    categoryColors[category.name] = `hsl(${
-      hues[index % hues.length]
-    }, 70%, 50%)`;
+  const categoryNames = [
+    ...new Set([
+      ...categories.map((c) => c.name),
+      ...Object.keys(productionByCategory),
+    ]),
+  ];
+  categoryNames.forEach((name, index) => {
+    if (!categoryColors[name]) {
+      categoryColors[name] =
+        neutralPalette[index % neutralPalette.length];
+    }
   });
 
   const categoryPercentages: Record<string, number> = {};
@@ -132,12 +142,38 @@ export default function StatisticsPage() {
     (a, b) => b[1] - a[1]
   );
 
-  const completedShifts = shifts.filter(
-    (shift) => shift.status === "completed"
+  const { startDate: periodStart, endDate: periodEnd } = useMemo(
+    () => getDateRangeForPeriod(period, selectedYear),
+    [period, selectedYear]
   );
-  const shiftsWithProduction = completedShifts.length;
+  const periodStartStr = dateToYYYYMMDD(periodStart);
+  const periodEndStr = dateToYYYYMMDD(periodEnd);
+
+  const shiftsInPeriod = useMemo(() => {
+    return shifts.filter((shift) => {
+      if (shift.status !== "completed") return false;
+      const d = shift.shift_date
+        ? String(shift.shift_date).slice(0, 10)
+        : "";
+      return d >= periodStartStr && d <= periodEndStr;
+    });
+  }, [shifts, periodStartStr, periodEndStr]);
+
+  const shiftsWithProduction = shiftsInPeriod.length;
   const averageProductionPerShift =
     shiftsWithProduction > 0 ? totalProduction / shiftsWithProduction : 0;
+
+  const periodLabel = useMemo(() => {
+    if (period === "year") return `Рік ${selectedYear}`;
+    if (period === "month") {
+      const monthNames = [
+        "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
+        "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
+      ];
+      return `${monthNames[new Date().getMonth()]} ${selectedYear}`;
+    }
+    return "Поточний тиждень";
+  }, [period, selectedYear]);
 
   // Функція для отримання назв місяців українською
   const getMonthName = (monthIndex: number): string => {
@@ -260,14 +296,109 @@ export default function StatisticsPage() {
   if (isLoading) {
     return (
       <div className="container py-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 bg-muted rounded" />
-          <div className="grid gap-4 md:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-32 bg-muted rounded" />
-            ))}
+        <div className="mb-6">
+          <Skeleton className="h-4 w-12" />
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Skeleton className="h-10 w-[120px]" />
+            <Skeleton className="h-9 w-14" />
+            <Skeleton className="h-9 w-16" />
+            <Skeleton className="h-9 w-20" />
           </div>
         </div>
+
+        <div className="grid gap-6 md:grid-cols-3 mb-8">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-5 w-40 mb-2" />
+                <Skeleton className="h-4 w-56" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-10 w-24 mb-4" />
+                {(i === 1 || i === 3) && (
+                  <Skeleton className="h-10 w-full" />
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 mb-8">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-48 mb-2" />
+              <Skeleton className="h-4 w-72" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-8 w-full rounded-full mb-4" />
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((j) => (
+                  <div key={j} className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4 rounded-sm" />
+                    <Skeleton className="h-4 flex-1" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-44 mb-2" />
+              <Skeleton className="h-4 w-64" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {[1, 2, 3, 4].map((j) => (
+                  <div key={j} className="space-y-2">
+                    <div className="flex justify-between">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                    <Skeleton className="h-2.5 w-full rounded-full" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-40 mb-2" />
+            <Skeleton className="h-4 w-56" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {[1, 2].map((cat) => (
+                <div key={cat} className="pt-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Skeleton className="h-3 w-3 rounded-sm" />
+                    <Skeleton className="h-5 w-28" />
+                  </div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="flex justify-between">
+                          <Skeleton className="h-4 w-40" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                        <Skeleton className="h-8 w-full rounded-md" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -288,7 +419,7 @@ export default function StatisticsPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">Статистика виробництва</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Аналіз виробленої продукції за вибраний період
+            Аналіз виробленої продукції за період: {periodLabel}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -660,7 +791,7 @@ export default function StatisticsPage() {
                   const productStats = categoryProducts.map((product) => {
                     let productTotal = 0;
 
-                    shifts.forEach((shift) => {
+                    shiftsInPeriod.forEach((shift) => {
                       if (shift.production) {
                         const productionItem = shift.production.find(
                           (item) => item.product_id === product.id

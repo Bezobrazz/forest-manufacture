@@ -92,6 +92,8 @@ import type {
 import { uk } from "date-fns/locale";
 import { EditSupplierDeliveryDialog } from "@/components/edit-supplier-delivery-dialog";
 import { DeleteSupplierDeliveryButton } from "@/components/delete-supplier-delivery-button";
+import { DeleteSupplierAdvanceButton } from "@/components/delete-supplier-advance-button";
+import { EditSupplierAdvanceDialog } from "@/components/edit-supplier-advance-dialog";
 
 function LoadingSkeleton() {
   return (
@@ -1345,9 +1347,43 @@ export default function SupplierTransactionsPage() {
                                     </span>
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <span className="text-muted-foreground">
-                                      —
-                                    </span>
+                                    <div className="flex items-center justify-end gap-2">
+                                      <EditSupplierAdvanceDialog
+                                        advance={adv}
+                                        suppliers={suppliers}
+                                        onAdvanceUpdated={async () => {
+                                          const [
+                                            updatedDeliveries,
+                                            updatedAdvance,
+                                            updatedSuppliers,
+                                          ] = await Promise.all([
+                                            getSupplierDeliveries(),
+                                            getSupplierAdvanceTransactions(),
+                                            getSuppliers(),
+                                          ]);
+                                          setDeliveries(updatedDeliveries);
+                                          setAdvanceTransactions(updatedAdvance);
+                                          setSuppliers(updatedSuppliers);
+                                        }}
+                                      />
+                                      <DeleteSupplierAdvanceButton
+                                        advance={adv}
+                                        onAdvanceDeleted={async () => {
+                                          const [
+                                            updatedDeliveries,
+                                            updatedAdvance,
+                                            updatedSuppliers,
+                                          ] = await Promise.all([
+                                            getSupplierDeliveries(),
+                                            getSupplierAdvanceTransactions(),
+                                            getSuppliers(),
+                                          ]);
+                                          setDeliveries(updatedDeliveries);
+                                          setAdvanceTransactions(updatedAdvance);
+                                          setSuppliers(updatedSuppliers);
+                                        }}
+                                      />
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               );

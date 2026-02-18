@@ -111,6 +111,7 @@ export interface SupplierDelivery {
   price_per_unit: number | null;
   material_product_id?: number | null;
   material_quantity?: number | null;
+  advance_used?: number;
   created_at: string;
   supplier?: Supplier;
   product?: Product;
