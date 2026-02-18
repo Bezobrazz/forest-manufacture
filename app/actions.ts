@@ -2837,7 +2837,7 @@ export async function createSupplierDelivery(formData: FormData) {
       const newAdvance = Math.round((currentAdvance - deductRounded) * 100) / 100;
       const { error: advanceError } = await supabase
         .from("suppliers")
-        .update({ advance: newAdvance })
+        .update({ advance: Math.max(0, newAdvance) })
         .eq("id", supplierId);
       if (advanceError) {
         console.error("Error updating supplier advance:", advanceError);
@@ -2907,7 +2907,7 @@ export async function addSupplierAdvance(formData: FormData) {
 
     const { error } = await supabase
       .from("suppliers")
-      .update({ advance: newAdvance })
+      .update({ advance: Math.max(0, newAdvance) })
       .eq("id", supplierId);
 
     if (error) {
@@ -2981,7 +2981,7 @@ export async function deleteSupplierAdvanceTransaction(advanceId: number) {
 
     await supabase
       .from("suppliers")
-      .update({ advance: newAdvance })
+      .update({ advance: Math.max(0, newAdvance) })
       .eq("id", supplierId);
 
     revalidatePath("/transactions/suppliers");
@@ -3062,7 +3062,7 @@ export async function updateSupplierAdvanceTransaction(formData: FormData) {
       const newAdv = Math.round((currentAdv + delta) * 100) / 100;
       await supabase
         .from("suppliers")
-        .update({ advance: newAdv })
+        .update({ advance: Math.max(0, newAdv) })
         .eq("id", supplierId);
     } else {
       const { data: oldRow } = await supabase
@@ -3074,7 +3074,7 @@ export async function updateSupplierAdvanceTransaction(formData: FormData) {
       await supabase
         .from("suppliers")
         .update({
-          advance: Math.round((oldBal - oldAmount) * 100) / 100,
+          advance: Math.max(0, Math.round((oldBal - oldAmount) * 100) / 100),
         })
         .eq("id", oldSupplierId);
 
@@ -3087,7 +3087,7 @@ export async function updateSupplierAdvanceTransaction(formData: FormData) {
       await supabase
         .from("suppliers")
         .update({
-          advance: Math.round((newBal + amount) * 100) / 100,
+          advance: Math.max(0, Math.round((newBal + amount) * 100) / 100),
         })
         .eq("id", supplierId);
     }
@@ -3431,7 +3431,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       const newAdvance = Math.round((currentAdvance + advanceDelta) * 100) / 100;
       const { error: advanceError } = await supabase
         .from("suppliers")
-        .update({ advance: newAdvance })
+        .update({ advance: Math.max(0, newAdvance) })
         .eq("id", supplierId);
       if (advanceError) {
         console.error("Error updating supplier advance:", advanceError);
@@ -3446,7 +3446,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       const newAdvance = Math.round((currentAdvance + oldAdvanceUsed) * 100) / 100;
       await supabase
         .from("suppliers")
-        .update({ advance: newAdvance })
+        .update({ advance: Math.max(0, newAdvance) })
         .eq("id", supplierId);
       await supabase
         .from("supplier_deliveries")
@@ -3499,7 +3499,7 @@ export async function deleteSupplierDelivery(deliveryId: number) {
       const newAdvance = Math.round((currentAdvance + advanceUsed) * 100) / 100;
       await supabase
         .from("suppliers")
-        .update({ advance: newAdvance })
+        .update({ advance: Math.max(0, newAdvance) })
         .eq("id", delivery.supplier_id);
     }
 
