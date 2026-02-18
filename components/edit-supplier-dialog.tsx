@@ -4,7 +4,7 @@ import type React from "react";
 
 import { useState, useEffect } from "react";
 import type { Supplier } from "@/lib/types";
-import { updateSupplier } from "@/app/actions";
+import { updateSupplier, addSupplierAdvance } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,8 +18,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, Calendar as CalendarIcon } from "lucide-react";
+import { formatDate, dateToYYYYMMDD } from "@/lib/utils";
+import { uk } from "date-fns/locale";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 interface EditSupplierDialogProps {
   supplier: Supplier;
@@ -37,19 +45,21 @@ export function EditSupplierDialog({
     name: supplier.name,
     phone: supplier.phone || "",
     notes: supplier.notes || "",
+    advanceAmount: "",
+    advanceDate: new Date(),
   });
 
-  // Оновлюємо стан форми при зміні постачальника
   useEffect(() => {
     setFormData({
       id: supplier.id,
       name: supplier.name,
       phone: supplier.phone || "",
       notes: supplier.notes || "",
+      advanceAmount: "",
+      advanceDate: new Date(),
     });
   }, [supplier]);
 
-  // Обробник зміни полів форми
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -57,50 +67,54 @@ export function EditSupplierDialog({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Функція для оновлення списку постачальників
-  const refreshSuppliers = async () => {
-    if (onSupplierUpdated) {
-      onSupplierUpdated();
-    }
-  };
-
-  // Функція для відправки форми
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsPending(true);
 
     try {
-      // Створюємо FormData для відправки
       const submitFormData = new FormData();
       submitFormData.append("id", formData.id.toString());
       submitFormData.append("name", formData.name);
       submitFormData.append("phone", formData.phone);
       submitFormData.append("notes", formData.notes);
 
-      // Викликаємо серверну дію
       const result = await updateSupplier(submitFormData);
 
-      if (result.success) {
-        setOpen(false);
-        toast.success("Постачальника оновлено", {
-          description: "Інформацію про постачальника успішно оновлено",
-        });
-
-        // Оновлюємо список постачальників без перезавантаження сторінки
-        if (onSupplierUpdated) {
-          try {
-            await onSupplierUpdated();
-          } catch (refreshError) {
-            console.error(
-              "Помилка при оновленні списку постачальників:",
-              refreshError
-            );
-          }
-        }
-      } else {
+      if (!result.success) {
         toast.error("Помилка", {
           description: result.error || "Не вдалося оновити постачальника",
         });
+        return;
+      }
+
+      const advanceAmt = Number(formData.advanceAmount);
+      if (advanceAmt > 0) {
+        const advanceFormData = new FormData();
+        advanceFormData.append("supplier_id", formData.id.toString());
+        advanceFormData.append("advance", formData.advanceAmount);
+        advanceFormData.append("delivery_date", dateToYYYYMMDD(formData.advanceDate));
+        const advanceResult = await addSupplierAdvance(advanceFormData);
+        if (!advanceResult.success) {
+          toast.error("Помилка", {
+            description: advanceResult.error || "Не вдалося додати аванс",
+          });
+        }
+      }
+
+      setOpen(false);
+      toast.success("Постачальника оновлено", {
+        description: "Інформацію про постачальника успішно оновлено",
+      });
+
+      if (onSupplierUpdated) {
+        try {
+          await onSupplierUpdated();
+        } catch (refreshError) {
+          console.error(
+            "Помилка при оновленні списку постачальників:",
+            refreshError
+          );
+        }
       }
     } catch (error) {
       console.error("Помилка при оновленні постачальника:", error);
@@ -159,6 +173,49 @@ export function EditSupplierDialog({
               onChange={handleChange}
               placeholder="Додаткова інформація про постачальника"
             />
+          </div>
+          <div className="space-y-2 border-t pt-4">
+            <Label htmlFor={`advance-${supplier.id}`}>Додати аванс (₴)</Label>
+            <div className="flex gap-2">
+              <Input
+                id={`advance-${supplier.id}`}
+                name="advanceAmount"
+                type="number"
+                placeholder="0.00"
+                value={formData.advanceAmount}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, advanceAmount: e.target.value }))
+                }
+                min="0"
+                step="0.01"
+                className="flex-1"
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-w-[120px] justify-start"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formatDate(formData.advanceDate.toISOString())}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={formData.advanceDate}
+                    onSelect={(d) => d && setFormData((prev) => ({ ...prev, advanceDate: d }))}
+                    locale={uk}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            {typeof supplier.advance === "number" && supplier.advance !== 0 && (
+              <p className="text-xs text-muted-foreground">
+                Поточний баланс: {supplier.advance.toFixed(2)} ₴
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
