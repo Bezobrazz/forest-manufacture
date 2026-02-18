@@ -104,15 +104,32 @@ export default function StatisticsPage() {
 
   const { totalProduction, productionByCategory } = productionStats;
 
+  const neutralPalette = [
+    "hsl(215, 32%, 48%)",
+    "hsl(180, 28%, 44%)",
+    "hsl(260, 30%, 52%)",
+    "hsl(35, 36%, 48%)",
+    "hsl(200, 28%, 42%)",
+    "hsl(280, 28%, 50%)",
+    "hsl(150, 30%, 46%)",
+    "hsl(240, 32%, 50%)",
+  ];
+
   const categoryColors: Record<string, string> = {
     "Без категорії": "hsl(var(--muted))",
   };
 
-  categories.forEach((category, index) => {
-    const hues = [200, 150, 100, 50, 300, 250, 350];
-    categoryColors[category.name] = `hsl(${
-      hues[index % hues.length]
-    }, 70%, 50%)`;
+  const categoryNames = [
+    ...new Set([
+      ...categories.map((c) => c.name),
+      ...Object.keys(productionByCategory),
+    ]),
+  ];
+  categoryNames.forEach((name, index) => {
+    if (!categoryColors[name]) {
+      categoryColors[name] =
+        neutralPalette[index % neutralPalette.length];
+    }
   });
 
   const categoryPercentages: Record<string, number> = {};
