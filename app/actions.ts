@@ -16,6 +16,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { getDateRangeForPeriod } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 // Отримання інформації про склад
@@ -589,46 +590,18 @@ export async function getProductionStats(
   try {
     const supabase = await createServerClient();
 
-    // Визначаємо початкову дату в залежності від періоду
-    const now = new Date();
-    const selectedYear = year || now.getFullYear();
-    let startDate: Date;
-    let endDate: Date | null = null;
-
-    switch (period) {
-      case "year":
-        startDate = new Date(selectedYear, 0, 1); // 1 січня вибраного року
-        endDate = new Date(selectedYear, 11, 31, 23, 59, 59); // 31 грудня вибраного року
-        break;
-      case "month":
-        startDate = new Date(selectedYear, now.getMonth(), 1); // 1 число поточного місяця вибраного року
-        break;
-      case "week":
-        // Тиждень починається з понеділка (день 1), неділя = 0
-        const dayOfWeek = now.getDay(); // 0 = неділя, 1 = понеділок, ...
-        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Якщо неділя, віднімаємо 6 днів
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - daysToMonday);
-        startDate.setHours(0, 0, 0, 0); // Початок дня
-        break;
-      default:
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
-    }
+    const { startDate, endDate } = getDateRangeForPeriod(period, year);
 
     try {
-      // Спочатку отримуємо shifts з фільтром за датою
-      let query = supabase
+      const startStr = startDate.toISOString().split("T")[0];
+      const endStr = endDate.toISOString().split("T")[0];
+
+      const { data: shiftsData, error: shiftsError } = await supabase
         .from("shifts")
         .select("id")
-        .gte("shift_date", startDate.toISOString().split("T")[0]); // Використовуємо тільки дату без часу
-      
-      // Якщо є кінцева дата (для року), додаємо фільтр
-      if (endDate) {
-        query = query.lte("shift_date", endDate.toISOString().split("T")[0]);
-      }
-      
-      const { data: shiftsData, error: shiftsError } = await query;
+        .eq("status", "completed")
+        .gte("shift_date", startStr)
+        .lte("shift_date", endStr);
 
       if (shiftsError) {
         console.error("Error fetching shifts:", shiftsError);

@@ -32,8 +32,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  dateToYYYYMMDD,
   formatNumber,
   formatNumberWithUnit,
+  getDateRangeForPeriod,
   formatPercentage,
 } from "@/lib/utils";
 import {
@@ -69,7 +71,6 @@ export default function StatisticsPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        console.log("Завантаження даних статистики...");
         const [stats, shiftsData, productsData, categoriesData] =
           await Promise.all([
             getProductionStats(period, selectedYear),
@@ -77,13 +78,6 @@ export default function StatisticsPage() {
             getProducts(),
             getProductCategories(),
           ]);
-
-        console.log("Дані завантажено:", {
-          stats,
-          shiftsCount: shiftsData?.length || 0,
-          productsCount: productsData?.length || 0,
-          categoriesCount: categoriesData?.length || 0,
-        });
 
         setProductionStats(stats);
         setProducts(productsData || []);
@@ -93,7 +87,6 @@ export default function StatisticsPage() {
           (shift) => shift.status === "completed"
         ) as ShiftWithDetails[];
         setShifts(completedShifts);
-        console.log("Завершені зміни:", completedShifts.length);
       } catch (error) {
         console.error("Помилка при завантаженні даних:", error);
         setProductionStats({ totalProduction: 0, productionByCategory: {} });
@@ -102,7 +95,6 @@ export default function StatisticsPage() {
         setShifts([]);
       } finally {
         setIsLoading(false);
-        console.log("Завантаження завершено");
       }
     };
 
@@ -132,12 +124,38 @@ export default function StatisticsPage() {
     (a, b) => b[1] - a[1]
   );
 
-  const completedShifts = shifts.filter(
-    (shift) => shift.status === "completed"
+  const { startDate: periodStart, endDate: periodEnd } = useMemo(
+    () => getDateRangeForPeriod(period, selectedYear),
+    [period, selectedYear]
   );
-  const shiftsWithProduction = completedShifts.length;
+  const periodStartStr = dateToYYYYMMDD(periodStart);
+  const periodEndStr = dateToYYYYMMDD(periodEnd);
+
+  const shiftsInPeriod = useMemo(() => {
+    return shifts.filter((shift) => {
+      if (shift.status !== "completed") return false;
+      const d = shift.shift_date
+        ? String(shift.shift_date).slice(0, 10)
+        : "";
+      return d >= periodStartStr && d <= periodEndStr;
+    });
+  }, [shifts, periodStartStr, periodEndStr]);
+
+  const shiftsWithProduction = shiftsInPeriod.length;
   const averageProductionPerShift =
     shiftsWithProduction > 0 ? totalProduction / shiftsWithProduction : 0;
+
+  const periodLabel = useMemo(() => {
+    if (period === "year") return `Рік ${selectedYear}`;
+    if (period === "month") {
+      const monthNames = [
+        "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
+        "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
+      ];
+      return `${monthNames[new Date().getMonth()]} ${selectedYear}`;
+    }
+    return "Поточний тиждень";
+  }, [period, selectedYear]);
 
   // Функція для отримання назв місяців українською
   const getMonthName = (monthIndex: number): string => {
@@ -288,7 +306,7 @@ export default function StatisticsPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">Статистика виробництва</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Аналіз виробленої продукції за вибраний період
+            Аналіз виробленої продукції за період: {periodLabel}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -660,7 +678,7 @@ export default function StatisticsPage() {
                   const productStats = categoryProducts.map((product) => {
                     let productTotal = 0;
 
-                    shifts.forEach((shift) => {
+                    shiftsInPeriod.forEach((shift) => {
                       if (shift.production) {
                         const productionItem = shift.production.find(
                           (item) => item.product_id === product.id

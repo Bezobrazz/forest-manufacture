@@ -84,6 +84,45 @@ export function getWeekNumber(date: Date): number {
   return Math.floor(pastDays / 7) + 1;
 }
 
+export function getDateRangeForPeriod(
+  period: "year" | "month" | "week",
+  year?: number,
+  monthIndex?: number
+): { startDate: Date; endDate: Date } {
+  const now = new Date();
+  const selectedYear = year ?? now.getFullYear();
+
+  switch (period) {
+    case "year":
+      return {
+        startDate: new Date(selectedYear, 0, 1),
+        endDate: new Date(selectedYear, 11, 31, 23, 59, 59),
+      };
+    case "month": {
+      const month = monthIndex ?? now.getMonth();
+      const start = new Date(selectedYear, month, 1);
+      const end = new Date(selectedYear, month + 1, 0, 23, 59, 59);
+      return { startDate: start, endDate: end };
+    }
+    case "week": {
+      const dayOfWeek = now.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const start = new Date(now);
+      start.setDate(now.getDate() - daysToMonday);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start, endDate: end };
+    }
+    default:
+      return {
+        startDate: new Date(selectedYear, 0, 1),
+        endDate: new Date(selectedYear, 11, 31, 23, 59, 59),
+      };
+  }
+}
+
 export function formatNumber(
   value: number,
   options: {
