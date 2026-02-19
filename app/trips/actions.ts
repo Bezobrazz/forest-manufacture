@@ -67,6 +67,7 @@ export type TripDetail = {
   driver_pay_mode: string;
   driver_pay_uah: number | null;
   driver_pay_uah_per_day: number | null;
+  driver_pay_percent_of_freight: number | null;
   extra_costs_uah: number | null;
   notes: string | null;
   distance_km: number | null;
@@ -123,6 +124,7 @@ export async function createTrip(
     driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
     driver_pay_uah: payload.driver_pay_uah,
     driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
+    driver_pay_percent_of_freight: payload.driver_pay_percent_of_freight,
     extra_costs_uah: payload.extra_costs_uah,
     notes: payload.notes,
   });
@@ -175,6 +177,7 @@ export async function createTrip(
     driver_pay_mode: d.driver_pay_mode,
     driver_pay_uah: d.driver_pay_uah ?? 0,
     driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
+    driver_pay_percent_of_freight: d.driver_pay_percent_of_freight ?? null,
     extra_costs_uah: d.extra_costs_uah ?? 0,
     notes: d.notes ?? null,
     distance_km: metrics.distance_km,
@@ -226,6 +229,7 @@ export async function updateTrip(
     driver_pay_mode: payload.driver_pay_mode ?? "per_trip",
     driver_pay_uah: payload.driver_pay_uah,
     driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
+    driver_pay_percent_of_freight: payload.driver_pay_percent_of_freight,
     extra_costs_uah: payload.extra_costs_uah,
     notes: payload.notes,
   });
@@ -277,6 +281,7 @@ export async function updateTrip(
     driver_pay_mode: d.driver_pay_mode,
     driver_pay_uah: d.driver_pay_uah ?? 0,
     driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
+    driver_pay_percent_of_freight: d.driver_pay_percent_of_freight ?? null,
     extra_costs_uah: d.extra_costs_uah ?? 0,
     notes: d.notes ?? null,
     distance_km: metrics.distance_km,

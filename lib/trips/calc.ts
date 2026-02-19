@@ -1,6 +1,6 @@
 export type VehicleType = "van" | "truck";
 
-export type DriverPayMode = "per_trip" | "per_day";
+export type DriverPayMode = "per_trip" | "per_day" | "percent_of_freight";
 
 export type TripType = "raw" | "commerce";
 
@@ -23,6 +23,7 @@ export type TripInput = {
   driver_pay_mode?: DriverPayMode | null;
   driver_pay_uah?: number | null;
   driver_pay_uah_per_day?: number | null;
+  driver_pay_percent_of_freight?: number | null;
   extra_costs_uah?: number | null;
   notes?: string | null;
 };
@@ -66,6 +67,10 @@ export function calculateTripMetrics(input: TripInput): TripMetrics {
   const freightUah = ensureNonNegative(input.freight_uah);
   const driverPayUah = ensureNonNegative(input.driver_pay_uah);
   const driverPayUahPerDay = ensureNonNegative(input.driver_pay_uah_per_day);
+  const driverPayPercentOfFreight = Math.min(
+    100,
+    Math.max(0, input.driver_pay_percent_of_freight ?? 0)
+  );
   const extraCosts = ensureNonNegative(input.extra_costs_uah);
 
   const distanceKm = round2(end - start);
@@ -79,7 +84,9 @@ export function calculateTripMetrics(input: TripInput): TripMetrics {
   const driverCostUah =
     driverPayMode === "per_trip"
       ? driverPayUah
-      : round2(driverPayUahPerDay * daysCount);
+      : driverPayMode === "percent_of_freight"
+        ? round2(freightUah * (driverPayPercentOfFreight / 100))
+        : round2(driverPayUahPerDay * daysCount);
   const driverCostUahRounded = round2(driverCostUah);
 
   const totalCostsUah = round2(

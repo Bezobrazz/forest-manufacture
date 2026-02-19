@@ -30,9 +30,10 @@ export const tripFormSchema = z
     }, z.number().int().min(1)),
     daily_taxes_uah: optionalNum(),
     freight_uah: optionalNum(),
-    driver_pay_mode: z.enum(["per_trip", "per_day"]).default("per_trip"),
+    driver_pay_mode: z.enum(["per_trip", "per_day", "percent_of_freight"]).default("per_trip"),
     driver_pay_uah: optionalNum(),
     driver_pay_uah_per_day: optionalNum(),
+    driver_pay_percent_of_freight: optionalNum(),
     extra_costs_uah: optionalNum(),
     notes: z
       .string()

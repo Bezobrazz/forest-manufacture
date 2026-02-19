@@ -34,6 +34,7 @@ import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
   per_day: "За день",
+  percent_of_freight: "% від фрахту",
 };
 
 const tripTypeLabels: Record<TripType, string> = {
@@ -95,6 +96,7 @@ export default function NewTripPage() {
   const [driverPayMode, setDriverPayMode] = useState<DriverPayMode>("per_trip");
   const [driverPayUah, setDriverPayUah] = useState("0");
   const [driverPayUahPerDay, setDriverPayUahPerDay] = useState("0");
+  const [driverPayPercentOfFreight, setDriverPayPercentOfFreight] = useState("0");
   const [extraCostsUah, setExtraCostsUah] = useState("0");
   const [notes, setNotes] = useState("");
 
@@ -138,6 +140,8 @@ export default function NewTripPage() {
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      driver_pay_percent_of_freight:
+        driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? 0 : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
     };
     try {
@@ -161,6 +165,7 @@ export default function NewTripPage() {
     driverPayMode,
     driverPayUah,
     driverPayUahPerDay,
+    driverPayPercentOfFreight,
     extraCostsUah,
   ]);
 
@@ -183,6 +188,8 @@ export default function NewTripPage() {
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      driver_pay_percent_of_freight:
+        driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? 0 : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
       notes: notes.trim() || null,
     };
@@ -218,6 +225,8 @@ export default function NewTripPage() {
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      driver_pay_percent_of_freight:
+        driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? null : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
       notes: notes.trim() || null,
     };
@@ -480,6 +489,7 @@ export default function NewTripPage() {
                     <SelectContent>
                       <SelectItem value="per_trip">{driverPayModeLabels.per_trip}</SelectItem>
                       <SelectItem value="per_day">{driverPayModeLabels.per_day}</SelectItem>
+                      <SelectItem value="percent_of_freight">{driverPayModeLabels.percent_of_freight}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -491,6 +501,17 @@ export default function NewTripPage() {
                       inputMode="decimal"
                       value={driverPayUah}
                       onChange={(e) => setDriverPayUah(parseNumericInput(e.target.value))}
+                      placeholder="0"
+                    />
+                  </Field>
+                ) : driverPayMode === "percent_of_freight" ? (
+                  <Field id="driver_pay_percent_of_freight" label="Відсоток від фрахту (%)">
+                    <Input
+                      id="driver_pay_percent_of_freight"
+                      type="text"
+                      inputMode="decimal"
+                      value={driverPayPercentOfFreight}
+                      onChange={(e) => setDriverPayPercentOfFreight(parseNumericInput(e.target.value))}
                       placeholder="0"
                     />
                   </Field>

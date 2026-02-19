@@ -39,6 +39,7 @@ import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/for
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
   per_day: "За день",
+  percent_of_freight: "% від фрахту",
 };
 
 const tripTypeLabels: Record<TripType, string> = {
@@ -91,9 +92,16 @@ function fillStateFromTrip(
     daysCount: trip.days_count != null ? String(trip.days_count) : "1",
     dailyTaxes: trip.daily_taxes_uah != null ? String(trip.daily_taxes_uah) : "150",
     freightUah: trip.freight_uah != null ? String(trip.freight_uah) : "0",
-    driverPayMode: trip.driver_pay_mode === "per_day" ? "per_day" : "per_trip",
+    driverPayMode:
+      trip.driver_pay_mode === "per_day"
+        ? "per_day"
+        : trip.driver_pay_mode === "percent_of_freight"
+          ? "percent_of_freight"
+          : "per_trip",
     driverPayUah: trip.driver_pay_uah != null ? String(trip.driver_pay_uah) : "0",
     driverPayUahPerDay: trip.driver_pay_uah_per_day != null ? String(trip.driver_pay_uah_per_day) : "0",
+    driverPayPercentOfFreight:
+      trip.driver_pay_percent_of_freight != null ? String(trip.driver_pay_percent_of_freight) : "0",
     extraCostsUah: trip.extra_costs_uah != null ? String(trip.extra_costs_uah) : "0",
     notes: trip.notes?.trim() ?? "",
   };
@@ -125,6 +133,7 @@ export default function TripDetailPage() {
   const [driverPayMode, setDriverPayMode] = useState<DriverPayMode>("per_trip");
   const [driverPayUah, setDriverPayUah] = useState("0");
   const [driverPayUahPerDay, setDriverPayUahPerDay] = useState("0");
+  const [driverPayPercentOfFreight, setDriverPayPercentOfFreight] = useState("0");
   const [extraCostsUah, setExtraCostsUah] = useState("0");
   const [notes, setNotes] = useState("");
 
@@ -151,6 +160,7 @@ export default function TripDetailPage() {
         setDriverPayMode(s.driverPayMode as DriverPayMode);
         setDriverPayUah(s.driverPayUah);
         setDriverPayUahPerDay(s.driverPayUahPerDay);
+        setDriverPayPercentOfFreight(s.driverPayPercentOfFreight);
         setExtraCostsUah(s.extraCostsUah);
         setNotes(s.notes);
       }
@@ -178,6 +188,8 @@ export default function TripDetailPage() {
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      driver_pay_percent_of_freight:
+        driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? 0 : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
       notes: notes.trim() || null,
     };
@@ -212,6 +224,8 @@ export default function TripDetailPage() {
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
+      driver_pay_percent_of_freight:
+        driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? null : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
       notes: notes.trim() || null,
     };
@@ -468,6 +482,7 @@ export default function TripDetailPage() {
                     <SelectContent>
                       <SelectItem value="per_trip">{driverPayModeLabels.per_trip}</SelectItem>
                       <SelectItem value="per_day">{driverPayModeLabels.per_day}</SelectItem>
+                      <SelectItem value="percent_of_freight">{driverPayModeLabels.percent_of_freight}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -479,6 +494,16 @@ export default function TripDetailPage() {
                       inputMode="decimal"
                       value={driverPayUah}
                       onChange={(e) => setDriverPayUah(parseNumericInput(e.target.value))}
+                    />
+                  </Field>
+                ) : driverPayMode === "percent_of_freight" ? (
+                  <Field id="driver_pay_percent_of_freight" label="Відсоток від фрахту (%)">
+                    <Input
+                      id="driver_pay_percent_of_freight"
+                      type="text"
+                      inputMode="decimal"
+                      value={driverPayPercentOfFreight}
+                      onChange={(e) => setDriverPayPercentOfFreight(parseNumericInput(e.target.value))}
                     />
                   </Field>
                 ) : (
