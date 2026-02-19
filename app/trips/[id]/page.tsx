@@ -601,14 +601,18 @@ export default function TripDetailPage() {
               <span className="text-muted-foreground">Витрати всього</span>
               <span className="tabular-nums">{formatUah(trip.total_costs_uah)}</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b">
-              <span className="text-muted-foreground">Прибуток</span>
-              <span className="tabular-nums">{formatUah(trip.profit_uah)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b">
-              <span className="text-muted-foreground">ROI</span>
-              <span className="tabular-nums">{formatPercent(trip.roi_percent)}</span>
-            </div>
+            {trip.trip_type !== "raw" && (
+              <>
+                <div className="flex justify-between py-1.5 border-b">
+                  <span className="text-muted-foreground">Прибуток</span>
+                  <span className="tabular-nums">{formatUah(trip.profit_uah)}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b">
+                  <span className="text-muted-foreground">ROI</span>
+                  <span className="tabular-nums">{formatPercent(trip.roi_percent)}</span>
+                </div>
+              </>
+            )}
             {trip.trip_type === "raw" &&
               trip.bags_count != null &&
               trip.bags_count >= 1 &&

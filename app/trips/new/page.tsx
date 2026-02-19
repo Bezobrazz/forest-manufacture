@@ -639,18 +639,22 @@ export default function NewTripPage() {
                   <span className="text-muted-foreground">Всього витрат</span>
                   <span className="tabular-nums">{formatUah(previewMetrics.metrics.total_costs_uah)}</span>
                 </div>
-                <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
-                  <span className="text-muted-foreground">Прибуток</span>
-                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_uah)}</span>
-                </div>
-                <div className="flex justify-between gap-2 py-1.5 border-b">
-                  <span className="text-muted-foreground">Прибуток/км</span>
-                  <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_per_km_uah)}</span>
-                </div>
-                <div className="flex justify-between gap-2 py-1.5 border-b">
-                  <span className="text-muted-foreground">ROI</span>
-                  <span className="tabular-nums">{formatPercent(previewMetrics.metrics.roi_percent)}</span>
-                </div>
+                {tripType !== "raw" && (
+                  <>
+                    <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
+                      <span className="text-muted-foreground">Прибуток</span>
+                      <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_uah)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 py-1.5 border-b">
+                      <span className="text-muted-foreground">Прибуток/км</span>
+                      <span className="tabular-nums">{formatUah(previewMetrics.metrics.profit_per_km_uah)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 py-1.5 border-b">
+                      <span className="text-muted-foreground">ROI</span>
+                      <span className="tabular-nums">{formatPercent(previewMetrics.metrics.roi_percent)}</span>
+                    </div>
+                  </>
+                )}
                 {tripType === "raw" && (() => {
                   const bags = parseNum(bagsCount);
                   const costPerBag =
@@ -663,10 +667,12 @@ export default function NewTripPage() {
                   ) : null;
                 })()}
               </div>
-              <div className="flex items-center gap-2 pt-2 font-medium">
-                <span>{statusIcon}</span>
-                <span>{statusLabel}</span>
-              </div>
+              {tripType !== "raw" && (
+                <div className="flex items-center gap-2 pt-2 font-medium">
+                  <span>{statusIcon}</span>
+                  <span>{statusLabel}</span>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
