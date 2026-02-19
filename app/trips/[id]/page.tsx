@@ -613,17 +613,18 @@ export default function TripDetailPage() {
                 </div>
               </>
             )}
-            {trip.trip_type === "raw" &&
-              trip.bags_count != null &&
-              trip.bags_count >= 1 &&
-              trip.total_costs_uah != null && (
-                <div className="flex justify-between py-1.5 border-b font-medium">
-                  <span className="text-muted-foreground">Вартість 1 мішка</span>
-                  <span className="tabular-nums">
-                    {formatUah(trip.total_costs_uah / trip.bags_count)}
-                  </span>
-                </div>
-              )}
+            {trip.trip_type === "raw" && (
+              <div className="flex justify-between py-1.5 border-b font-medium">
+                <span className="text-muted-foreground">Вартість 1 мішка</span>
+                <span className="tabular-nums">
+                  {trip.bags_count != null &&
+                  trip.bags_count >= 1 &&
+                  trip.total_costs_uah != null
+                    ? formatUah(trip.total_costs_uah / trip.bags_count)
+                    : "—"}
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
