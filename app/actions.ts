@@ -12,15 +12,17 @@ import type {
   Task,
   Supplier,
   SupplierDelivery,
+  SupplierAdvanceTransaction,
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import { getDateRangeForPeriod } from "@/lib/utils";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data: oldInventoryData, error: oldInventoryError } = await supabase
       .from("inventory")
@@ -77,7 +79,7 @@ export async function getInventory(): Promise<Inventory[]> {
   } catch (error) {
     console.error("Error in getInventory:", error);
     try {
-      const supabase = createServerClient();
+      const supabase = await createServerClient();
       const { data, error } = await supabase
         .from("inventory")
         .select("*, product:products(*, category:product_categories(*))")
@@ -101,7 +103,7 @@ export async function getInventoryTransactions(): Promise<
   InventoryTransaction[]
 > {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("inventory_transactions")
@@ -144,7 +146,7 @@ export async function updateInventoryQuantity(
     `Початок оновлення інвентаря для продукту ${productId}, нова кількість: ${quantity}`
   );
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data: currentInventory, error: getError } = await supabase
       .from("inventory")
@@ -250,7 +252,7 @@ export async function updateInventoryQuantity(
 // Відвантаження продукції зі складу
 export async function shipInventory(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const productId = Number.parseInt(formData.get("product_id") as string);
     const quantity = Number.parseFloat(formData.get("quantity") as string);
@@ -357,7 +359,7 @@ export async function shipInventory(formData: FormData) {
 
 export async function updateProduction(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = Number.parseInt(formData.get("shift_id") as string);
     const productId = Number.parseInt(formData.get("product_id") as string);
@@ -432,7 +434,7 @@ export async function updateProduction(formData: FormData) {
 
 export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
@@ -460,7 +462,7 @@ export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
 
 export async function getShifts(): Promise<ShiftWithDetails[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("shifts")
@@ -487,7 +489,7 @@ export async function getShifts(): Promise<ShiftWithDetails[]> {
 
 export async function getEmployees(): Promise<Employee[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("employees")
@@ -509,7 +511,7 @@ export async function getEmployees(): Promise<Employee[]> {
 // Оновлюємо функцію getProducts для кращої обробки помилок
 export async function getProducts(): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("products")
@@ -533,7 +535,7 @@ export async function getProductsByCategoryName(
   categoryName: string
 ): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data: categories } = await supabase
       .from("product_categories")
       .select("id")
@@ -559,7 +561,7 @@ export async function getProductsByCategoryName(
 // Оновлюємо функцію getProductCategories для кращої обробки помилок
 export async function getProductCategories(): Promise<ProductCategory[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("product_categories")
@@ -586,48 +588,20 @@ export async function getProductionStats(
   productionByCategory: Record<string, number>;
 }> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
-    // Визначаємо початкову дату в залежності від періоду
-    const now = new Date();
-    const selectedYear = year || now.getFullYear();
-    let startDate: Date;
-    let endDate: Date | null = null;
-
-    switch (period) {
-      case "year":
-        startDate = new Date(selectedYear, 0, 1); // 1 січня вибраного року
-        endDate = new Date(selectedYear, 11, 31, 23, 59, 59); // 31 грудня вибраного року
-        break;
-      case "month":
-        startDate = new Date(selectedYear, now.getMonth(), 1); // 1 число поточного місяця вибраного року
-        break;
-      case "week":
-        // Тиждень починається з понеділка (день 1), неділя = 0
-        const dayOfWeek = now.getDay(); // 0 = неділя, 1 = понеділок, ...
-        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Якщо неділя, віднімаємо 6 днів
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - daysToMonday);
-        startDate.setHours(0, 0, 0, 0); // Початок дня
-        break;
-      default:
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
-    }
+    const { startDate, endDate } = getDateRangeForPeriod(period, year);
 
     try {
-      // Спочатку отримуємо shifts з фільтром за датою
-      let query = supabase
+      const startStr = startDate.toISOString().split("T")[0];
+      const endStr = endDate.toISOString().split("T")[0];
+
+      const { data: shiftsData, error: shiftsError } = await supabase
         .from("shifts")
         .select("id")
-        .gte("shift_date", startDate.toISOString().split("T")[0]); // Використовуємо тільки дату без часу
-      
-      // Якщо є кінцева дата (для року), додаємо фільтр
-      if (endDate) {
-        query = query.lte("shift_date", endDate.toISOString().split("T")[0]);
-      }
-      
-      const { data: shiftsData, error: shiftsError } = await query;
+        .eq("status", "completed")
+        .gte("shift_date", startStr)
+        .lte("shift_date", endStr);
 
       if (shiftsError) {
         console.error("Error fetching shifts:", shiftsError);
@@ -690,7 +664,7 @@ export async function getProductionStats(
 
 export async function addEmployeeToShift(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = Number(formData.get("shift_id"));
     const employeeId = formData.get("employee_id");
@@ -731,7 +705,7 @@ export async function addEmployeeToShift(formData: FormData) {
 
 export async function createProductCategory(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name");
 
@@ -770,7 +744,7 @@ export async function createProductCategory(formData: FormData) {
 export async function completeShift(shiftId: number) {
   try {
     console.log("Starting completeShift function with shiftId:", shiftId);
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       console.error("No shiftId provided");
@@ -1052,7 +1026,7 @@ ${Object.entries(productsByCategory)
 
 export async function createShift(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
@@ -1124,7 +1098,7 @@ export async function createShiftWithEmployees(
   employeeIds: number[]
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
@@ -1216,7 +1190,7 @@ export async function createShiftWithEmployees(
 
 export async function updateShiftOpenedAt(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const shiftId = formData.get("shift_id");
     const opened_at = formData.get("opened_at");
@@ -1276,7 +1250,7 @@ export async function updateShiftOpenedAt(formData: FormData) {
 
 export async function deleteProductCategory(categoryId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!categoryId) {
       return { success: false, error: "Необхідно вказати ID категорії" };
@@ -1341,7 +1315,7 @@ export async function deleteProductCategory(categoryId: number) {
 
 export async function deleteProduct(productId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!productId) {
       return { success: false, error: "Необхідно вказати ID продукту" };
@@ -1377,7 +1351,7 @@ export async function deleteProduct(productId: number) {
 
 export async function deleteShift(shiftId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       return { success: false, error: "Необхідно вказати ID зміни" };
@@ -1567,7 +1541,7 @@ export async function deleteShift(shiftId: number) {
 
 export async function updateProduct(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name");
@@ -1642,7 +1616,7 @@ export async function updateProduct(formData: FormData) {
 
 export async function createEmployee(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const position = formData.get("position") as string;
@@ -1682,7 +1656,7 @@ export async function createEmployee(formData: FormData) {
 
 export async function createProduct(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -1748,7 +1722,7 @@ export async function removeEmployeeFromShift(
   employeeId: number
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId || !employeeId) {
       return {
@@ -1791,7 +1765,7 @@ export async function getShiftDetails(
   shiftId: number
 ): Promise<ShiftWithDetails | null> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!shiftId) {
       console.error("Shift ID is required");
@@ -1847,7 +1821,7 @@ export async function getShiftDetails(
 
 export async function manuallyUpdateInventoryFromProduction() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // 1. Отримуємо всі дані про виробництво
     const { data: productionData, error: productionError } = await supabase
@@ -1963,7 +1937,7 @@ export async function manuallyUpdateInventoryFromProduction() {
 
 export async function getTasks() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
@@ -1985,7 +1959,7 @@ export async function createTask(
   task: Omit<Task, "id" | "created_at" | "completed_at">
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .insert([task])
@@ -2006,7 +1980,7 @@ export async function createTask(
 
 export async function updateTaskStatus(taskId: number, status: Task["status"]) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .update({
@@ -2034,7 +2008,7 @@ export async function updateTaskStatus(taskId: number, status: Task["status"]) {
 
 export async function deleteTask(taskId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { error } = await supabase.from("tasks").delete().eq("id", taskId);
 
     if (error) {
@@ -2054,7 +2028,7 @@ export async function deleteTask(taskId: number) {
 
 export async function getActiveTasks() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
@@ -2076,7 +2050,7 @@ export async function getActiveTasks() {
 
 export async function getExpenseCategories() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expense_categories")
@@ -2100,7 +2074,7 @@ export async function createExpenseCategory(
   description: string | null
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expense_categories")
@@ -2122,7 +2096,7 @@ export async function createExpenseCategory(
 
 export async function deleteExpenseCategory(id: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { error } = await supabase
       .from("expense_categories")
@@ -2147,7 +2121,7 @@ export async function updateExpenseCategory(
   description: string | null
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!name.trim()) {
       throw new Error("Назва категорії не може бути порожньою");
@@ -2174,7 +2148,7 @@ export async function updateExpenseCategory(
 
 export async function getExpenses() {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("expenses")
@@ -2208,7 +2182,7 @@ export async function createExpense(
       throw new Error("Некоректні дані для створення витрати");
     }
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Перевіряємо існування категорії
     const { data: category, error: categoryError } = await supabase
@@ -2253,7 +2227,7 @@ export async function createExpense(
 
 export async function deleteExpense(id: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { error } = await supabase.from("expenses").delete().eq("id", id);
 
@@ -2280,7 +2254,7 @@ export async function updateExpense(
       throw new Error("Некоректні дані для оновлення витрати");
     }
 
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Перевіряємо існування категорії
     const { data: category, error: categoryError } = await supabase
@@ -2323,7 +2297,7 @@ export async function updateExpense(
 
 export async function updateEmployee(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name") as string;
@@ -2374,7 +2348,7 @@ export async function updateTask(
 ) {
   try {
     console.log("Updating task:", { taskId, data });
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     // Спочатку отримаємо поточну задачу
     const { data: currentTask, error: fetchError } = await supabase
@@ -2424,7 +2398,7 @@ export async function updateTask(
 // Отримання списку постачальників
 export async function getSuppliers(): Promise<Supplier[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("suppliers")
@@ -2446,7 +2420,7 @@ export async function getSuppliers(): Promise<Supplier[]> {
 // Створення постачальника
 export async function createSupplier(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const phone = formData.get("phone") as string;
@@ -2487,7 +2461,7 @@ export async function createSupplier(formData: FormData) {
 // Оновлення постачальника
 export async function updateSupplier(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name") as string;
@@ -2530,7 +2504,7 @@ export async function updateSupplier(formData: FormData) {
 // Видалення постачальника
 export async function deleteSupplier(supplierId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!supplierId) {
       return { success: false, error: "Необхідно вказати ID постачальника" };
@@ -2565,7 +2539,7 @@ export async function createSuppliersBatch(
   }>
 ) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!suppliers || suppliers.length === 0) {
       return {
@@ -2618,7 +2592,7 @@ export async function createSuppliersBatch(
 // Отримання складів
 export async function getWarehouses(): Promise<Warehouse[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("warehouses")
@@ -2639,7 +2613,7 @@ export async function getWarehouses(): Promise<Warehouse[]> {
 
 export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("supplier_deliveries")
@@ -2666,9 +2640,30 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
   }
 }
 
+export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceTransaction[]> {
+  try {
+    const supabase = await createServerClient();
+
+    const { data, error } = await supabase
+      .from("supplier_advance_transactions")
+      .select("*, supplier:suppliers(*)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching supplier advance transactions:", error);
+      return [];
+    }
+
+    return data as SupplierAdvanceTransaction[];
+  } catch (error) {
+    console.error("Error in getSupplierAdvanceTransactions:", error);
+    return [];
+  }
+}
+
 export async function createSupplierDelivery(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const supplierId = Number(formData.get("supplier_id"));
     const productId = Number(formData.get("product_id"));
@@ -2797,6 +2792,58 @@ export async function createSupplierDelivery(formData: FormData) {
       }
     }
 
+    const purchaseAmount =
+      pricePerUnit != null
+        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
+        : 0;
+    if (purchaseAmount > 0 && data?.id) {
+      const deliveryCreatedAt = (data as { created_at?: string }).created_at ?? new Date().toISOString();
+      const { data: advances } = await supabase
+        .from("supplier_advance_transactions")
+        .select("amount")
+        .eq("supplier_id", supplierId)
+        .lte("created_at", deliveryCreatedAt);
+      const advancesSum = (advances ?? []).reduce(
+        (s, r) => s + Number(r.amount ?? 0),
+        0,
+      );
+      const { data: prevDeliveries } = await supabase
+        .from("supplier_deliveries")
+        .select("advance_used")
+        .eq("supplier_id", supplierId)
+        .lt("created_at", deliveryCreatedAt);
+      const advanceUsedSum = (prevDeliveries ?? []).reduce(
+        (s, r) => s + Number(r.advance_used ?? 0),
+        0,
+      );
+      const availableAdvance = Math.max(
+        0,
+        Math.round((advancesSum - advanceUsedSum) * 100) / 100,
+      );
+      const deduct = Math.min(purchaseAmount, availableAdvance);
+      const deductRounded = Math.round(deduct * 100) / 100;
+
+      await supabase
+        .from("supplier_deliveries")
+        .update({ advance_used: deductRounded })
+        .eq("id", data.id);
+
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance - deductRounded) * 100) / 100;
+      const { error: advanceError } = await supabase
+        .from("suppliers")
+        .update({ advance: Math.max(0, newAdvance) })
+        .eq("id", supplierId);
+      if (advanceError) {
+        console.error("Error updating supplier advance:", advanceError);
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
     revalidatePath("/suppliers");
 
@@ -2810,9 +2857,257 @@ export async function createSupplierDelivery(formData: FormData) {
   }
 }
 
+export async function addSupplierAdvance(formData: FormData) {
+  try {
+    const supabase = await createServerClient();
+
+    const supplierId = Number(formData.get("supplier_id"));
+    const advanceAmount = Number(formData.get("advance"));
+
+    if (!supplierId) {
+      return {
+        success: false,
+        error: "Оберіть постачальника",
+      };
+    }
+
+    if (!advanceAmount || advanceAmount <= 0) {
+      return {
+        success: false,
+        error: "Введіть коректну суму авансу",
+      };
+    }
+
+    const { data: supplierRow } = await supabase
+      .from("suppliers")
+      .select("advance")
+      .eq("id", supplierId)
+      .single();
+
+    const currentAdvance = Number(supplierRow?.advance ?? 0);
+    const newAdvance = Math.round((currentAdvance + advanceAmount) * 100) / 100;
+
+    const deliveryDate = formData.get("delivery_date") as string;
+    const createdAt = deliveryDate
+      ? new Date(deliveryDate + "T12:00:00.000Z").toISOString()
+      : new Date().toISOString();
+
+    const { error: insertError } = await supabase
+      .from("supplier_advance_transactions")
+      .insert({
+        supplier_id: supplierId,
+        amount: advanceAmount,
+        created_at: createdAt,
+      });
+
+    if (insertError) {
+      console.error("Error inserting supplier advance transaction:", insertError);
+      return { success: false, error: insertError.message };
+    }
+
+    const { error } = await supabase
+      .from("suppliers")
+      .update({ advance: Math.max(0, newAdvance) })
+      .eq("id", supplierId);
+
+    if (error) {
+      console.error("Error updating supplier advance:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in addSupplierAdvance:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при додаванні авансу",
+    };
+  }
+}
+
+export async function deleteSupplierAdvanceTransaction(advanceId: number) {
+  try {
+    const supabase = await createServerClient();
+
+    if (!advanceId) {
+      return { success: false, error: "Необхідно вказати ID операції авансу" };
+    }
+
+    const { data: advanceRow, error: getError } = await supabase
+      .from("supplier_advance_transactions")
+      .select("supplier_id, amount")
+      .eq("id", advanceId)
+      .single();
+
+    if (getError || !advanceRow) {
+      return { success: false, error: "Операцію авансу не знайдено" };
+    }
+
+    const amount = Math.round(Number(advanceRow.amount) * 100) / 100;
+    const supplierId = advanceRow.supplier_id;
+
+    const { error: deleteError } = await supabase
+      .from("supplier_advance_transactions")
+      .delete()
+      .eq("id", advanceId);
+
+    if (deleteError) {
+      console.error("Error deleting advance transaction:", deleteError);
+      return { success: false, error: deleteError.message };
+    }
+
+    const { data: remainingAdvances } = await supabase
+      .from("supplier_advance_transactions")
+      .select("amount")
+      .eq("supplier_id", supplierId);
+    const advancesSum = (remainingAdvances ?? []).reduce(
+      (s, r) => s + Number(r.amount ?? 0),
+      0,
+    );
+
+    const { data: deliveries } = await supabase
+      .from("supplier_deliveries")
+      .select("advance_used")
+      .eq("supplier_id", supplierId);
+    const advanceUsedSum = (deliveries ?? []).reduce(
+      (s, r) => s + Number((r as { advance_used?: number }).advance_used ?? 0),
+      0,
+    );
+
+    const newAdvance = Math.round((advancesSum - advanceUsedSum) * 100) / 100;
+
+    await supabase
+      .from("suppliers")
+      .update({ advance: Math.max(0, newAdvance) })
+      .eq("id", supplierId);
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteSupplierAdvanceTransaction:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при видаленні авансу",
+    };
+  }
+}
+
+export async function updateSupplierAdvanceTransaction(formData: FormData) {
+  try {
+    const supabase = await createServerClient();
+
+    const advanceId = Number(formData.get("advance_id"));
+    const supplierId = Number(formData.get("supplier_id"));
+    const amount = Math.round(Number(formData.get("amount")) * 100) / 100;
+    const dateRaw = formData.get("date") as string;
+    const createdAt =
+      dateRaw && dateRaw.trim().length >= 10
+        ? new Date(dateRaw.trim().slice(0, 10) + "T12:00:00.000Z").toISOString()
+        : new Date().toISOString();
+
+    if (!advanceId || !supplierId) {
+      return {
+        success: false,
+        error: "Необхідно вказати ID та постачальника",
+      };
+    }
+
+    if (!amount || amount <= 0) {
+      return {
+        success: false,
+        error: "Введіть коректну суму авансу",
+      };
+    }
+
+    const { data: currentAdvance, error: getError } = await supabase
+      .from("supplier_advance_transactions")
+      .select("supplier_id, amount")
+      .eq("id", advanceId)
+      .single();
+
+    if (getError || !currentAdvance) {
+      return { success: false, error: "Операцію авансу не знайдено" };
+    }
+
+    const oldSupplierId = currentAdvance.supplier_id;
+    const oldAmount = Math.round(Number(currentAdvance.amount) * 100) / 100;
+
+    const { error: updateError } = await supabase
+      .from("supplier_advance_transactions")
+      .update({
+        supplier_id: supplierId,
+        amount,
+        created_at: createdAt,
+      })
+      .eq("id", advanceId);
+
+    if (updateError) {
+      console.error("Error updating advance transaction:", updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    if (oldSupplierId === supplierId) {
+      const delta = amount - oldAmount;
+      const { data: row } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdv = Number(row?.advance ?? 0);
+      const newAdv = Math.round((currentAdv + delta) * 100) / 100;
+      await supabase
+        .from("suppliers")
+        .update({ advance: Math.max(0, newAdv) })
+        .eq("id", supplierId);
+    } else {
+      const { data: oldRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", oldSupplierId)
+        .single();
+      const oldBal = Number(oldRow?.advance ?? 0);
+      await supabase
+        .from("suppliers")
+        .update({
+          advance: Math.max(0, Math.round((oldBal - oldAmount) * 100) / 100),
+        })
+        .eq("id", oldSupplierId);
+
+      const { data: newRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const newBal = Number(newRow?.advance ?? 0);
+      await supabase
+        .from("suppliers")
+        .update({
+          advance: Math.max(0, Math.round((newBal + amount) * 100) / 100),
+        })
+        .eq("id", supplierId);
+    }
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateSupplierAdvanceTransaction:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні авансу",
+    };
+  }
+}
+
 export async function updateSupplierDelivery(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const deliveryId = Number(formData.get("delivery_id"));
     const supplierId = Number(formData.get("supplier_id"));
@@ -2862,7 +3157,7 @@ export async function updateSupplierDelivery(formData: FormData) {
 
     const { data: currentDelivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id, material_product_id, material_quantity")
+      .select("quantity, product_id, warehouse_id, material_product_id, material_quantity, price_per_unit, advance_used, created_at")
       .eq("id", deliveryId)
       .single();
 
@@ -3084,6 +3379,81 @@ export async function updateSupplierDelivery(formData: FormData) {
       }
     }
 
+    const newAmount =
+      pricePerUnit != null
+        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
+        : 0;
+    const oldAdvanceUsed = Number((currentDelivery as { advance_used?: number }).advance_used ?? 0);
+    const deliveryCreatedAt =
+      (createdAt ? new Date(createdAt) : new Date((currentDelivery as { created_at?: string }).created_at ?? 0)).toISOString();
+
+    if (newAmount > 0) {
+      const { data: advances } = await supabase
+        .from("supplier_advance_transactions")
+        .select("amount")
+        .eq("supplier_id", supplierId)
+        .lte("created_at", deliveryCreatedAt);
+      const advancesSum = (advances ?? []).reduce(
+        (s, r) => s + Number(r.amount ?? 0),
+        0,
+      );
+      const { data: prevDeliveries } = await supabase
+        .from("supplier_deliveries")
+        .select("advance_used, created_at, id")
+        .eq("supplier_id", supplierId);
+      const advanceUsedSum = (prevDeliveries ?? [])
+        .filter(
+          (d) =>
+            d.id !== deliveryId &&
+            (new Date(d.created_at).getTime() < new Date(deliveryCreatedAt).getTime() ||
+              (new Date(d.created_at).getTime() === new Date(deliveryCreatedAt).getTime() && (d.id as number) < deliveryId)),
+        )
+        .reduce((s, r) => s + Number(r.advance_used ?? 0), 0);
+      const availableAdvance = Math.max(
+        0,
+        Math.round((advancesSum - advanceUsedSum) * 100) / 100,
+      );
+      const newDeduct = Math.min(newAmount, availableAdvance);
+      const newDeductRounded = Math.round(newDeduct * 100) / 100;
+
+      await supabase
+        .from("supplier_deliveries")
+        .update({ advance_used: newDeductRounded })
+        .eq("id", deliveryId);
+
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const advanceDelta = -oldAdvanceUsed + newDeductRounded;
+      const newAdvance = Math.round((currentAdvance + advanceDelta) * 100) / 100;
+      const { error: advanceError } = await supabase
+        .from("suppliers")
+        .update({ advance: Math.max(0, newAdvance) })
+        .eq("id", supplierId);
+      if (advanceError) {
+        console.error("Error updating supplier advance:", advanceError);
+      }
+    } else if (oldAdvanceUsed > 0) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", supplierId)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance + oldAdvanceUsed) * 100) / 100;
+      await supabase
+        .from("suppliers")
+        .update({ advance: Math.max(0, newAdvance) })
+        .eq("id", supplierId);
+      await supabase
+        .from("supplier_deliveries")
+        .update({ advance_used: 0 })
+        .eq("id", deliveryId);
+    }
+
     revalidatePath("/transactions/suppliers");
     revalidatePath("/suppliers");
 
@@ -3099,7 +3469,7 @@ export async function updateSupplierDelivery(formData: FormData) {
 
 export async function deleteSupplierDelivery(deliveryId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!deliveryId) {
       return { success: false, error: "Необхідно вказати ID транзакції" };
@@ -3107,12 +3477,30 @@ export async function deleteSupplierDelivery(deliveryId: number) {
 
     const { data: delivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id")
+      .select("quantity, product_id, warehouse_id, supplier_id, price_per_unit, advance_used")
       .eq("id", deliveryId)
       .single();
 
     if (getError || !delivery) {
       return { success: false, error: "Транзакцію не знайдено" };
+    }
+
+    const advanceUsed =
+      (delivery as { advance_used?: number }).advance_used != null
+        ? Math.round(Number((delivery as { advance_used: number }).advance_used) * 100) / 100
+        : 0;
+    if (advanceUsed > 0 && delivery.supplier_id) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("advance")
+        .eq("id", delivery.supplier_id)
+        .single();
+      const currentAdvance = Number(supplierRow?.advance ?? 0);
+      const newAdvance = Math.round((currentAdvance + advanceUsed) * 100) / 100;
+      await supabase
+        .from("suppliers")
+        .update({ advance: Math.max(0, newAdvance) })
+        .eq("id", delivery.supplier_id);
     }
 
     const { data: inventoryTransaction } = await supabase
@@ -3179,6 +3567,7 @@ export async function deleteSupplierDelivery(deliveryId: number) {
     }
 
     revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
 
     return { success: true };
   } catch (error) {
@@ -3193,7 +3582,7 @@ export async function deleteSupplierDelivery(deliveryId: number) {
 // Отримання виробничих матеріалів
 export async function getMaterials(): Promise<Product[]> {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from("products")
@@ -3216,7 +3605,7 @@ export async function getMaterials(): Promise<Product[]> {
 // Створення виробничого матеріалу
 export async function createMaterial(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
@@ -3276,7 +3665,7 @@ export async function createMaterial(formData: FormData) {
 // Оновлення виробничого матеріалу
 export async function updateMaterial(formData: FormData) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const id = Number(formData.get("id"));
     const name = formData.get("name");
@@ -3347,7 +3736,7 @@ export async function updateMaterial(formData: FormData) {
 // Видалення виробничого матеріалу
 export async function deleteMaterial(materialId: number) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     if (!materialId) {
       return { success: false, error: "Необхідно вказати ID матеріалу" };
@@ -3386,242 +3775,171 @@ export async function deleteMaterial(materialId: number) {
 
 // Отримання останніх змін для головної сторінки (тільки для відображення)
 export async function getRecentShifts(limit = 10) {
-  return unstable_cache(
-    async () => {
-      try {
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        const { data, error } = await supabase
-          .from("shifts")
-          .select(
-            `
+    const { data, error } = await supabase
+      .from("shifts")
+      .select(
+        `
             *,
             employees:shift_employees(*, employee:employees(*)),
             production:production(*, product:products(*, category:product_categories(*)))
           `
-          )
-          .order("created_at", { ascending: false })
-          .limit(limit);
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-        if (error) {
-          console.error("Error fetching recent shifts:", error);
-          return [];
-        }
-
-        return data as ShiftWithDetails[];
-      } catch (error) {
-        console.error("Error in getRecentShifts:", error);
-        return [];
-      }
-    },
-    [`recent-shifts-${limit}`],
-    {
-      revalidate: 60, // Кешуємо на 60 секунд
-      tags: ["shifts"],
+    if (error) {
+      console.error("Error fetching recent shifts:", error);
+      return [];
     }
-  )();
+
+    return data as ShiftWithDetails[];
+  } catch (error) {
+    console.error("Error in getRecentShifts:", error);
+    return [];
+  }
 }
 
 // Отримання кількості активних змін (тільки count, без даних)
 export async function getActiveShiftsCount() {
-  return unstable_cache(
-    async () => {
-      try {
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        const { data, error } = await supabase
-          .from("shifts")
-          .select("id")
-          .eq("status", "active");
+    const { data, error } = await supabase
+      .from("shifts")
+      .select("id")
+      .eq("status", "active");
 
-        if (error) {
-          console.error("Error fetching active shifts count:", error);
-          return 0;
-        }
-
-        return data?.length || 0;
-      } catch (error) {
-        console.error("Error in getActiveShiftsCount:", error);
-        return 0;
-      }
-    },
-    ["active-shifts-count"],
-    {
-      revalidate: 30, // Кешуємо на 30 секунд
-      tags: ["shifts"],
+    if (error) {
+      console.error("Error fetching active shifts count:", error);
+      return 0;
     }
-  )();
+
+    return data?.length || 0;
+  } catch (error) {
+    console.error("Error in getActiveShiftsCount:", error);
+    return 0;
+  }
 }
 
 // Отримання кількості працівників (тільки count)
 export async function getEmployeesCount() {
-  return unstable_cache(
-    async () => {
-      try {
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        const { data, error } = await supabase
-          .from("employees")
-          .select("id");
+    const { data, error } = await supabase.from("employees").select("id");
 
-        if (error) {
-          console.error("Error fetching employees count:", error);
-          return 0;
-        }
-
-        return data?.length || 0;
-      } catch (error) {
-        console.error("Error in getEmployeesCount:", error);
-        return 0;
-      }
-    },
-    ["employees-count"],
-    {
-      revalidate: 300, // Кешуємо на 5 хвилин
-      tags: ["employees"],
+    if (error) {
+      console.error("Error fetching employees count:", error);
+      return 0;
     }
-  )();
+
+    return data?.length || 0;
+  } catch (error) {
+    console.error("Error in getEmployeesCount:", error);
+    return 0;
+  }
 }
 
 // Отримання кількості продуктів (тільки count)
 export async function getProductsCount() {
-  return unstable_cache(
-    async () => {
-      try {
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        const { data, error } = await supabase
-          .from("products")
-          .select("id")
-          .or("product_type.eq.finished,product_type.is.null");
+    const { data, error } = await supabase
+      .from("products")
+      .select("id")
+      .or("product_type.eq.finished,product_type.is.null");
 
-        if (error) {
-          console.error("Error fetching products count:", error);
-          return 0;
-        }
-
-        return data?.length || 0;
-      } catch (error) {
-        console.error("Error in getProductsCount:", error);
-        return 0;
-      }
-    },
-    ["products-count"],
-    {
-      revalidate: 300, // Кешуємо на 5 хвилин
-      tags: ["products"],
+    if (error) {
+      console.error("Error fetching products count:", error);
+      return 0;
     }
-  )();
+
+    return data?.length || 0;
+  } catch (error) {
+    console.error("Error in getProductsCount:", error);
+    return 0;
+  }
 }
 
 // Отримання кількості матеріалів (тільки count)
 export async function getMaterialsCount() {
-  return unstable_cache(
-    async () => {
-      try {
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        const { data, error } = await supabase
-          .from("products")
-          .select("id")
-          .eq("product_type", "material");
+    const { data, error } = await supabase
+      .from("products")
+      .select("id")
+      .eq("product_type", "material");
 
-        if (error) {
-          console.error("Error fetching materials count:", error);
-          return 0;
-        }
-
-        return data?.length || 0;
-      } catch (error) {
-        console.error("Error in getMaterialsCount:", error);
-        return 0;
-      }
-    },
-    ["materials-count"],
-    {
-      revalidate: 300, // Кешуємо на 5 хвилин
-      tags: ["materials"],
+    if (error) {
+      console.error("Error fetching materials count:", error);
+      return 0;
     }
-  )();
+
+    return data?.length || 0;
+  } catch (error) {
+    console.error("Error in getMaterialsCount:", error);
+    return 0;
+  }
 }
 
 // Отримання загальної кількості на складі (тільки сума)
 export async function getTotalInventory() {
-  return unstable_cache(
-    async () => {
-      try {
-        // Використовуємо ту саму логіку, що і getInventory(), щоб отримати всі товари на складі
-        const supabase = createServerClient();
+  try {
+    const supabase = await createServerClient();
 
-        // Отримуємо готову продукцію зі старої таблиці inventory
-        const { data: oldInventoryData, error: oldInventoryError } = await supabase
-          .from("inventory")
-          .select("quantity, product:products(product_type, reward)");
+    const { data: oldInventoryData, error: oldInventoryError } = await supabase
+      .from("inventory")
+      .select("quantity, product:products(product_type, reward)");
 
-        // Отримуємо матеріали з warehouse_inventory для Main warehouse
-        const { data: mainWarehouseData } = await supabase
-          .from("warehouses")
-          .select("id")
-          .ilike("name", "%main%")
-          .limit(1)
-          .single();
+    const { data: mainWarehouseData } = await supabase
+      .from("warehouses")
+      .select("id")
+      .ilike("name", "%main%")
+      .limit(1)
+      .single();
 
-        let warehouseInventoryTotal = 0;
-        if (mainWarehouseData) {
-          const { data: warehouseData, error: warehouseError } = await supabase
-            .from("warehouse_inventory")
-            .select("quantity, product:products(product_type)")
-            .eq("warehouse_id", mainWarehouseData.id);
+    let warehouseInventoryTotal = 0;
+    if (mainWarehouseData) {
+      const { data: warehouseData, error: warehouseError } = await supabase
+        .from("warehouse_inventory")
+        .select("quantity, product:products(product_type)")
+        .eq("warehouse_id", mainWarehouseData.id);
 
-          if (!warehouseError && warehouseData) {
-            // Фільтруємо тільки матеріали (product_type === "material")
-            const materials = warehouseData.filter(
-              (item) => item.product?.product_type === "material"
-            );
-            warehouseInventoryTotal = materials.reduce(
-              (sum, item) => sum + (Number(item.quantity) || 0),
-              0
-            );
-          }
-        }
-
-        // Фільтруємо тільки готову продукцію (не матеріали) з inventory
-        let oldInventoryTotal = 0;
-        if (!oldInventoryError && oldInventoryData) {
-          const finishedProducts = oldInventoryData.filter(
-            (item) =>
-              item.product?.product_type !== "material" &&
-              (item.product?.product_type === "finished" ||
-                (item.product?.product_type === null && item.product?.reward !== null))
-          );
-          oldInventoryTotal = finishedProducts.reduce(
-            (sum, item) => sum + (Number(item.quantity) || 0),
-            0
-          );
-        }
-
-        // Округлюємо до цілого числа, оскільки товари не можуть бути дробовими
-        return Math.round(oldInventoryTotal + warehouseInventoryTotal);
-      } catch (error) {
-        console.error("Error in getTotalInventory:", error);
-        // Якщо помилка, спробуємо використати getInventory() як fallback
-        try {
-          const inventory = await getInventory();
-          return Math.round(
-            inventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
-          );
-        } catch (fallbackError) {
-          console.error("Error in getTotalInventory fallback:", fallbackError);
-          return 0;
-        }
+      if (!warehouseError && warehouseData) {
+        const materials = warehouseData.filter(
+          (item) => item.product?.product_type === "material"
+        );
+        warehouseInventoryTotal = materials.reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0),
+          0
+        );
       }
-    },
-    ["total-inventory"],
-    {
-      revalidate: 60, // Кешуємо на 60 секунд
-      tags: ["inventory"],
     }
-  )();
+
+    let oldInventoryTotal = 0;
+    if (!oldInventoryError && oldInventoryData) {
+      const finishedProducts = oldInventoryData.filter(
+        (item) =>
+          item.product?.product_type !== "material" &&
+          (item.product?.product_type === "finished" ||
+            (item.product?.product_type === null && item.product?.reward !== null))
+      );
+      oldInventoryTotal = finishedProducts.reduce(
+        (sum, item) => sum + (Number(item.quantity) || 0),
+        0
+      );
+    }
+
+    return Math.round(oldInventoryTotal + warehouseInventoryTotal);
+  } catch (error) {
+    console.error("Error in getTotalInventory:", error);
+    return 0;
+  }
 }
 
 // Оптимізована функція для завантаження всіх даних головної сторінки

@@ -91,6 +91,7 @@ export interface Supplier {
   name: string;
   phone: string | null;
   notes: string | null;
+  advance?: number;
   materials_balance?: number;
   created_at: string;
 }
@@ -110,9 +111,18 @@ export interface SupplierDelivery {
   price_per_unit: number | null;
   material_product_id?: number | null;
   material_quantity?: number | null;
+  advance_used?: number;
   created_at: string;
   supplier?: Supplier;
   product?: Product;
   material_product?: Product | null;
   warehouse?: Warehouse;
+}
+
+export interface SupplierAdvanceTransaction {
+  id: number;
+  supplier_id: number;
+  amount: number;
+  created_at: string;
+  supplier?: Supplier;
 }

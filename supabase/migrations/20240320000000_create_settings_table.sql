@@ -7,9 +7,9 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- Create a single row for settings
+-- Create a single row for settings (credentials set via app/dashboard, never in migrations)
 INSERT INTO settings (telegram_bot_token, telegram_chat_id)
-VALUES ('8080116318:AAHahivxwM-8_L079NOzs0T4LeRGmiVD1yE', '277758394')
+VALUES (NULL, NULL)
 ON CONFLICT DO NOTHING;
 
 -- Create function to update updated_at timestamp
