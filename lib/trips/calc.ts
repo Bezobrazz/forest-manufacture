@@ -25,6 +25,7 @@ export type TripInput = {
   driver_pay_uah_per_day?: number | null;
   driver_pay_percent_of_freight?: number | null;
   extra_costs_uah?: number | null;
+  bags_count?: number | null;
   notes?: string | null;
 };
 

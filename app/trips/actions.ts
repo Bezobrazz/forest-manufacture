@@ -69,6 +69,7 @@ export type TripDetail = {
   driver_pay_uah_per_day: number | null;
   driver_pay_percent_of_freight: number | null;
   extra_costs_uah: number | null;
+  bags_count: number | null;
   notes: string | null;
   distance_km: number | null;
   fuel_used_l: number | null;
@@ -126,12 +127,14 @@ export async function createTrip(
     driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
     driver_pay_percent_of_freight: payload.driver_pay_percent_of_freight,
     extra_costs_uah: payload.extra_costs_uah,
+    bags_count: payload.bags_count,
     notes: payload.notes,
   });
 
   if (!parsed.success) {
     const first = parsed.error.flatten().fieldErrors;
     const msg =
+      first.bags_count?.[0] ??
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
       first.trip_start_date?.[0] ??
@@ -179,6 +182,7 @@ export async function createTrip(
     driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
     driver_pay_percent_of_freight: d.driver_pay_percent_of_freight ?? null,
     extra_costs_uah: d.extra_costs_uah ?? 0,
+    bags_count: d.bags_count ?? null,
     notes: d.notes ?? null,
     distance_km: metrics.distance_km,
     fuel_used_l: metrics.fuel_used_l,
@@ -231,12 +235,14 @@ export async function updateTrip(
     driver_pay_uah_per_day: payload.driver_pay_uah_per_day,
     driver_pay_percent_of_freight: payload.driver_pay_percent_of_freight,
     extra_costs_uah: payload.extra_costs_uah,
+    bags_count: payload.bags_count,
     notes: payload.notes,
   });
 
   if (!parsed.success) {
     const first = parsed.error.flatten().fieldErrors;
     const msg =
+      first.bags_count?.[0] ??
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
       first.trip_start_date?.[0] ??
@@ -283,6 +289,7 @@ export async function updateTrip(
     driver_pay_uah_per_day: d.driver_pay_uah_per_day ?? 0,
     driver_pay_percent_of_freight: d.driver_pay_percent_of_freight ?? null,
     extra_costs_uah: d.extra_costs_uah ?? 0,
+    bags_count: d.bags_count ?? null,
     notes: d.notes ?? null,
     distance_km: metrics.distance_km,
     fuel_used_l: metrics.fuel_used_l,

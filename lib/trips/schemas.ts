@@ -35,6 +35,11 @@ export const tripFormSchema = z
     driver_pay_uah_per_day: optionalNum(),
     driver_pay_percent_of_freight: optionalNum(),
     extra_costs_uah: optionalNum(),
+    bags_count: z.preprocess((v) => {
+      if (v === "" || v === undefined || v === null) return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+    }, z.number().int().min(1).nullable()),
     notes: z
       .string()
       .max(2000)
@@ -56,6 +61,14 @@ export const tripFormSchema = z
       return data.trip_end_date >= data.trip_start_date;
     },
     { message: "Дата кінця не може бути раніше за дату початку", path: ["trip_end_date"] }
+  )
+  .refine(
+    (data) => {
+      if (data.trip_type !== "raw") return true;
+      const bags = data.bags_count;
+      return bags != null && bags >= 1;
+    },
+    { message: "Вкажіть кількість мішків для поїздки типу «Сировина»", path: ["bags_count"] }
   );
 
 export type TripFormValues = z.infer<typeof tripFormSchema>;

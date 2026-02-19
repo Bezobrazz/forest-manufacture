@@ -103,6 +103,7 @@ function fillStateFromTrip(
     driverPayPercentOfFreight:
       trip.driver_pay_percent_of_freight != null ? String(trip.driver_pay_percent_of_freight) : "0",
     extraCostsUah: trip.extra_costs_uah != null ? String(trip.extra_costs_uah) : "0",
+    bagsCount: trip.bags_count != null ? String(trip.bags_count) : "",
     notes: trip.notes?.trim() ?? "",
   };
 }
@@ -121,6 +122,7 @@ export default function TripDetailPage() {
   const [tripStartDate, setTripStartDate] = useState("");
   const [tripEndDate, setTripEndDate] = useState("");
   const [tripType, setTripType] = useState<TripType>("raw");
+  const [bagsCount, setBagsCount] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
@@ -162,6 +164,7 @@ export default function TripDetailPage() {
         setDriverPayUahPerDay(s.driverPayUahPerDay);
         setDriverPayPercentOfFreight(s.driverPayPercentOfFreight);
         setExtraCostsUah(s.extraCostsUah);
+        setBagsCount(s.bagsCount);
         setNotes(s.notes);
       }
       setLoading(false);
@@ -191,17 +194,20 @@ export default function TripDetailPage() {
       driver_pay_percent_of_freight:
         driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? 0 : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+      bags_count: tripType === "raw" ? (parseNum(bagsCount) ?? null) : null,
       notes: notes.trim() || null,
     };
     const parsed = tripFormSchema.safeParse(payloadForValidation);
     if (!parsed.success) {
       const first = parsed.error.flatten().fieldErrors;
       const msg =
+        first.bags_count?.[0] ??
         first.end_odometer_km?.[0] ??
         first.name?.[0] ??
         first.trip_start_date?.[0] ??
         first.trip_end_date?.[0] ??
         first.vehicle_id?.[0] ??
+        first.trip_type?.[0] ??
         parsed.error.message;
       toast.error(msg);
       return;
@@ -227,6 +233,7 @@ export default function TripDetailPage() {
       driver_pay_percent_of_freight:
         driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? null : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+      bags_count: tripType === "raw" ? (parseNum(bagsCount) ?? null) : null,
       notes: notes.trim() || null,
     };
     try {
@@ -344,6 +351,22 @@ export default function TripDetailPage() {
                 </ToggleGroupItem>
               </ToggleGroup>
             </Field>
+            {tripType === "raw" && (
+              <Field id="bags_count" label="Кількість мішків *">
+                <Input
+                  id="bags_count"
+                  type="text"
+                  inputMode="numeric"
+                  value={bagsCount}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setBagsCount(v);
+                  }}
+                  placeholder="0"
+                  required={tripType === "raw"}
+                />
+              </Field>
+            )}
             <Field id="vehicle" label="Транспорт *">
               <Select value={vehicleId} onValueChange={setVehicleId}>
                 <SelectTrigger id="vehicle">
@@ -586,6 +609,17 @@ export default function TripDetailPage() {
               <span className="text-muted-foreground">ROI</span>
               <span className="tabular-nums">{formatPercent(trip.roi_percent)}</span>
             </div>
+            {trip.trip_type === "raw" &&
+              trip.bags_count != null &&
+              trip.bags_count >= 1 &&
+              trip.total_costs_uah != null && (
+                <div className="flex justify-between py-1.5 border-b font-medium">
+                  <span className="text-muted-foreground">Вартість 1 мішка</span>
+                  <span className="tabular-nums">
+                    {formatUah(trip.total_costs_uah / trip.bags_count)}
+                  </span>
+                </div>
+              )}
           </div>
         </CardContent>
       </Card>

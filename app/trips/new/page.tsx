@@ -84,6 +84,7 @@ export default function NewTripPage() {
     new Date().toISOString().slice(0, 10)
   );
   const [tripType, setTripType] = useState<TripType>("raw");
+  const [bagsCount, setBagsCount] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
@@ -191,12 +192,14 @@ export default function NewTripPage() {
       driver_pay_percent_of_freight:
         driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? 0 : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+      bags_count: tripType === "raw" ? (parseNum(bagsCount) ?? null) : null,
       notes: notes.trim() || null,
     };
     const parsed = tripFormSchema.safeParse(payloadForValidation);
     if (!parsed.success) {
       const first = parsed.error.flatten().fieldErrors;
       const msg =
+        first.bags_count?.[0] ??
         first.end_odometer_km?.[0] ??
         first.name?.[0] ??
         first.trip_start_date?.[0] ??
@@ -228,6 +231,7 @@ export default function NewTripPage() {
       driver_pay_percent_of_freight:
         driverPayMode === "percent_of_freight" ? parseNum(driverPayPercentOfFreight) ?? null : null,
       extra_costs_uah: parseNum(extraCostsUah) ?? 0,
+      bags_count: tripType === "raw" ? (parseNum(bagsCount) ?? null) : null,
       notes: notes.trim() || null,
     };
     try {
@@ -335,6 +339,22 @@ export default function NewTripPage() {
                 </ToggleGroupItem>
               </ToggleGroup>
             </Field>
+            {tripType === "raw" && (
+              <Field id="bags_count" label="Кількість мішків *">
+                <Input
+                  id="bags_count"
+                  type="text"
+                  inputMode="numeric"
+                  value={bagsCount}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setBagsCount(v);
+                  }}
+                  placeholder="0"
+                  required={tripType === "raw"}
+                />
+              </Field>
+            )}
             <Field id="vehicle" label="Транспорт *">
               <Select
                 value={vehicleId}
@@ -631,6 +651,17 @@ export default function NewTripPage() {
                   <span className="text-muted-foreground">ROI</span>
                   <span className="tabular-nums">{formatPercent(previewMetrics.metrics.roi_percent)}</span>
                 </div>
+                {tripType === "raw" && (() => {
+                  const bags = parseNum(bagsCount);
+                  const costPerBag =
+                    bags != null && bags >= 1 ? previewMetrics.metrics.total_costs_uah / bags : null;
+                  return costPerBag != null ? (
+                    <div className="flex justify-between gap-2 py-1.5 border-b font-medium">
+                      <span className="text-muted-foreground">Вартість 1 мішка</span>
+                      <span className="tabular-nums">{formatUah(costPerBag)}</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
               <div className="flex items-center gap-2 pt-2 font-medium">
                 <span>{statusIcon}</span>
