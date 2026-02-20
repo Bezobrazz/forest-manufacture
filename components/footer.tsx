@@ -8,6 +8,8 @@ import {
   DollarSign,
   Truck,
   ShoppingCart,
+  Car,
+  MapPin,
 } from "lucide-react";
 
 export function Footer() {
@@ -107,6 +109,24 @@ export function Footer() {
                 >
                   <Truck className="h-4 w-4" />
                   Постачальники
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/vehicles"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <Car className="h-4 w-4" />
+                  Транспорт
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/trips"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Поїздки
                 </Link>
               </li>
               <li>
