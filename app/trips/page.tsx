@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
@@ -104,8 +105,17 @@ export default function TripsPage() {
     });
   }, [trips, dateFrom, dateTo, vehicleFilter, statusFilter]);
 
-  const totals = useMemo(() => {
-    if (filteredTrips.length === 0) return null;
+  const commerceTrips = useMemo(
+    () => filteredTrips.filter((t) => t.trip_type === "commerce"),
+    [filteredTrips]
+  );
+  const rawTrips = useMemo(
+    () => filteredTrips.filter((t) => t.trip_type === "raw"),
+    [filteredTrips]
+  );
+
+  const commerceTotals = useMemo(() => {
+    if (commerceTrips.length === 0) return null;
     let sumFreightUah = 0;
     let sumFuelCostUah = 0;
     let sumDriverCostUah = 0;
@@ -115,7 +125,7 @@ export default function TripsPage() {
     let sumRoiPercent = 0;
     let countRoi = 0;
     let countProfitPerKm = 0;
-    for (const t of filteredTrips) {
+    for (const t of commerceTrips) {
       sumFreightUah += t.freight_uah ?? 0;
       sumFuelCostUah += t.fuel_cost_uah ?? 0;
       sumDriverCostUah += t.driver_cost_uah ?? 0;
@@ -139,7 +149,20 @@ export default function TripsPage() {
       avgProfitPerKmUah: countProfitPerKm > 0 ? sumProfitPerKmUah / countProfitPerKm : null,
       avgRoiPercent: countRoi > 0 ? sumRoiPercent / countRoi : null,
     };
-  }, [filteredTrips]);
+  }, [commerceTrips]);
+
+  const rawTotals = useMemo(() => {
+    if (rawTrips.length === 0) return null;
+    let sumFreightUah = 0;
+    let sumTotalCostsUah = 0;
+    let sumBags = 0;
+    for (const t of rawTrips) {
+      sumFreightUah += t.freight_uah ?? 0;
+      sumTotalCostsUah += t.total_costs_uah ?? 0;
+      sumBags += t.bags_count ?? 0;
+    }
+    return { sumFreightUah, sumTotalCostsUah, sumBags };
+  }, [rawTrips]);
 
   return (
     <div className="container py-6 space-y-6">
@@ -283,59 +306,191 @@ export default function TripsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Транспорт</TableHead>
-                    <TableHead>Тип</TableHead>
-                    <TableHead className="text-right">Відстань</TableHead>
-                    <TableHead className="text-right">Фрахт</TableHead>
-                    <TableHead className="text-right">Витрати</TableHead>
-                    <TableHead className="text-right">Прибуток</TableHead>
-                    <TableHead className="text-right">ROI</TableHead>
-                    <TableHead>Статус</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTrips.map((t) => {
-                  const status = tripStatus(t.profit_uah);
-                  return (
-                    <TableRow
-                      key={t.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/trips/${t.id}`)}
-                    >
-                      <TableCell className="font-medium">
-                        {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
-                      </TableCell>
-                      <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
-                      <TableCell>
-                        {t.trip_type ? tripTypeLabels[t.trip_type] ?? t.trip_type : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatKm(t.distance_km)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatUah(t.freight_uah)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatUah(t.total_costs_uah)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatUah(t.profit_uah)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatPercent(t.roi_percent)}
-                      </TableCell>
-                      <TableCell>
-                        <span title={status.label}>{status.icon}</span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                  })}
-                </TableBody>
-              </Table>
+              <Tabs defaultValue="commerce" className="w-full">
+                <TabsList className="grid w-full max-w-[280px] grid-cols-2">
+                  <TabsTrigger value="commerce">
+                    {tripTypeLabels.commerce} ({commerceTrips.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="raw">
+                    {tripTypeLabels.raw} ({rawTrips.length})
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="commerce" className="mt-4 space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Назва</TableHead>
+                        <TableHead>Транспорт</TableHead>
+                        <TableHead className="text-right">Відстань</TableHead>
+                        <TableHead className="text-right">Фрахт</TableHead>
+                        <TableHead className="text-right">Витрати</TableHead>
+                        <TableHead className="text-right">Прибуток</TableHead>
+                        <TableHead className="text-right">ROI</TableHead>
+                        <TableHead>Статус</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {commerceTrips.map((t) => {
+                        const status = tripStatus(t.profit_uah);
+                        return (
+                          <TableRow
+                            key={t.id}
+                            className="cursor-pointer"
+                            onClick={() => router.push(`/trips/${t.id}`)}
+                          >
+                            <TableCell className="font-medium">
+                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                            </TableCell>
+                            <TableCell>{t.name?.trim() ?? "—"}</TableCell>
+                            <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatKm(t.distance_km)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatUah(t.freight_uah)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatUah(t.total_costs_uah)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatUah(t.profit_uah)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatPercent(t.roi_percent)}
+                            </TableCell>
+                            <TableCell>
+                              <span title={status.label}>{status.icon}</span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                  {commerceTrips.length === 0 && (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      Немає комерційних рейсів за обраними фільтрами
+                    </p>
+                  )}
+                  {commerceTotals && (
+                    <div className="rounded-lg border p-4">
+                      <h3 className="text-sm font-medium mb-3">Підсумки (Комерція)</h3>
+                      <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Фрахт (дохід)</span>
+                          <span className="tabular-nums font-medium">
+                            {formatUah(commerceTotals.sumFreightUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Паливо</span>
+                          <span className="tabular-nums">
+                            {formatUah(commerceTotals.sumFuelCostUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Водій</span>
+                          <span className="tabular-nums">
+                            {formatUah(commerceTotals.sumDriverCostUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Всього витрат</span>
+                          <span className="tabular-nums font-medium">
+                            {formatUah(commerceTotals.sumTotalCostsUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Прибуток</span>
+                          <span className="tabular-nums font-medium">
+                            {formatUah(commerceTotals.sumProfitUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Середній прибуток/км</span>
+                          <span className="tabular-nums">
+                            {formatUah(commerceTotals.avgProfitPerKmUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Середній ROI</span>
+                          <span className="tabular-nums">
+                            {formatPercent(commerceTotals.avgRoiPercent)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="raw" className="mt-4 space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Транспорт</TableHead>
+                        <TableHead className="text-right">Відстань</TableHead>
+                        <TableHead className="text-right">Фрахт</TableHead>
+                        <TableHead className="text-right">Витрати</TableHead>
+                        <TableHead className="text-right">Мішки</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rawTrips.map((t) => (
+                        <TableRow
+                          key={t.id}
+                          className="cursor-pointer"
+                          onClick={() => router.push(`/trips/${t.id}`)}
+                        >
+                          <TableCell className="font-medium">
+                            {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                          </TableCell>
+                          <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatKm(t.distance_km)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatUah(t.freight_uah)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatUah(t.total_costs_uah)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {t.bags_count != null ? t.bags_count : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {rawTrips.length === 0 && (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      Немає рейсів «Сировина» за обраними фільтрами
+                    </p>
+                  )}
+                  {rawTotals && (
+                    <div className="rounded-lg border p-4">
+                      <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
+                      <div className="grid gap-3 text-sm sm:grid-cols-3">
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Фрахт (дохід)</span>
+                          <span className="tabular-nums font-medium">
+                            {formatUah(rawTotals.sumFreightUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Всього витрат</span>
+                          <span className="tabular-nums font-medium">
+                            {formatUah(rawTotals.sumTotalCostsUah)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2 py-2 border-b">
+                          <span className="text-muted-foreground">Всього мішків</span>
+                          <span className="tabular-nums font-medium">{rawTotals.sumBags}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
               {filteredTrips.length === 0 && trips.length > 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   За обраними фільтрами рейсів не знайдено
@@ -343,64 +498,6 @@ export default function TripsPage() {
               )}
             </CardContent>
           </Card>
-
-          {totals && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Підсумки по фільтру</CardTitle>
-                <CardDescription>
-                  Суми та середні за {filteredTrips.length}{" "}
-                  {filteredTrips.length === 1 ? "рейс" : filteredTrips.length < 5 ? "рейси" : "рейсів"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Фрахт (дохід)</span>
-                    <span className="tabular-nums font-medium">
-                      {formatUah(totals.sumFreightUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Паливо</span>
-                    <span className="tabular-nums">
-                      {formatUah(totals.sumFuelCostUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Водій</span>
-                    <span className="tabular-nums">
-                      {formatUah(totals.sumDriverCostUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Всього витрат</span>
-                    <span className="tabular-nums font-medium">
-                      {formatUah(totals.sumTotalCostsUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Прибуток</span>
-                    <span className="tabular-nums font-medium">
-                      {formatUah(totals.sumProfitUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Середній прибуток/км</span>
-                    <span className="tabular-nums">
-                      {formatUah(totals.avgProfitPerKmUah)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2 py-2 border-b">
-                    <span className="text-muted-foreground">Середній ROI</span>
-                    <span className="tabular-nums">
-                      {formatPercent(totals.avgRoiPercent)}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
     </div>

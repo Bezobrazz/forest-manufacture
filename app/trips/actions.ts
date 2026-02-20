@@ -28,6 +28,7 @@ export type TripListItem = {
   profit_uah: number | null;
   profit_per_km_uah: number | null;
   roi_percent: number | null;
+  bags_count: number | null;
 };
 
 /** Повертає список рейсів із snapshot-полями (distance_km, total_costs_uah, profit_uah тощо). Звіти та підсумки використовують ці збережені значення без перерахунку на льоту. */
@@ -37,7 +38,7 @@ export async function getTrips(): Promise<TripListItem[]> {
   if (!user) return [];
   const { data, error } = await supabase
     .from("trips")
-    .select("id, name, trip_date, trip_start_date, trip_end_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, vehicle:vehicles(name)")
+    .select("id, name, trip_date, trip_start_date, trip_end_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, bags_count, vehicle:vehicles(name)")
     .eq("user_id", user.id)
     .order("trip_start_date", { ascending: false });
   if (error) {
