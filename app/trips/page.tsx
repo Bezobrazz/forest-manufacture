@@ -430,30 +430,42 @@ export default function TripsPage() {
                         <TableHead className="text-right">Відстань</TableHead>
                         <TableHead className="text-right">Витрати</TableHead>
                         <TableHead className="text-right">Мішки</TableHead>
+                        <TableHead className="text-right">Ціна мішка</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rawTrips.map((t) => (
-                        <TableRow
-                          key={t.id}
-                          className="cursor-pointer"
-                          onClick={() => router.push(`/trips/${t.id}`)}
-                        >
-                          <TableCell className="font-medium">
-                            {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
-                          </TableCell>
-                          <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatKm(t.distance_km)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatUah(t.total_costs_uah)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {t.bags_count != null ? t.bags_count : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {rawTrips.map((t) => {
+                        const costPerBag =
+                          t.bags_count != null &&
+                          t.bags_count >= 1 &&
+                          t.total_costs_uah != null
+                            ? t.total_costs_uah / t.bags_count
+                            : null;
+                        return (
+                          <TableRow
+                            key={t.id}
+                            className="cursor-pointer"
+                            onClick={() => router.push(`/trips/${t.id}`)}
+                          >
+                            <TableCell className="font-medium">
+                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                            </TableCell>
+                            <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatKm(t.distance_km)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatUah(t.total_costs_uah)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {t.bags_count != null ? t.bags_count : "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatUah(costPerBag)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                   {rawTrips.length === 0 && (
