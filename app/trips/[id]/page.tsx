@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
@@ -253,8 +254,84 @@ export default function TripDetailPage() {
 
   if (loading) {
     return (
-      <div className="container py-6">
-        <p className="text-muted-foreground">Завантаження...</p>
+      <div className="container py-6 max-w-3xl">
+        <div className="mb-6">
+          <Link
+            href="/trips"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Назад до поїздок</span>
+          </Link>
+          <div className="flex items-center gap-2 mt-2">
+            <MapPin className="h-6 w-6 text-muted-foreground" />
+            <Skeleton className="h-8 w-56" />
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Деталі та редагування поїздки
+          </p>
+        </div>
+        <Card>
+          <CardHeader className="pb-4">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-4 w-72 mt-2" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-10 w-48" />
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <Separator />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-20" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
