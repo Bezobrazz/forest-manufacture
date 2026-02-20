@@ -191,7 +191,77 @@ export default function TripsPage() {
       </div>
 
       {isLoading ? (
-        <Skeleton className="h-64" />
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Фільтри</CardTitle>
+              <CardDescription>
+                Обмежити список за датою, транспортом або статусом
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-end gap-4">
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-10 w-[140px]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-14" />
+                  <Skeleton className="h-10 w-[140px]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-10 w-[160px]" />
+                </div>
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-14" />
+                  <Skeleton className="h-10 w-[140px]" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-24" />
+              <Skeleton className="h-4 w-80 mt-2" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="inline-flex h-10 rounded-md bg-muted p-1 gap-1">
+                <Skeleton className="h-8 w-[120px]" />
+                <Skeleton className="h-8 w-[100px]" />
+              </div>
+              <div className="rounded-md border">
+                <div className="flex border-b bg-muted/50">
+                  <Skeleton className="h-10 flex-1 min-w-[80px]" />
+                  <Skeleton className="h-10 flex-1 min-w-[100px]" />
+                  <Skeleton className="h-10 flex-1 min-w-[90px]" />
+                  <Skeleton className="h-10 flex-1 min-w-[80px]" />
+                  <Skeleton className="h-10 flex-1 min-w-[70px]" />
+                  <Skeleton className="h-10 flex-1 min-w-[80px]" />
+                </div>
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="flex border-b last:border-0">
+                    <Skeleton className="h-12 flex-1 min-w-[80px] rounded-none" />
+                    <Skeleton className="h-12 flex-1 min-w-[100px] rounded-none" />
+                    <Skeleton className="h-12 flex-1 min-w-[90px] rounded-none" />
+                    <Skeleton className="h-12 flex-1 min-w-[80px] rounded-none" />
+                    <Skeleton className="h-12 flex-1 min-w-[70px] rounded-none" />
+                    <Skeleton className="h-12 flex-1 min-w-[80px] rounded-none" />
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg border p-4 space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-full" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       ) : trips.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
