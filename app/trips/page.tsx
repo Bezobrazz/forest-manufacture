@@ -153,15 +153,14 @@ export default function TripsPage() {
 
   const rawTotals = useMemo(() => {
     if (rawTrips.length === 0) return null;
-    let sumFreightUah = 0;
     let sumTotalCostsUah = 0;
     let sumBags = 0;
     for (const t of rawTrips) {
-      sumFreightUah += t.freight_uah ?? 0;
       sumTotalCostsUah += t.total_costs_uah ?? 0;
       sumBags += t.bags_count ?? 0;
     }
-    return { sumFreightUah, sumTotalCostsUah, sumBags };
+    const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
+    return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
   }, [rawTrips]);
 
   return (
@@ -429,7 +428,6 @@ export default function TripsPage() {
                         <TableHead>Дата</TableHead>
                         <TableHead>Транспорт</TableHead>
                         <TableHead className="text-right">Відстань</TableHead>
-                        <TableHead className="text-right">Фрахт</TableHead>
                         <TableHead className="text-right">Витрати</TableHead>
                         <TableHead className="text-right">Мішки</TableHead>
                       </TableRow>
@@ -447,9 +445,6 @@ export default function TripsPage() {
                           <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatKm(t.distance_km)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatUah(t.freight_uah)}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatUah(t.total_costs_uah)}
@@ -471,9 +466,9 @@ export default function TripsPage() {
                       <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
                       <div className="grid gap-3 text-sm sm:grid-cols-3">
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Фрахт (дохід)</span>
+                          <span className="text-muted-foreground">Середня вартість мішка</span>
                           <span className="tabular-nums font-medium">
-                            {formatUah(rawTotals.sumFreightUah)}
+                            {formatUah(rawTotals.avgCostPerBagUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
