@@ -59,6 +59,9 @@ import { uk } from "date-fns/locale";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
+const FILTER_PURCHASE = -1;
+const FILTER_WAGES = -2;
+
 interface ExpenseCategory {
   id: number;
   name: string;
@@ -401,22 +404,33 @@ export default function ExpensesPage() {
   const getHistoryItemDate = (item: HistoryItem) =>
     item.type === "expense" ? item.expense.date : item.date;
 
+  const includePurchases =
+    selectedCategories.length === 0 ||
+    selectedCategories.includes(FILTER_PURCHASE);
+  const includeWages =
+    selectedCategories.length === 0 ||
+    selectedCategories.includes(FILTER_WAGES);
+
   const combinedHistory: HistoryItem[] = [
     ...filteredExpenses.map((e) => ({ type: "expense" as const, expense: e })),
-    ...filteredPurchaseExpenses.map((p) => ({
-      type: "purchase" as const,
-      id: p.id,
-      amount: p.amount,
-      date: p.date,
-      delivery: p.delivery,
-    })),
-    ...filteredWageExpenses.map((w) => ({
-      type: "wage" as const,
-      id: w.id,
-      amount: w.amount,
-      date: w.date,
-      shift: w.shift,
-    })),
+    ...(includePurchases
+      ? filteredPurchaseExpenses.map((p) => ({
+          type: "purchase" as const,
+          id: p.id,
+          amount: p.amount,
+          date: p.date,
+          delivery: p.delivery,
+        }))
+      : []),
+    ...(includeWages
+      ? filteredWageExpenses.map((w) => ({
+          type: "wage" as const,
+          id: w.id,
+          amount: w.amount,
+          date: w.date,
+          shift: w.shift,
+        }))
+      : []),
   ].sort(
     (a, b) =>
       new Date(getHistoryItemDate(b)).getTime() -
@@ -465,8 +479,11 @@ export default function ExpensesPage() {
     (sum, w) => sum + w.amount,
     0
   );
-  const totalExpenses =
-    totalExpensesAmount + totalPurchaseAmount + totalWagesAmount;
+  const totalExpenses = combinedHistory.reduce(
+    (sum, item) =>
+      sum + (item.type === "expense" ? item.expense.amount : item.amount),
+    0
+  );
 
   const expensesByCategory = categories.map((category) => {
     const categoryExpenses = filteredExpenses.filter(
@@ -1147,6 +1164,62 @@ export default function ExpensesPage() {
                   )}
                 </div>
                 <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="category-purchase"
+                      checked={selectedCategories.includes(FILTER_PURCHASE)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories([
+                            ...selectedCategories,
+                            FILTER_PURCHASE,
+                          ]);
+                        } else {
+                          setSelectedCategories(
+                            selectedCategories.filter(
+                              (id) => id !== FILTER_PURCHASE
+                            )
+                          );
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <label
+                      htmlFor="category-purchase"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Закупівля сировини
+                    </label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="category-wages"
+                      checked={selectedCategories.includes(FILTER_WAGES)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories([
+                            ...selectedCategories,
+                            FILTER_WAGES,
+                          ]);
+                        } else {
+                          setSelectedCategories(
+                            selectedCategories.filter(
+                              (id) => id !== FILTER_WAGES
+                            )
+                          );
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <label
+                      htmlFor="category-wages"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      З/П Лінія
+                    </label>
+                  </div>
                   {categories.map((category) => (
                     <div
                       key={category.id}
