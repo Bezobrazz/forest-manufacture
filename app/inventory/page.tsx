@@ -436,7 +436,7 @@ export default function InventoryPage() {
                       )
                       .map((item) => (
                         <div
-                          key={item.id}
+                          key={item.id ? item.id : `product-${item.product_id}`}
                           className="flex items-center justify-between py-2 border-b last:border-0"
                         >
                           <div className="flex items-center gap-2">
