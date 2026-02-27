@@ -21,6 +21,7 @@ import {
   deleteExpense,
   updateExpense,
   updateExpenseCategory,
+  getSupplierDeliveries,
 } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import type { ShiftWithDetails } from "@/lib/types";
+import type { ShiftWithDetails, SupplierDelivery } from "@/lib/types";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Popover,
@@ -163,6 +164,9 @@ export default function ExpensesPage() {
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [supplierDeliveries, setSupplierDeliveries] = useState<
+    SupplierDelivery[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -240,14 +244,17 @@ export default function ExpensesPage() {
       setDatabaseError(false);
 
       try {
-        const [shiftsData, categoriesData, expensesData] = await Promise.all([
-          getShifts(),
-          getExpenseCategories(),
-          getExpenses(),
-        ]);
+        const [shiftsData, categoriesData, expensesData, deliveriesData] =
+          await Promise.all([
+            getShifts(),
+            getExpenseCategories(),
+            getExpenses(),
+            getSupplierDeliveries(),
+          ]);
         setShifts(shiftsData);
         setCategories(categoriesData);
         setExpenses(expensesData);
+        setSupplierDeliveries(deliveriesData);
       } catch (err: any) {
         console.error("Помилка при завантаженні даних:", err);
         if (err?.message?.includes("Supabase")) {
@@ -268,33 +275,15 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), 0, 1);
       case "month":
         return new Date(now.getFullYear(), now.getMonth(), 1);
-      case "week":
+      case "week": {
         const day = now.getDay();
-        // Розрахунок для початку тижня (субота)
-        // Якщо сьогодні субота (6), то початок тижня - сьогодні
-        // Якщо сьогодні неділя (0), то початок тижня - вчора (субота)
-        // Інакше - минула субота
-        let diff;
-        if (day === 6) {
-          diff = 0; // Сьогодні субота
-        } else if (day === 0) {
-          diff = -1; // Вчора була субота
-        } else {
-          diff = -(day + 1); // Дні до минулої суботи
-        }
+        const saturdayOffset =
+          day === 6 ? 0 : day === 0 ? -1 : -(day + 1);
         const startDate = new Date(now);
-        startDate.setDate(now.getDate() + diff);
+        startDate.setDate(now.getDate() + saturdayOffset);
         startDate.setHours(0, 0, 0, 0);
-
-        // Діагностика для тижня
-        console.log("Week start calculation:", {
-          currentDay: day,
-          diff,
-          startDate: startDate.toISOString(),
-          currentDate: now.toISOString(),
-        });
-
         return startDate;
+      }
       case "day":
         return new Date(now.getFullYear(), now.getMonth(), now.getDate());
       default:
@@ -309,34 +298,15 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), 11, 31);
       case "month":
         return new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      case "week":
+      case "week": {
         const day = now.getDay();
-        // Розрахунок для кінця тижня (п'ятниця)
-        // Якщо сьогодні п'ятниця (5), то кінець тижня - сьогодні
-        // Якщо сьогодні до п'ятниці, то кінець тижня - ця п'ятниця
-        // Якщо сьогодні після п'ятниці, то кінець тижня - наступна п'ятниця
-        let diff;
-        if (day === 5) {
-          diff = 0; // Сьогодні п'ятниця
-        } else if (day < 5) {
-          diff = 5 - day; // Дні до цієї п'ятниці
-        } else {
-          diff = 12 - day; // Дні до наступної п'ятниці
-        }
+        const fridayOffset = day === 5 ? 0 : day === 6 ? -1 : 5 - day;
         const endDate = new Date(now);
-        endDate.setDate(now.getDate() + diff);
+        endDate.setDate(now.getDate() + fridayOffset);
         endDate.setHours(23, 59, 59, 999);
-
-        // Діагностика для тижня
-        console.log("Week end calculation:", {
-          currentDay: day,
-          diff,
-          endDate: endDate.toISOString(),
-          currentDate: now.toISOString(),
-        });
-
         return endDate;
-      case "day":
+      }
+      case "day": {
         const dayEnd = new Date(
           now.getFullYear(),
           now.getMonth(),
@@ -344,65 +314,82 @@ export default function ExpensesPage() {
         );
         dayEnd.setHours(23, 59, 59, 999);
         return dayEnd;
+      }
       default:
         return now;
     }
   };
 
-  const filteredExpenses = expenses.filter((expense) => {
-    const expenseDate = new Date(expense.date);
+  const toLocalDateOnly = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
-    // Фільтрація за датою
-    let dateFilter;
+  const isDateInRange = (date: Date) => {
+    let startDate: Date;
+    let endDate: Date;
     if (dateRange.from && dateRange.to) {
-      // Встановлюємо час для початкової дати на початок дня (00:00:00)
-      const startDate = new Date(dateRange.from);
+      startDate = new Date(dateRange.from);
       startDate.setHours(0, 0, 0, 0);
-
-      // Встановлюємо час для кінцевої дати на кінець дня (23:59:59)
-      const endDate = new Date(dateRange.to);
+      endDate = new Date(dateRange.to);
       endDate.setHours(23, 59, 59, 999);
-
-      dateFilter = expenseDate >= startDate && expenseDate <= endDate;
-
-      // Логування для діагностики
-      console.log("Date range filter:", {
-        expenseDate: expenseDate.toISOString(),
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        isInRange: dateFilter,
-      });
     } else {
-      const startDate = getStartDate(period);
-      const endDate = getEndDate(period);
-      dateFilter = expenseDate >= startDate && expenseDate <= endDate;
-
-      // Логування для діагностики
-      if (period === "week") {
-        console.log("Week filter for expense:", {
-          expenseId: expense.id,
-          expenseDate: expenseDate.toISOString(),
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          isInRange: dateFilter,
-          expenseDateMs: expenseDate.getTime(),
-          startDateMs: startDate.getTime(),
-          endDateMs: endDate.getTime(),
-        });
-      }
+      startDate = getStartDate(period);
+      endDate = getEndDate(period);
     }
+    const t = toLocalDateOnly(date);
+    return t >= toLocalDateOnly(startDate) && t <= toLocalDateOnly(endDate);
+  };
 
-    // Фільтрація за категоріями
+  const parseDate = (value: string): Date => {
+    if (!value) return new Date();
+    if (value.includes("T")) return new Date(value);
+    return new Date(value + "T12:00:00");
+  };
+
+  const filteredExpenses = expenses.filter((expense) => {
+    const expenseDate = parseDate(expense.date);
+    const dateFilter = isDateInRange(expenseDate);
     const categoryFilter =
       selectedCategories.length === 0 ||
       selectedCategories.includes(expense.category_id);
-
     return dateFilter && categoryFilter;
   });
 
-  // Розрахунок пагінації
-  const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
-  const paginatedExpenses = filteredExpenses.slice(
+  const purchaseExpenseItems = supplierDeliveries
+    .filter((d) => Number(d.quantity) * Number(d.price_per_unit ?? 0) > 0)
+    .map((d) => ({
+      id: `delivery-${d.id}`,
+      amount:
+        Math.round(
+          Number(d.quantity) * Number(d.price_per_unit ?? 0) * 100
+        ) / 100,
+      date: d.created_at,
+      delivery: d,
+    }));
+
+  const filteredPurchaseExpenses = purchaseExpenseItems.filter((p) =>
+    isDateInRange(parseDate(p.date))
+  );
+
+  type HistoryItem =
+    | { type: "expense"; expense: Expense }
+    | { type: "purchase"; id: string; amount: number; date: string; delivery: SupplierDelivery };
+  const combinedHistory: HistoryItem[] = [
+    ...filteredExpenses.map((e) => ({ type: "expense" as const, expense: e })),
+    ...filteredPurchaseExpenses.map((p) => ({
+      type: "purchase" as const,
+      id: p.id,
+      amount: p.amount,
+      date: p.date,
+      delivery: p.delivery,
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.type === "expense" ? b.expense.date : b.date).getTime() -
+      new Date(a.type === "expense" ? a.expense.date : a.date).getTime()
+  );
+
+  const totalPages = Math.ceil(combinedHistory.length / itemsPerPage);
+  const paginatedHistory = combinedHistory.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -431,10 +418,15 @@ export default function ExpensesPage() {
     setCurrentPage(1);
   }, [period]);
 
-  const totalExpenses = filteredExpenses.reduce(
+  const totalExpensesAmount = filteredExpenses.reduce(
     (sum, expense) => sum + expense.amount,
     0
   );
+  const totalPurchaseAmount = filteredPurchaseExpenses.reduce(
+    (sum, p) => sum + p.amount,
+    0
+  );
+  const totalExpenses = totalExpensesAmount + totalPurchaseAmount;
 
   const expensesByCategory = categories.map((category) => {
     const categoryExpenses = filteredExpenses.filter(
@@ -1159,6 +1151,24 @@ export default function ExpensesPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Закупівля сировини</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Витрати на сировину з постачальників
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold">
+                {formatNumberWithUnit(totalPurchaseAmount, "₴")}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {filteredPurchaseExpenses.length} поставок
+              </p>
+            </div>
+          </CardContent>
+        </Card>
         {expensesByCategory.map((category) => (
           <Card key={category.id}>
             <CardHeader className="pb-2">
@@ -1219,77 +1229,109 @@ export default function ExpensesPage() {
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Історія витрат</h2>
-        {filteredExpenses.length === 0 ? (
+        {combinedHistory.length === 0 ? (
           <Card>
             <CardContent className="py-8">
               <div className="text-center">
                 <p className="text-muted-foreground">
-                  Немає зареєстрованих витрат
+                  Немає зареєстрованих витрат та закупівель сировини
                 </p>
               </div>
             </CardContent>
           </Card>
         ) : (
           <>
-            {paginatedExpenses.map((expense) => (
-              <Card key={expense.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      {expense.category?.name || "Без категорії"}
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <div className="text-lg font-bold">
-                        {formatNumberWithUnit(expense.amount, "₴")}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditExpense(expense)}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
+            {paginatedHistory.map((item) =>
+              item.type === "expense" ? (
+                <Card key={item.expense.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">
+                        {item.expense.category?.name || "Без категорії"}
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <div className="text-lg font-bold">
+                          {formatNumberWithUnit(item.expense.amount, "₴")}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditExpense(item.expense)}
                         >
-                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                          <path d="m15 5 4 4" />
-                        </svg>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          handleDeleteExpense(expense.id, expense.amount)
-                        }
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                          >
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                            <path d="m15 5 4 4" />
+                          </svg>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            handleDeleteExpense(
+                              item.expense.id,
+                              item.expense.amount
+                            )
+                          }
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDateTime(expense.date)}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm">{expense.description}</p>
-                </CardContent>
-              </Card>
-            ))}
+                    <p className="text-sm text-muted-foreground">
+                      {formatDateTime(item.expense.date)}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm">{item.expense.description}</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card key={item.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">
+                        Закупівля сировини
+                      </CardTitle>
+                      <div className="text-lg font-bold">
+                        {formatNumberWithUnit(item.amount, "₴")}
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDateTime(item.date)}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm">
+                      {item.delivery.supplier?.name ?? "Постачальник"} —{" "}
+                      {item.delivery.product?.name ?? item.delivery.product_id}{" "}
+                      {item.delivery.quantity && (
+                        <span className="text-muted-foreground">
+                          ({formatNumberWithUnit(Number(item.delivery.quantity), "шт")})
+                        </span>
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+              )
+            )}
 
             {/* Пагінація */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <div className="text-sm text-muted-foreground">
-                  Показано {paginatedExpenses.length} з{" "}
-                  {filteredExpenses.length} витрат
+                  Показано {paginatedHistory.length} з{" "}
+                  {combinedHistory.length} записів
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
