@@ -370,9 +370,37 @@ export default function ExpensesPage() {
     isDateInRange(parseDate(p.date))
   );
 
+  const wageItems = shifts
+    .filter((s) => s.status === "completed")
+    .map((shift) => {
+      const totalWage =
+        shift.production?.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.quantity) * Number(item.product?.reward ?? 0),
+          0
+        ) ?? 0;
+      return {
+        id: `shift-${shift.id}`,
+        amount: Math.round(totalWage * 100) / 100,
+        date: shift.completed_at ?? shift.shift_date ?? shift.created_at,
+        shift,
+      };
+    })
+    .filter((w) => w.amount > 0);
+
+  const filteredWageExpenses = wageItems.filter((w) =>
+    isDateInRange(parseDate(w.date))
+  );
+
   type HistoryItem =
     | { type: "expense"; expense: Expense }
-    | { type: "purchase"; id: string; amount: number; date: string; delivery: SupplierDelivery };
+    | { type: "purchase"; id: string; amount: number; date: string; delivery: SupplierDelivery }
+    | { type: "wage"; id: string; amount: number; date: string; shift: ShiftWithDetails };
+
+  const getHistoryItemDate = (item: HistoryItem) =>
+    item.type === "expense" ? item.expense.date : item.date;
+
   const combinedHistory: HistoryItem[] = [
     ...filteredExpenses.map((e) => ({ type: "expense" as const, expense: e })),
     ...filteredPurchaseExpenses.map((p) => ({
@@ -382,10 +410,17 @@ export default function ExpensesPage() {
       date: p.date,
       delivery: p.delivery,
     })),
+    ...filteredWageExpenses.map((w) => ({
+      type: "wage" as const,
+      id: w.id,
+      amount: w.amount,
+      date: w.date,
+      shift: w.shift,
+    })),
   ].sort(
     (a, b) =>
-      new Date(b.type === "expense" ? b.expense.date : b.date).getTime() -
-      new Date(a.type === "expense" ? a.expense.date : a.date).getTime()
+      new Date(getHistoryItemDate(b)).getTime() -
+      new Date(getHistoryItemDate(a)).getTime()
   );
 
   const totalPages = Math.ceil(combinedHistory.length / itemsPerPage);
@@ -426,7 +461,12 @@ export default function ExpensesPage() {
     (sum, p) => sum + p.amount,
     0
   );
-  const totalExpenses = totalExpensesAmount + totalPurchaseAmount;
+  const totalWagesAmount = filteredWageExpenses.reduce(
+    (sum, w) => sum + w.amount,
+    0
+  );
+  const totalExpenses =
+    totalExpensesAmount + totalPurchaseAmount + totalWagesAmount;
 
   const expensesByCategory = categories.map((category) => {
     const categoryExpenses = filteredExpenses.filter(
@@ -1169,6 +1209,24 @@ export default function ExpensesPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">З/П Лінія</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Заробітна плата з виробництва (за винагородою за продукцію)
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold">
+                {formatNumberWithUnit(totalWagesAmount, "₴")}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {filteredWageExpenses.length} змін
+              </p>
+            </div>
+          </CardContent>
+        </Card>
         {expensesByCategory.map((category) => (
           <Card key={category.id}>
             <CardHeader className="pb-2">
@@ -1234,7 +1292,7 @@ export default function ExpensesPage() {
             <CardContent className="py-8">
               <div className="text-center">
                 <p className="text-muted-foreground">
-                  Немає зареєстрованих витрат та закупівель сировини
+                  Немає зареєстрованих витрат, закупівель сировини та з/п з виробництва
                 </p>
               </div>
             </CardContent>
@@ -1294,6 +1352,36 @@ export default function ExpensesPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm">{item.expense.description}</p>
+                  </CardContent>
+                </Card>
+              ) : item.type === "wage" ? (
+                <Card key={item.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">З/П Лінія</CardTitle>
+                      <div className="text-lg font-bold">
+                        {formatNumberWithUnit(item.amount, "₴")}
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDateTime(item.date)}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm">
+                      <Link
+                        href={`/shifts/${item.shift.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        Зміна {formatDate(item.shift.shift_date)}
+                      </Link>
+                      {item.shift.employees?.length > 0 && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {item.shift.employees.length} прац.
+                        </span>
+                      )}
+                    </p>
                   </CardContent>
                 </Card>
               ) : (
