@@ -2175,7 +2175,8 @@ export async function getExpenses() {
 export async function createExpense(
   category_id: number,
   amount: number,
-  description: string
+  description: string,
+  date?: string
 ) {
   try {
     if (!category_id || amount <= 0) {
@@ -2195,6 +2196,10 @@ export async function createExpense(
       throw new Error("Категорія витрат не знайдена");
     }
 
+    const dateValue = date
+      ? new Date(date).toISOString()
+      : new Date().toISOString();
+
     const { data, error } = await supabase
       .from("expenses")
       .insert([
@@ -2202,7 +2207,7 @@ export async function createExpense(
           category_id,
           amount,
           description: description?.trim() || "",
-          date: new Date().toISOString(),
+          date: dateValue,
         },
       ])
       .select(

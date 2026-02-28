@@ -176,6 +176,11 @@ export default function ExpensesPage() {
   const [newCategoryDescription, setNewCategoryDescription] = useState("");
   const [newExpenseAmount, setNewExpenseAmount] = useState("");
   const [newExpenseDescription, setNewExpenseDescription] = useState("");
+  const [newExpenseDate, setNewExpenseDate] = useState<Date | undefined>(
+    () => new Date()
+  );
+  const [newExpenseDatePickerOpen, setNewExpenseDatePickerOpen] =
+    useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [isAddExpenseDialogOpen, setIsAddExpenseDialogOpen] = useState(false);
 
@@ -558,10 +563,23 @@ export default function ExpensesPage() {
         description: newExpenseDescription || "",
       });
 
+      const dateStr =
+        newExpenseDate instanceof Date
+          ? new Date(
+              newExpenseDate.getFullYear(),
+              newExpenseDate.getMonth(),
+              newExpenseDate.getDate(),
+              12,
+              0,
+              0
+            ).toISOString()
+          : undefined;
+
       const newExpense = await createExpense(
         parseInt(selectedCategory),
         amount,
-        newExpenseDescription || ""
+        newExpenseDescription || "",
+        dateStr
       );
 
       console.log("Expense created successfully:", newExpense);
@@ -569,6 +587,7 @@ export default function ExpensesPage() {
       setExpenses([...expenses, newExpense]);
       setNewExpenseAmount("");
       setNewExpenseDescription("");
+      setNewExpenseDate(new Date());
       setSelectedCategory("");
       setIsAddExpenseDialogOpen(false);
       toast.success("Успіх", {
@@ -968,7 +987,10 @@ export default function ExpensesPage() {
 
           <Dialog
             open={isAddExpenseDialogOpen}
-            onOpenChange={setIsAddExpenseDialogOpen}
+            onOpenChange={(open) => {
+              setIsAddExpenseDialogOpen(open);
+              if (open) setNewExpenseDate(new Date());
+            }}
           >
             <DialogTrigger asChild>
               <Button>
@@ -1004,6 +1026,48 @@ export default function ExpensesPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Дата</Label>
+                  <Popover
+                    open={newExpenseDatePickerOpen}
+                    onOpenChange={setNewExpenseDatePickerOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !newExpenseDate && "text-muted-foreground"
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {newExpenseDate ? (
+                          formatDate(
+                            new Date(
+                              newExpenseDate.getFullYear(),
+                              newExpenseDate.getMonth(),
+                              newExpenseDate.getDate()
+                            ).toISOString()
+                          )
+                        ) : (
+                          <span>Оберіть дату</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={newExpenseDate}
+                        onSelect={(d) => {
+                          setNewExpenseDate(d);
+                          setNewExpenseDatePickerOpen(false);
+                        }}
+                        locale={uk}
+                        weekStartsOn={1}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="amount">Сума</Label>
