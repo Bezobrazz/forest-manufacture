@@ -1777,10 +1777,18 @@ export async function getShiftDetails(
         .from("shifts")
         .select("*")
         .eq("id", shiftId)
-        .single();
+        .maybeSingle();
 
       if (shiftError) {
-        console.error("Error fetching shift:", shiftError);
+        const errMsg =
+          shiftError?.message ??
+          (shiftError as { code?: string })?.code ??
+          String(shiftError);
+        console.error("Error fetching shift:", errMsg);
+        return null;
+      }
+
+      if (!shift) {
         return null;
       }
 
@@ -1790,7 +1798,11 @@ export async function getShiftDetails(
         .eq("shift_id", shiftId);
 
       if (employeesError) {
-        console.error("Error fetching shift employees:", employeesError);
+        const errMsg =
+          employeesError?.message ??
+          (employeesError as { code?: string })?.code ??
+          String(employeesError);
+        console.error("Error fetching shift employees:", errMsg);
         return null;
       }
 
@@ -1800,7 +1812,11 @@ export async function getShiftDetails(
         .eq("shift_id", shiftId);
 
       if (productionError) {
-        console.error("Error fetching production:", productionError);
+        const errMsg =
+          productionError?.message ??
+          (productionError as { code?: string })?.code ??
+          String(productionError);
+        console.error("Error fetching production:", errMsg);
         return null;
       }
 
@@ -1810,11 +1826,15 @@ export async function getShiftDetails(
         production: production as any,
       };
     } catch (error) {
-      console.error("Unexpected error in getShiftDetails:", error);
+      const errMsg =
+        error instanceof Error ? error.message : String(error);
+      console.error("Unexpected error in getShiftDetails:", errMsg);
       return null;
     }
   } catch (error) {
-    console.error("Error in getShiftDetails:", error);
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+    console.error("Error in getShiftDetails:", errMsg);
     return null;
   }
 }

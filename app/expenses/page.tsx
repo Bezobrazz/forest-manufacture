@@ -391,7 +391,7 @@ export default function ExpensesPage() {
       return {
         id: `shift-${shift.id}`,
         amount: Math.round(totalWage * 100) / 100,
-        date: shift.completed_at ?? shift.shift_date ?? shift.created_at,
+        date: shift.shift_date ?? shift.created_at,
         shift,
       };
     })
