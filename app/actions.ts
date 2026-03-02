@@ -1777,10 +1777,18 @@ export async function getShiftDetails(
         .from("shifts")
         .select("*")
         .eq("id", shiftId)
-        .single();
+        .maybeSingle();
 
       if (shiftError) {
-        console.error("Error fetching shift:", shiftError);
+        const errMsg =
+          shiftError?.message ??
+          (shiftError as { code?: string })?.code ??
+          String(shiftError);
+        console.error("Error fetching shift:", errMsg);
+        return null;
+      }
+
+      if (!shift) {
         return null;
       }
 
@@ -1790,7 +1798,11 @@ export async function getShiftDetails(
         .eq("shift_id", shiftId);
 
       if (employeesError) {
-        console.error("Error fetching shift employees:", employeesError);
+        const errMsg =
+          employeesError?.message ??
+          (employeesError as { code?: string })?.code ??
+          String(employeesError);
+        console.error("Error fetching shift employees:", errMsg);
         return null;
       }
 
@@ -1800,7 +1812,11 @@ export async function getShiftDetails(
         .eq("shift_id", shiftId);
 
       if (productionError) {
-        console.error("Error fetching production:", productionError);
+        const errMsg =
+          productionError?.message ??
+          (productionError as { code?: string })?.code ??
+          String(productionError);
+        console.error("Error fetching production:", errMsg);
         return null;
       }
 
@@ -1810,11 +1826,15 @@ export async function getShiftDetails(
         production: production as any,
       };
     } catch (error) {
-      console.error("Unexpected error in getShiftDetails:", error);
+      const errMsg =
+        error instanceof Error ? error.message : String(error);
+      console.error("Unexpected error in getShiftDetails:", errMsg);
       return null;
     }
   } catch (error) {
-    console.error("Error in getShiftDetails:", error);
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+    console.error("Error in getShiftDetails:", errMsg);
     return null;
   }
 }
@@ -2175,7 +2195,8 @@ export async function getExpenses() {
 export async function createExpense(
   category_id: number,
   amount: number,
-  description: string
+  description: string,
+  date?: string
 ) {
   try {
     if (!category_id || amount <= 0) {
@@ -2195,6 +2216,10 @@ export async function createExpense(
       throw new Error("Категорія витрат не знайдена");
     }
 
+    const dateValue = date
+      ? new Date(date).toISOString()
+      : new Date().toISOString();
+
     const { data, error } = await supabase
       .from("expenses")
       .insert([
@@ -2202,7 +2227,7 @@ export async function createExpense(
           category_id,
           amount,
           description: description?.trim() || "",
-          date: new Date().toISOString(),
+          date: dateValue,
         },
       ])
       .select(

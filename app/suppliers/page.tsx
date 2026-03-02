@@ -78,7 +78,9 @@ export default function SuppliersPage() {
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [sortBy, setSortBy] = useState<"name" | "advance" | "materials">(
+    "name",
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -108,12 +110,10 @@ export default function SuppliersPage() {
     }
   };
 
-  // Завантажуємо дані при першому рендері
   useEffect(() => {
     loadData();
   }, []);
 
-  // Функція для оновлення списку постачальників
   const refreshSuppliers = async () => {
     try {
       const updatedSuppliers = await getSuppliers();
@@ -124,7 +124,6 @@ export default function SuppliersPage() {
     }
   };
 
-  // Фільтрація та сортування постачальників
   const filteredAndSortedSuppliers = useMemo(() => {
     let filtered = suppliers.filter((supplier) => {
       const query = searchQuery.toLowerCase().trim();
@@ -137,15 +136,14 @@ export default function SuppliersPage() {
       return nameMatch || phoneMatch || notesMatch;
     });
 
-    // Сортування
     filtered = [...filtered].sort((a, b) => {
       if (sortBy === "name") {
         return a.name.localeCompare(b.name, "uk");
-      } else {
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
       }
+      if (sortBy === "advance") {
+        return (b.advance ?? 0) - (a.advance ?? 0);
+      }
+      return (b.materials_balance ?? 0) - (a.materials_balance ?? 0);
     });
 
     return filtered;
@@ -153,11 +151,11 @@ export default function SuppliersPage() {
 
   // Розрахунок пагінації
   const totalPages = Math.ceil(
-    filteredAndSortedSuppliers.length / itemsPerPage
+    filteredAndSortedSuppliers.length / itemsPerPage,
   );
   const paginatedSuppliers = filteredAndSortedSuppliers.slice(
     (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    currentPage * itemsPerPage,
   );
 
   // Функції для керування пагінацією
@@ -184,10 +182,15 @@ export default function SuppliersPage() {
     setCurrentPage(1);
   }, [searchQuery, sortBy]);
 
-  // Статистика
   const totalSuppliers = suppliers.length;
-  const suppliersWithPhone = suppliers.filter((s) => s.phone).length;
-  const suppliersWithNotes = suppliers.filter((s) => s.notes).length;
+  const materialsBalanceTotal = suppliers.reduce(
+    (sum, s) => sum + (s.materials_balance ?? 0),
+    0,
+  );
+  const advanceBalanceTotal = suppliers.reduce(
+    (sum, s) => sum + (s.advance ?? 0),
+    0,
+  );
 
   return (
     <div className="container py-6 space-y-6">
@@ -206,7 +209,12 @@ export default function SuppliersPage() {
               <h1 className="text-2xl sm:text-3xl font-bold">Постачальники</h1>
             </div>
             <Badge variant="secondary" className="text-sm w-fit">
-              {totalSuppliers} {totalSuppliers === 1 ? "постачальник" : totalSuppliers < 5 ? "постачальники" : "постачальників"}
+              {totalSuppliers}{" "}
+              {totalSuppliers === 1
+                ? "постачальник"
+                : totalSuppliers < 5
+                  ? "постачальники"
+                  : "постачальників"}
             </Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm sm:text-base hidden sm:block">
@@ -219,25 +227,26 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Статистика */}
       {!isLoading && !databaseError && totalSuppliers > 0 && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Всього постачальників</CardDescription>
-              <CardTitle className="text-2xl">{totalSuppliers}</CardTitle>
+              <CardDescription>Матеріали у постачальників</CardDescription>
+              <CardTitle className="text-2xl">
+                {materialsBalanceTotal}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>З номером телефону</CardDescription>
-              <CardTitle className="text-2xl">{suppliersWithPhone}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>З примітками</CardDescription>
-              <CardTitle className="text-2xl">{suppliersWithNotes}</CardTitle>
+              <CardDescription>Аванс у постачальників</CardDescription>
+              <CardTitle className="text-2xl">
+                {advanceBalanceTotal.toLocaleString("uk-UA", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                ₴
+              </CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -254,14 +263,18 @@ export default function SuppliersPage() {
           <CardHeader>
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div className="flex-1">
-                <CardTitle className="text-lg sm:text-xl">Список постачальників</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">
+                  Список постачальників
+                </CardTitle>
                 <CardDescription className="text-xs sm:text-sm mt-1">
                   {filteredAndSortedSuppliers.length === totalSuppliers
                     ? `Показано всіх ${totalSuppliers} постачальників`
                     : `Показано ${filteredAndSortedSuppliers.length} з ${totalSuppliers} постачальників`}
                   {totalPages > 1 && (
                     <span className="block sm:inline">
-                      {filteredAndSortedSuppliers.length === totalSuppliers ? " • " : " • "}
+                      {filteredAndSortedSuppliers.length === totalSuppliers
+                        ? " • "
+                        : " • "}
                       Сторінка {currentPage} з {totalPages}
                     </span>
                   )}
@@ -271,7 +284,7 @@ export default function SuppliersPage() {
                 <Select
                   value={sortBy}
                   onValueChange={(value) =>
-                    setSortBy(value as "name" | "date")
+                    setSortBy(value as "name" | "advance" | "materials")
                   }
                 >
                   <SelectTrigger className="w-full sm:w-[180px]">
@@ -279,7 +292,12 @@ export default function SuppliersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="name">Сортувати за назвою</SelectItem>
-                    <SelectItem value="date">Сортувати за датою</SelectItem>
+                    <SelectItem value="advance">
+                      Сортувати за авансом
+                    </SelectItem>
+                    <SelectItem value="materials">
+                      Сортувати за матеріалами
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -376,7 +394,7 @@ export default function SuppliersPage() {
                             </PaginationLink>
                           </PaginationItem>
                         );
-                      }
+                      },
                     )}
                     <PaginationItem>
                       <PaginationNext
