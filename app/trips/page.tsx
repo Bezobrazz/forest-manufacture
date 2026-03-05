@@ -32,7 +32,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, MapPin, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -549,47 +548,31 @@ export default function TripsPage() {
                       Немає рейсів «Сировина» за обраними фільтрами
                     </p>
                   )}
-                  {rawTotals && (() => {
-                    const costsMax = Math.max(
-                      Math.ceil(rawTotals.sumTotalCostsUah / 50_000) * 50_000,
-                      100_000
-                    );
-                    const costsPercent = Math.min(
-                      Math.round((rawTotals.sumTotalCostsUah / costsMax) * 100),
-                      100
-                    );
-                    return (
-                      <div className="rounded-lg border p-4">
-                        <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <div className="rounded-lg border bg-muted/40 p-4">
-                            <p className="text-xs text-muted-foreground mb-1">Середня вартість мішка</p>
-                            <p className="text-xl font-semibold tabular-nums">
-                              {rawTotals.avgCostPerBagUah != null
-                                ? formatUah(rawTotals.avgCostPerBagUah)
-                                : "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border bg-muted/40 p-4">
-                            <p className="text-xs text-muted-foreground mb-1">Всього мішків</p>
-                            <p className="text-xl font-semibold tabular-nums">{rawTotals.sumBags}</p>
-                          </div>
-                          <div className="rounded-lg border bg-muted/40 p-4">
-                            <p className="text-xs text-muted-foreground mb-2">Всього витрат</p>
-                            <p className="text-xl font-semibold tabular-nums mb-2">
-                              {formatUah(rawTotals.sumTotalCostsUah)}
-                            </p>
-                            <div className="space-y-1">
-                              <Progress value={costsPercent} className="h-2" />
-                              <p className="text-xs text-muted-foreground tabular-nums">
-                                {costsPercent}%
-                              </p>
-                            </div>
-                          </div>
+                  {rawTotals && (
+                    <div className="rounded-lg border p-4">
+                      <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">Середня вартість мішка</p>
+                          <p className="text-xl font-semibold tabular-nums">
+                            {rawTotals.avgCostPerBagUah != null
+                              ? formatUah(rawTotals.avgCostPerBagUah)
+                              : "—"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">Всього мішків</p>
+                          <p className="text-xl font-semibold tabular-nums">{rawTotals.sumBags}</p>
+                        </div>
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">Всього витрат</p>
+                          <p className="text-xl font-semibold tabular-nums">
+                            {formatUah(rawTotals.sumTotalCostsUah)}
+                          </p>
                         </div>
                       </div>
-                    );
-                  })()}
+                    </div>
+                  )}
                   {rawTotals && (
                     <div className="rounded-lg border p-4 mt-4">
                       <h3 className="text-sm font-medium mb-3">Погасити витрати</h3>
