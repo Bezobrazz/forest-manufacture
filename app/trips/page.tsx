@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { createRawCostRepayment, getRawRepaymentsSum } from "@/app/actions";
+import {
+  createRawCostRepayment,
+  deleteExpense,
+  getRawRepayments,
+  type RawRepaymentItem,
+  updateRawRepayment,
+} from "@/app/actions";
 import { getTrips, type TripListItem } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
@@ -32,7 +38,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Plus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
@@ -85,7 +107,18 @@ export default function TripsPage() {
   const [repaymentDate, setRepaymentDate] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
-  const [repaymentsSum, setRepaymentsSum] = useState<number>(0);
+  const [repaymentsList, setRepaymentsList] = useState<RawRepaymentItem[]>([]);
+  const [editingRepayment, setEditingRepayment] = useState<RawRepaymentItem | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  const repaymentsSum = useMemo(
+    () => repaymentsList.reduce((s, r) => s + r.amount, 0),
+    [repaymentsList],
+  );
 
   useEffect(() => {
     Promise.all([getTrips(), getVehicles()]).then(
@@ -97,10 +130,11 @@ export default function TripsPage() {
     );
   }, []);
 
+  const refetchRepayments = () =>
+    getRawRepayments(dateFrom || undefined, dateTo || undefined).then(setRepaymentsList);
+
   useEffect(() => {
-    getRawRepaymentsSum(dateFrom || undefined, dateTo || undefined).then(
-      setRepaymentsSum,
-    );
+    refetchRepayments();
   }, [dateFrom, dateTo]);
 
   const filteredTrips = useMemo(() => {
@@ -691,10 +725,7 @@ export default function TripsPage() {
                               toast.success("Погашення витрат збережено");
                               setRepaymentDate("");
                               setRepaymentAmount("");
-                              getRawRepaymentsSum(
-                                dateFrom || undefined,
-                                dateTo || undefined,
-                              ).then(setRepaymentsSum);
+                              refetchRepayments();
                             } else {
                               toast.error(result.error);
                             }
@@ -740,6 +771,192 @@ export default function TripsPage() {
                       </div>
                     </div>
                   )}
+                  {rawTotals && (
+                    <div className="mt-4 rounded-lg border p-4">
+                      <h3 className="text-sm font-medium mb-3">Погашення</h3>
+                      {repaymentsList.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4">
+                          Немає погашень за обраний період
+                        </p>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Дата</TableHead>
+                              <TableHead className="text-right">Сума</TableHead>
+                              <TableHead className="w-[100px] text-right">
+                                Дії
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {repaymentsList.map((item) => (
+                              <TableRow key={item.id}>
+                                <TableCell className="tabular-nums">
+                                  {formatDate(
+                                    item.date.startsWith("20")
+                                      ? item.date.slice(0, 10)
+                                      : item.date,
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums font-medium">
+                                  {formatUah(item.amount)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => {
+                                        setEditingRepayment(item);
+                                        setEditDate(item.date.slice(0, 10));
+                                        setEditAmount(
+                                          String(item.amount),
+                                        );
+                                      }}
+                                      aria-label="Редагувати"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive hover:text-destructive"
+                                      onClick={() =>
+                                        setDeleteRepaymentId(item.id)
+                                      }
+                                      aria-label="Видалити"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+                  )}
+                  <Dialog
+                    open={!!editingRepayment}
+                    onOpenChange={(open) => {
+                      if (!open) setEditingRepayment(null);
+                    }}
+                  >
+                    <DialogContent className="sm:max-w-[400px]">
+                      <DialogHeader>
+                        <DialogTitle>Редагувати погашення</DialogTitle>
+                      </DialogHeader>
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!editingRepayment) return;
+                          const amount = Number(editAmount);
+                          if (!editDate.trim()) {
+                            toast.error("Оберіть дату");
+                            return;
+                          }
+                          if (!(amount > 0)) {
+                            toast.error("Вкажіть суму більше нуля");
+                            return;
+                          }
+                          setEditSubmitting(true);
+                          const result = await updateRawRepayment(
+                            editingRepayment.id,
+                            editDate,
+                            amount,
+                          );
+                          setEditSubmitting(false);
+                          if (result.ok) {
+                            toast.success("Погашення оновлено");
+                            setEditingRepayment(null);
+                            refetchRepayments();
+                          } else {
+                            toast.error(result.error);
+                          }
+                        }}
+                        className="space-y-4 pt-2"
+                      >
+                        <div className="space-y-1.5">
+                          <Label htmlFor="edit-date">Дата</Label>
+                          <Input
+                            id="edit-date"
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="edit-amount">Сума (грн)</Label>
+                          <Input
+                            id="edit-amount"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={editAmount}
+                            onChange={(e) =>
+                              setEditAmount(e.target.value)
+                            }
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setEditingRepayment(null)}
+                          >
+                            Скасувати
+                          </Button>
+                          <Button type="submit" disabled={editSubmitting}>
+                            {editSubmitting ? "Збереження…" : "Зберегти"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                  <AlertDialog
+                    open={deleteRepaymentId !== null}
+                    onOpenChange={(open) => {
+                      if (!open) setDeleteRepaymentId(null);
+                    }}
+                  >
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Видалити погашення?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Цю дію не можна скасувати. Запис про погашення буде
+                          видалено.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                        <Button
+                          variant="destructive"
+                          disabled={deleteSubmitting}
+                          onClick={async () => {
+                            if (deleteRepaymentId === null) return;
+                            setDeleteSubmitting(true);
+                            try {
+                              await deleteExpense(deleteRepaymentId);
+                              toast.success("Погашення видалено");
+                              setDeleteRepaymentId(null);
+                              refetchRepayments();
+                            } catch {
+                              toast.error("Помилка при видаленні");
+                            } finally {
+                              setDeleteSubmitting(false);
+                            }
+                          }}
+                        >
+                          {deleteSubmitting ? "Видалення…" : "Видалити"}
+                        </Button>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </TabsContent>
               </Tabs>
               {filteredTrips.length === 0 && trips.length > 0 && (
