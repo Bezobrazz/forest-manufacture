@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
+import { createRawCostRepayment } from "@/app/actions";
 import { getTrips, type TripListItem } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
@@ -33,6 +34,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, MapPin, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
 
@@ -82,6 +84,9 @@ export default function TripsPage() {
   const [dateTo, setDateTo] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [repaymentDate, setRepaymentDate] = useState("");
+  const [repaymentAmount, setRepaymentAmount] = useState("");
+  const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
 
   useEffect(() => {
     Promise.all([getTrips(), getVehicles()]).then(([tripsData, vehiclesData]) => {
@@ -585,6 +590,65 @@ export default function TripsPage() {
                       </div>
                     );
                   })()}
+                  {rawTotals && (
+                    <div className="rounded-lg border p-4 mt-4">
+                      <h3 className="text-sm font-medium mb-3">Погасити витрати</h3>
+                      <form
+                        className="flex flex-wrap items-end gap-4"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const amount = Number(repaymentAmount);
+                          if (!repaymentDate.trim()) {
+                            toast.error("Оберіть дату");
+                            return;
+                          }
+                          if (!(amount > 0)) {
+                            toast.error("Вкажіть суму більше нуля");
+                            return;
+                          }
+                          setRepaymentSubmitting(true);
+                          const result = await createRawCostRepayment(repaymentDate, amount);
+                          setRepaymentSubmitting(false);
+                          if (result.ok) {
+                            toast.success("Погашення витрат збережено");
+                            setRepaymentDate("");
+                            setRepaymentAmount("");
+                          } else {
+                            toast.error(result.error);
+                          }
+                        }}
+                      >
+                        <div className="space-y-1.5">
+                          <Label htmlFor="repayment-date" className="text-xs text-muted-foreground">
+                            Дата
+                          </Label>
+                          <Input
+                            id="repayment-date"
+                            type="date"
+                            value={repaymentDate}
+                            onChange={(e) => setRepaymentDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="repayment-amount" className="text-xs text-muted-foreground">
+                            Сума погашення (грн)
+                          </Label>
+                          <Input
+                            id="repayment-amount"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            placeholder="0.00"
+                            value={repaymentAmount}
+                            onChange={(e) => setRepaymentAmount(e.target.value)}
+                          />
+                        </div>
+                        <Button type="submit" disabled={repaymentSubmitting}>
+                          {repaymentSubmitting ? "Збереження…" : "Погасити"}
+                        </Button>
+                      </form>
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
               {filteredTrips.length === 0 && trips.length > 0 && (

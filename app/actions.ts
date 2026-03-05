@@ -2250,6 +2250,34 @@ export async function createExpense(
   }
 }
 
+const RAW_REPAYMENT_CATEGORY_NAME = "Погашення доставки (сировина)";
+
+export async function createRawCostRepayment(
+  date: string,
+  amount: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!date || amount <= 0) {
+      return { ok: false, error: "Вкажіть дату та суму більше нуля" };
+    }
+
+    const categories = await getExpenseCategories();
+    let category = (categories as { id: number; name: string }[]).find(
+      (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
+    );
+    if (!category) {
+      const created = await createExpenseCategory(RAW_REPAYMENT_CATEGORY_NAME, null);
+      category = { id: created.id, name: created.name };
+    }
+
+    await createExpense(category.id, amount, "Погашення доставки сировина", date);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при збереженні";
+    return { ok: false, error: message };
+  }
+}
+
 export async function deleteExpense(id: number) {
   try {
     const supabase = await createServerClient();
