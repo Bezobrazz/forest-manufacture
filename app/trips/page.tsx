@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
+import {
+  createRawCostRepayment,
+  deleteExpense,
+  getRawRepayments,
+  type RawRepaymentItem,
+  updateRawRepayment,
+} from "@/app/actions";
 import { getTrips, type TripListItem } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
@@ -31,7 +38,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Plus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
 
@@ -49,7 +87,7 @@ function formatDate(s: string) {
 function formatTripDateRange(
   start: string | null | undefined,
   end: string | null | undefined,
-  fallback: string | null
+  fallback: string | null,
 ): string {
   if (start && end && start !== end) {
     return `${formatDate(start)} — ${formatDate(end)}`;
@@ -58,7 +96,6 @@ function formatTripDateRange(
   if (fallback) return formatDate(fallback);
   return "—";
 }
-
 
 const tripTypeLabels: Record<string, string> = {
   raw: "Сировина",
@@ -81,14 +118,59 @@ export default function TripsPage() {
   const [dateTo, setDateTo] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [repaymentDate, setRepaymentDate] = useState("");
+  const [repaymentAmount, setRepaymentAmount] = useState("");
+  const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
+  const [repaymentsList, setRepaymentsList] = useState<RawRepaymentItem[]>([]);
+  const [editingRepayment, setEditingRepayment] = useState<RawRepaymentItem | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [repaymentPageSize, setRepaymentPageSize] = useState(5);
+  const [repaymentPage, setRepaymentPage] = useState(1);
+
+  const repaymentsSum = useMemo(
+    () => repaymentsList.reduce((s, r) => s + r.amount, 0),
+    [repaymentsList],
+  );
+
+  const repaymentTotalPages = Math.max(
+    1,
+    Math.ceil(repaymentsList.length / repaymentPageSize),
+  );
+  const paginatedRepayments = useMemo(
+    () =>
+      repaymentsList.slice(
+        (repaymentPage - 1) * repaymentPageSize,
+        repaymentPage * repaymentPageSize,
+      ),
+    [repaymentsList, repaymentPage, repaymentPageSize],
+  );
 
   useEffect(() => {
-    Promise.all([getTrips(), getVehicles()]).then(([tripsData, vehiclesData]) => {
-      setTrips(tripsData);
-      setVehicles(vehiclesData ?? []);
-      setIsLoading(false);
-    });
+    Promise.all([getTrips(), getVehicles()]).then(
+      ([tripsData, vehiclesData]) => {
+        setTrips(tripsData);
+        setVehicles(vehiclesData ?? []);
+        setIsLoading(false);
+      },
+    );
   }, []);
+
+  const refetchRepayments = () =>
+    getRawRepayments(dateFrom || undefined, dateTo || undefined).then(setRepaymentsList);
+
+  useEffect(() => {
+    refetchRepayments();
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (repaymentPage > repaymentTotalPages) {
+      setRepaymentPage(repaymentTotalPages);
+    }
+  }, [repaymentPage, repaymentTotalPages]);
 
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
@@ -107,11 +189,11 @@ export default function TripsPage() {
 
   const commerceTrips = useMemo(
     () => filteredTrips.filter((t) => t.trip_type === "commerce"),
-    [filteredTrips]
+    [filteredTrips],
   );
   const rawTrips = useMemo(
     () => filteredTrips.filter((t) => t.trip_type === "raw"),
-    [filteredTrips]
+    [filteredTrips],
   );
 
   const commerceTotals = useMemo(() => {
@@ -146,7 +228,8 @@ export default function TripsPage() {
       sumDriverCostUah,
       sumTotalCostsUah,
       sumProfitUah,
-      avgProfitPerKmUah: countProfitPerKm > 0 ? sumProfitPerKmUah / countProfitPerKm : null,
+      avgProfitPerKmUah:
+        countProfitPerKm > 0 ? sumProfitPerKmUah / countProfitPerKm : null,
       avgRoiPercent: countRoi > 0 ? sumRoiPercent / countRoi : null,
     };
   }, [commerceTrips]);
@@ -286,7 +369,10 @@ export default function TripsPage() {
             <CardContent>
               <div className="flex flex-wrap items-end gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="date-from" className="text-xs text-muted-foreground">
+                  <Label
+                    htmlFor="date-from"
+                    className="text-xs text-muted-foreground"
+                  >
                     Дата від
                   </Label>
                   <Input
@@ -297,7 +383,10 @@ export default function TripsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="date-to" className="text-xs text-muted-foreground">
+                  <Label
+                    htmlFor="date-to"
+                    className="text-xs text-muted-foreground"
+                  >
                     Дата до
                   </Label>
                   <Input
@@ -308,10 +397,14 @@ export default function TripsPage() {
                   />
                 </div>
                 <div className="space-y-1.5 min-w-[160px]">
-                  <Label className="text-xs text-muted-foreground">Транспорт</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Транспорт
+                  </Label>
                   <Select
                     value={vehicleFilter || "__all__"}
-                    onValueChange={(v) => setVehicleFilter(v === "__all__" ? "" : v)}
+                    onValueChange={(v) =>
+                      setVehicleFilter(v === "__all__" ? "" : v)
+                    }
                   >
                     <SelectTrigger id="vehicle-filter">
                       <SelectValue placeholder="Усі" />
@@ -327,11 +420,15 @@ export default function TripsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5 min-w-[140px]">
-                  <Label className="text-xs text-muted-foreground">Статус</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Статус
+                  </Label>
                   <Select
                     value={statusFilter || "__all__"}
                     onValueChange={(v) =>
-                      setStatusFilter((v === "__all__" ? "" : v) as StatusFilter)
+                      setStatusFilter(
+                        (v === "__all__" ? "" : v) as StatusFilter,
+                      )
                     }
                   >
                     <SelectTrigger id="status-filter">
@@ -409,7 +506,11 @@ export default function TripsPage() {
                             onClick={() => router.push(`/trips/${t.id}`)}
                           >
                             <TableCell className="font-medium">
-                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                              {formatTripDateRange(
+                                t.trip_start_date,
+                                t.trip_end_date,
+                                t.trip_date,
+                              )}
                             </TableCell>
                             <TableCell>{t.name?.trim() ?? "—"}</TableCell>
                             <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
@@ -443,10 +544,14 @@ export default function TripsPage() {
                   )}
                   {commerceTotals && (
                     <div className="rounded-lg border p-4">
-                      <h3 className="text-sm font-medium mb-3">Підсумки (Комерція)</h3>
+                      <h3 className="text-sm font-medium mb-3">
+                        Підсумки (Комерція)
+                      </h3>
                       <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Фрахт (дохід)</span>
+                          <span className="text-muted-foreground">
+                            Фрахт (дохід)
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumFreightUah)}
                           </span>
@@ -464,25 +569,33 @@ export default function TripsPage() {
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Всього витрат</span>
+                          <span className="text-muted-foreground">
+                            Всього витрат
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumTotalCostsUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Прибуток</span>
+                          <span className="text-muted-foreground">
+                            Прибуток
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumProfitUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Середній прибуток/км</span>
+                          <span className="text-muted-foreground">
+                            Середній прибуток/км
+                          </span>
                           <span className="tabular-nums">
                             {formatUah(commerceTotals.avgProfitPerKmUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Середній ROI</span>
+                          <span className="text-muted-foreground">
+                            Середній ROI
+                          </span>
                           <span className="tabular-nums">
                             {formatPercent(commerceTotals.avgRoiPercent)}
                           </span>
@@ -518,7 +631,11 @@ export default function TripsPage() {
                             onClick={() => router.push(`/trips/${t.id}`)}
                           >
                             <TableCell className="font-medium">
-                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                              {formatTripDateRange(
+                                t.trip_start_date,
+                                t.trip_end_date,
+                                t.trip_date,
+                              )}
                             </TableCell>
                             <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
                             <TableCell className="text-right tabular-nums">
@@ -545,27 +662,440 @@ export default function TripsPage() {
                   )}
                   {rawTotals && (
                     <div className="rounded-lg border p-4">
-                      <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
-                      <div className="grid gap-3 text-sm sm:grid-cols-3">
-                        <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Середня вартість мішка</span>
-                          <span className="tabular-nums font-medium">
-                            {formatUah(rawTotals.avgCostPerBagUah)}
-                          </span>
+                      <h3 className="text-sm font-medium mb-3">
+                        Підсумки (Сировина)
+                      </h3>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Середня вартість мішка
+                          </p>
+                          <p className="text-xl font-semibold tabular-nums">
+                            {rawTotals.avgCostPerBagUah != null
+                              ? formatUah(rawTotals.avgCostPerBagUah)
+                              : "—"}
+                          </p>
                         </div>
-                        <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Всього витрат</span>
-                          <span className="tabular-nums font-medium">
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Всього мішків
+                          </p>
+                          <p className="text-xl font-semibold tabular-nums">
+                            {rawTotals.sumBags}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border bg-muted/40 p-4">
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Всього витрат
+                          </p>
+                          <p className="text-xl font-semibold tabular-nums">
                             {formatUah(rawTotals.sumTotalCostsUah)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Всього мішків</span>
-                          <span className="tabular-nums font-medium">{rawTotals.sumBags}</span>
+                          </p>
                         </div>
                       </div>
                     </div>
                   )}
+                  {rawTotals && (
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-lg border bg-muted/40 p-4">
+                        <h3 className="text-sm font-medium mb-3">
+                          Залишилось погасити
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              Всього витрат
+                            </span>
+                            <span className="tabular-nums font-medium">
+                              {formatUah(rawTotals.sumTotalCostsUah)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              Погашено
+                            </span>
+                            <span className="tabular-nums font-medium">
+                              {formatUah(repaymentsSum)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2 border-t pt-2">
+                            <span className="font-medium">
+                              Залишилось погасити
+                            </span>
+                            <span className="tabular-nums font-semibold">
+                              {formatUah(
+                                Math.max(
+                                  0,
+                                  rawTotals.sumTotalCostsUah - repaymentsSum,
+                                ),
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border p-4">
+                        <h3 className="text-sm font-medium mb-3">
+                          Погасити доставку
+                        </h3>
+                        <form
+                          className="flex flex-wrap items-end gap-4"
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const amount = Number(repaymentAmount);
+                            if (!repaymentDate.trim()) {
+                              toast.error("Оберіть дату");
+                              return;
+                            }
+                            if (!(amount > 0)) {
+                              toast.error("Вкажіть суму більше нуля");
+                              return;
+                            }
+                            setRepaymentSubmitting(true);
+                            const result = await createRawCostRepayment(
+                              repaymentDate,
+                              amount,
+                            );
+                            setRepaymentSubmitting(false);
+                            if (result.ok) {
+                              toast.success("Погашення витрат збережено");
+                              setRepaymentDate("");
+                              setRepaymentAmount("");
+                              refetchRepayments();
+                            } else {
+                              toast.error(result.error);
+                            }
+                          }}
+                        >
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="repayment-date"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Дата
+                            </Label>
+                            <Input
+                              id="repayment-date"
+                              type="date"
+                              value={repaymentDate}
+                              onChange={(e) => setRepaymentDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="repayment-amount"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Сума погашення (грн)
+                            </Label>
+                            <Input
+                              id="repayment-amount"
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              value={repaymentAmount}
+                              onChange={(e) =>
+                                setRepaymentAmount(e.target.value)
+                              }
+                            />
+                          </div>
+                          <Button type="submit" disabled={repaymentSubmitting}>
+                            {repaymentSubmitting ? "Збереження…" : "Погасити"}
+                          </Button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                  {rawTotals && (
+                    <Accordion type="single" collapsible className="mt-4 w-full">
+                      <AccordionItem value="repayments" className="rounded-lg border px-4">
+                        <AccordionTrigger className="hover:no-underline">
+                          Погашення
+                          {repaymentsList.length > 0 &&
+                            ` (${repaymentsList.length})`}
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
+                            <span className="text-sm text-muted-foreground">
+                              Погашення за обраний період
+                            </span>
+                            <Select
+                              value={String(repaymentPageSize)}
+                              onValueChange={(v) => {
+                                setRepaymentPageSize(Number(v));
+                                setRepaymentPage(1);
+                              }}
+                            >
+                              <SelectTrigger className="w-[72px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {repaymentsList.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-4">
+                              Немає погашень за обраний період
+                            </p>
+                          ) : (
+                            <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Дата</TableHead>
+                                    <TableHead className="text-right">
+                                      Сума
+                                    </TableHead>
+                                    <TableHead className="w-[100px] text-right">
+                                      Дії
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {paginatedRepayments.map((item) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell className="tabular-nums">
+                                        {formatDate(
+                                          item.date.startsWith("20")
+                                            ? item.date.slice(0, 10)
+                                            : item.date,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums font-medium">
+                                        {formatUah(item.amount)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                              setEditingRepayment(item);
+                                              setEditDate(
+                                                item.date.slice(0, 10),
+                                              );
+                                              setEditAmount(
+                                                String(item.amount),
+                                              );
+                                            }}
+                                            aria-label="Редагувати"
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive hover:text-destructive"
+                                            onClick={() =>
+                                              setDeleteRepaymentId(item.id)
+                                            }
+                                            aria-label="Видалити"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              {repaymentTotalPages > 1 && (
+                                <div className="p-2 border-t">
+                                  <Pagination>
+                                    <PaginationContent className="flex-wrap justify-center gap-1">
+                                      <PaginationItem>
+                                        <PaginationPrevious
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setRepaymentPage((p) =>
+                                              Math.max(1, p - 1),
+                                            );
+                                          }}
+                                          aria-disabled={
+                                            repaymentPage <= 1
+                                          }
+                                          className={
+                                            repaymentPage <= 1
+                                              ? "pointer-events-none opacity-50"
+                                              : ""
+                                          }
+                                        />
+                                      </PaginationItem>
+                                      {Array.from(
+                                        { length: repaymentTotalPages },
+                                        (_, i) => i + 1,
+                                      ).map((p) => (
+                                        <PaginationItem key={p}>
+                                          <PaginationLink
+                                            href="#"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              setRepaymentPage(p);
+                                            }}
+                                            isActive={repaymentPage === p}
+                                          >
+                                            {p}
+                                          </PaginationLink>
+                                        </PaginationItem>
+                                      ))}
+                                      <PaginationItem>
+                                        <PaginationNext
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setRepaymentPage((p) =>
+                                              Math.min(
+                                                repaymentTotalPages,
+                                                p + 1,
+                                              ),
+                                            );
+                                          }}
+                                          aria-disabled={
+                                            repaymentPage >=
+                                            repaymentTotalPages
+                                          }
+                                          className={
+                                            repaymentPage >=
+                                            repaymentTotalPages
+                                              ? "pointer-events-none opacity-50"
+                                              : ""
+                                          }
+                                        />
+                                      </PaginationItem>
+                                    </PaginationContent>
+                                  </Pagination>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  )}
+                  <Dialog
+                    open={!!editingRepayment}
+                    onOpenChange={(open) => {
+                      if (!open) setEditingRepayment(null);
+                    }}
+                  >
+                    <DialogContent className="sm:max-w-[400px]">
+                      <DialogHeader>
+                        <DialogTitle>Редагувати погашення</DialogTitle>
+                      </DialogHeader>
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!editingRepayment) return;
+                          const amount = Number(editAmount);
+                          if (!editDate.trim()) {
+                            toast.error("Оберіть дату");
+                            return;
+                          }
+                          if (!(amount > 0)) {
+                            toast.error("Вкажіть суму більше нуля");
+                            return;
+                          }
+                          setEditSubmitting(true);
+                          const result = await updateRawRepayment(
+                            editingRepayment.id,
+                            editDate,
+                            amount,
+                          );
+                          setEditSubmitting(false);
+                          if (result.ok) {
+                            toast.success("Погашення оновлено");
+                            setEditingRepayment(null);
+                            refetchRepayments();
+                          } else {
+                            toast.error(result.error);
+                          }
+                        }}
+                        className="space-y-4 pt-2"
+                      >
+                        <div className="space-y-1.5">
+                          <Label htmlFor="edit-date">Дата</Label>
+                          <Input
+                            id="edit-date"
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="edit-amount">Сума (грн)</Label>
+                          <Input
+                            id="edit-amount"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={editAmount}
+                            onChange={(e) =>
+                              setEditAmount(e.target.value)
+                            }
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setEditingRepayment(null)}
+                          >
+                            Скасувати
+                          </Button>
+                          <Button type="submit" disabled={editSubmitting}>
+                            {editSubmitting ? "Збереження…" : "Зберегти"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                  <AlertDialog
+                    open={deleteRepaymentId !== null}
+                    onOpenChange={(open) => {
+                      if (!open) setDeleteRepaymentId(null);
+                    }}
+                  >
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Видалити погашення?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Цю дію не можна скасувати. Запис про погашення буде
+                          видалено.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                        <Button
+                          variant="destructive"
+                          disabled={deleteSubmitting}
+                          onClick={async () => {
+                            if (deleteRepaymentId === null) return;
+                            setDeleteSubmitting(true);
+                            try {
+                              await deleteExpense(deleteRepaymentId);
+                              toast.success("Погашення видалено");
+                              setDeleteRepaymentId(null);
+                              refetchRepayments();
+                            } catch {
+                              toast.error("Помилка при видаленні");
+                            } finally {
+                              setDeleteSubmitting(false);
+                            }
+                          }}
+                        >
+                          {deleteSubmitting ? "Видалення…" : "Видалити"}
+                        </Button>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </TabsContent>
               </Tabs>
               {filteredTrips.length === 0 && trips.length > 0 && (

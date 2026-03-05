@@ -3,6 +3,8 @@ import { getEmployees } from "@/app/actions"
 import { CreateShiftForm } from "@/components/create-shift-form"
 import { ArrowLeft } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default async function NewShiftPage() {
   const employees = await getEmployees()
 

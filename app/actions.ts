@@ -2250,6 +2250,110 @@ export async function createExpense(
   }
 }
 
+const RAW_REPAYMENT_CATEGORY_NAME = "Погашення доставки (сировина)";
+
+export async function createRawCostRepayment(
+  date: string,
+  amount: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!date || amount <= 0) {
+      return { ok: false, error: "Вкажіть дату та суму більше нуля" };
+    }
+
+    const categories = await getExpenseCategories();
+    let category = (categories as { id: number; name: string }[]).find(
+      (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
+    );
+    if (!category) {
+      const created = await createExpenseCategory(RAW_REPAYMENT_CATEGORY_NAME, null);
+      category = { id: created.id, name: created.name };
+    }
+
+    await createExpense(category.id, amount, "Погашення доставки сировина", date);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при збереженні";
+    return { ok: false, error: message };
+  }
+}
+
+export type RawRepaymentItem = {
+  id: number;
+  date: string;
+  amount: number;
+};
+
+export async function getRawRepayments(
+  dateFrom?: string,
+  dateTo?: string
+): Promise<RawRepaymentItem[]> {
+  try {
+    const supabase = await createServerClient();
+    const categories = await getExpenseCategories();
+    const category = (categories as { id: number; name: string }[]).find(
+      (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
+    );
+    if (!category) return [];
+
+    let query = supabase
+      .from("expenses")
+      .select("id, date, amount")
+      .eq("category_id", category.id)
+      .order("date", { ascending: false });
+
+    if (dateFrom) query = query.gte("date", `${dateFrom}T00:00:00.000Z`);
+    if (dateTo) query = query.lte("date", `${dateTo}T23:59:59.999Z`);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error fetching raw repayments:", error);
+      return [];
+    }
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      date: row.date,
+      amount: Number(row.amount ?? 0),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getRawRepaymentsSum(
+  dateFrom?: string,
+  dateTo?: string
+): Promise<number> {
+  const list = await getRawRepayments(dateFrom, dateTo);
+  return list.reduce((sum, row) => sum + row.amount, 0);
+}
+
+export async function updateRawRepayment(
+  id: number,
+  date: string,
+  amount: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!date || amount <= 0) {
+      return { ok: false, error: "Вкажіть дату та суму більше нуля" };
+    }
+    const supabase = await createServerClient();
+    const dateValue = new Date(date).toISOString();
+    const { error } = await supabase
+      .from("expenses")
+      .update({ date: dateValue, amount })
+      .eq("id", id);
+    if (error) {
+      console.error("Error updating raw repayment:", error);
+      throw error;
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при оновленні";
+    return { ok: false, error: message };
+  }
+}
+
 export async function deleteExpense(id: number) {
   try {
     const supabase = await createServerClient();

@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { getHomePageData } from "@/app/actions";
 import { HomePageClient } from "@/components/home-page-client";
+
+export const dynamic = "force-dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
