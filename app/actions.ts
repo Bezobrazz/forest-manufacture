@@ -2278,6 +2278,37 @@ export async function createRawCostRepayment(
   }
 }
 
+export async function getRawRepaymentsSum(
+  dateFrom?: string,
+  dateTo?: string
+): Promise<number> {
+  try {
+    const supabase = await createServerClient();
+    const categories = await getExpenseCategories();
+    const category = (categories as { id: number; name: string }[]).find(
+      (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
+    );
+    if (!category) return 0;
+
+    let query = supabase
+      .from("expenses")
+      .select("amount")
+      .eq("category_id", category.id);
+
+    if (dateFrom) query = query.gte("date", `${dateFrom}T00:00:00.000Z`);
+    if (dateTo) query = query.lte("date", `${dateTo}T23:59:59.999Z`);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error fetching raw repayments sum:", error);
+      return 0;
+    }
+    return (data ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
 export async function deleteExpense(id: number) {
   try {
     const supabase = await createServerClient();

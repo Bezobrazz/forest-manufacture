@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { createRawCostRepayment } from "@/app/actions";
+import { createRawCostRepayment, getRawRepaymentsSum } from "@/app/actions";
 import { getTrips, type TripListItem } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
@@ -51,7 +51,7 @@ function formatDate(s: string) {
 function formatTripDateRange(
   start: string | null | undefined,
   end: string | null | undefined,
-  fallback: string | null
+  fallback: string | null,
 ): string {
   if (start && end && start !== end) {
     return `${formatDate(start)} — ${formatDate(end)}`;
@@ -60,7 +60,6 @@ function formatTripDateRange(
   if (fallback) return formatDate(fallback);
   return "—";
 }
-
 
 const tripTypeLabels: Record<string, string> = {
   raw: "Сировина",
@@ -86,14 +85,23 @@ export default function TripsPage() {
   const [repaymentDate, setRepaymentDate] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
+  const [repaymentsSum, setRepaymentsSum] = useState<number>(0);
 
   useEffect(() => {
-    Promise.all([getTrips(), getVehicles()]).then(([tripsData, vehiclesData]) => {
-      setTrips(tripsData);
-      setVehicles(vehiclesData ?? []);
-      setIsLoading(false);
-    });
+    Promise.all([getTrips(), getVehicles()]).then(
+      ([tripsData, vehiclesData]) => {
+        setTrips(tripsData);
+        setVehicles(vehiclesData ?? []);
+        setIsLoading(false);
+      },
+    );
   }, []);
+
+  useEffect(() => {
+    getRawRepaymentsSum(dateFrom || undefined, dateTo || undefined).then(
+      setRepaymentsSum,
+    );
+  }, [dateFrom, dateTo]);
 
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
@@ -112,11 +120,11 @@ export default function TripsPage() {
 
   const commerceTrips = useMemo(
     () => filteredTrips.filter((t) => t.trip_type === "commerce"),
-    [filteredTrips]
+    [filteredTrips],
   );
   const rawTrips = useMemo(
     () => filteredTrips.filter((t) => t.trip_type === "raw"),
-    [filteredTrips]
+    [filteredTrips],
   );
 
   const commerceTotals = useMemo(() => {
@@ -151,7 +159,8 @@ export default function TripsPage() {
       sumDriverCostUah,
       sumTotalCostsUah,
       sumProfitUah,
-      avgProfitPerKmUah: countProfitPerKm > 0 ? sumProfitPerKmUah / countProfitPerKm : null,
+      avgProfitPerKmUah:
+        countProfitPerKm > 0 ? sumProfitPerKmUah / countProfitPerKm : null,
       avgRoiPercent: countRoi > 0 ? sumRoiPercent / countRoi : null,
     };
   }, [commerceTrips]);
@@ -291,7 +300,10 @@ export default function TripsPage() {
             <CardContent>
               <div className="flex flex-wrap items-end gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="date-from" className="text-xs text-muted-foreground">
+                  <Label
+                    htmlFor="date-from"
+                    className="text-xs text-muted-foreground"
+                  >
                     Дата від
                   </Label>
                   <Input
@@ -302,7 +314,10 @@ export default function TripsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="date-to" className="text-xs text-muted-foreground">
+                  <Label
+                    htmlFor="date-to"
+                    className="text-xs text-muted-foreground"
+                  >
                     Дата до
                   </Label>
                   <Input
@@ -313,10 +328,14 @@ export default function TripsPage() {
                   />
                 </div>
                 <div className="space-y-1.5 min-w-[160px]">
-                  <Label className="text-xs text-muted-foreground">Транспорт</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Транспорт
+                  </Label>
                   <Select
                     value={vehicleFilter || "__all__"}
-                    onValueChange={(v) => setVehicleFilter(v === "__all__" ? "" : v)}
+                    onValueChange={(v) =>
+                      setVehicleFilter(v === "__all__" ? "" : v)
+                    }
                   >
                     <SelectTrigger id="vehicle-filter">
                       <SelectValue placeholder="Усі" />
@@ -332,11 +351,15 @@ export default function TripsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5 min-w-[140px]">
-                  <Label className="text-xs text-muted-foreground">Статус</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Статус
+                  </Label>
                   <Select
                     value={statusFilter || "__all__"}
                     onValueChange={(v) =>
-                      setStatusFilter((v === "__all__" ? "" : v) as StatusFilter)
+                      setStatusFilter(
+                        (v === "__all__" ? "" : v) as StatusFilter,
+                      )
                     }
                   >
                     <SelectTrigger id="status-filter">
@@ -414,7 +437,11 @@ export default function TripsPage() {
                             onClick={() => router.push(`/trips/${t.id}`)}
                           >
                             <TableCell className="font-medium">
-                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                              {formatTripDateRange(
+                                t.trip_start_date,
+                                t.trip_end_date,
+                                t.trip_date,
+                              )}
                             </TableCell>
                             <TableCell>{t.name?.trim() ?? "—"}</TableCell>
                             <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
@@ -448,10 +475,14 @@ export default function TripsPage() {
                   )}
                   {commerceTotals && (
                     <div className="rounded-lg border p-4">
-                      <h3 className="text-sm font-medium mb-3">Підсумки (Комерція)</h3>
+                      <h3 className="text-sm font-medium mb-3">
+                        Підсумки (Комерція)
+                      </h3>
                       <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Фрахт (дохід)</span>
+                          <span className="text-muted-foreground">
+                            Фрахт (дохід)
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumFreightUah)}
                           </span>
@@ -469,25 +500,33 @@ export default function TripsPage() {
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Всього витрат</span>
+                          <span className="text-muted-foreground">
+                            Всього витрат
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumTotalCostsUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Прибуток</span>
+                          <span className="text-muted-foreground">
+                            Прибуток
+                          </span>
                           <span className="tabular-nums font-medium">
                             {formatUah(commerceTotals.sumProfitUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Середній прибуток/км</span>
+                          <span className="text-muted-foreground">
+                            Середній прибуток/км
+                          </span>
                           <span className="tabular-nums">
                             {formatUah(commerceTotals.avgProfitPerKmUah)}
                           </span>
                         </div>
                         <div className="flex justify-between gap-2 py-2 border-b">
-                          <span className="text-muted-foreground">Середній ROI</span>
+                          <span className="text-muted-foreground">
+                            Середній ROI
+                          </span>
                           <span className="tabular-nums">
                             {formatPercent(commerceTotals.avgRoiPercent)}
                           </span>
@@ -523,7 +562,11 @@ export default function TripsPage() {
                             onClick={() => router.push(`/trips/${t.id}`)}
                           >
                             <TableCell className="font-medium">
-                              {formatTripDateRange(t.trip_start_date, t.trip_end_date, t.trip_date)}
+                              {formatTripDateRange(
+                                t.trip_start_date,
+                                t.trip_end_date,
+                                t.trip_date,
+                              )}
                             </TableCell>
                             <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
                             <TableCell className="text-right tabular-nums">
@@ -550,10 +593,14 @@ export default function TripsPage() {
                   )}
                   {rawTotals && (
                     <div className="rounded-lg border p-4">
-                      <h3 className="text-sm font-medium mb-3">Підсумки (Сировина)</h3>
+                      <h3 className="text-sm font-medium mb-3">
+                        Підсумки (Сировина)
+                      </h3>
                       <div className="grid gap-4 sm:grid-cols-3">
                         <div className="rounded-lg border bg-muted/40 p-4">
-                          <p className="text-xs text-muted-foreground mb-1">Середня вартість мішка</p>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Середня вартість мішка
+                          </p>
                           <p className="text-xl font-semibold tabular-nums">
                             {rawTotals.avgCostPerBagUah != null
                               ? formatUah(rawTotals.avgCostPerBagUah)
@@ -561,11 +608,17 @@ export default function TripsPage() {
                           </p>
                         </div>
                         <div className="rounded-lg border bg-muted/40 p-4">
-                          <p className="text-xs text-muted-foreground mb-1">Всього мішків</p>
-                          <p className="text-xl font-semibold tabular-nums">{rawTotals.sumBags}</p>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Всього мішків
+                          </p>
+                          <p className="text-xl font-semibold tabular-nums">
+                            {rawTotals.sumBags}
+                          </p>
                         </div>
                         <div className="rounded-lg border bg-muted/40 p-4">
-                          <p className="text-xs text-muted-foreground mb-1">Всього витрат</p>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Всього витрат
+                          </p>
                           <p className="text-xl font-semibold tabular-nums">
                             {formatUah(rawTotals.sumTotalCostsUah)}
                           </p>
@@ -574,62 +627,117 @@ export default function TripsPage() {
                     </div>
                   )}
                   {rawTotals && (
-                    <div className="rounded-lg border p-4 mt-4">
-                      <h3 className="text-sm font-medium mb-3">Погасити витрати</h3>
-                      <form
-                        className="flex flex-wrap items-end gap-4"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          const amount = Number(repaymentAmount);
-                          if (!repaymentDate.trim()) {
-                            toast.error("Оберіть дату");
-                            return;
-                          }
-                          if (!(amount > 0)) {
-                            toast.error("Вкажіть суму більше нуля");
-                            return;
-                          }
-                          setRepaymentSubmitting(true);
-                          const result = await createRawCostRepayment(repaymentDate, amount);
-                          setRepaymentSubmitting(false);
-                          if (result.ok) {
-                            toast.success("Погашення витрат збережено");
-                            setRepaymentDate("");
-                            setRepaymentAmount("");
-                          } else {
-                            toast.error(result.error);
-                          }
-                        }}
-                      >
-                        <div className="space-y-1.5">
-                          <Label htmlFor="repayment-date" className="text-xs text-muted-foreground">
-                            Дата
-                          </Label>
-                          <Input
-                            id="repayment-date"
-                            type="date"
-                            value={repaymentDate}
-                            onChange={(e) => setRepaymentDate(e.target.value)}
-                          />
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-lg border bg-muted/40 p-4">
+                        <h3 className="text-sm font-medium mb-3">
+                          Залишилось погасити
+                        </h3>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              Всього витрат
+                            </span>
+                            <span className="tabular-nums font-medium">
+                              {formatUah(rawTotals.sumTotalCostsUah)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              Погашено
+                            </span>
+                            <span className="tabular-nums font-medium">
+                              {formatUah(repaymentsSum)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2 border-t pt-2">
+                            <span className="font-medium">
+                              Залишилось погасити
+                            </span>
+                            <span className="tabular-nums font-semibold">
+                              {formatUah(
+                                Math.max(
+                                  0,
+                                  rawTotals.sumTotalCostsUah - repaymentsSum,
+                                ),
+                              )}
+                            </span>
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="repayment-amount" className="text-xs text-muted-foreground">
-                            Сума погашення (грн)
-                          </Label>
-                          <Input
-                            id="repayment-amount"
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            placeholder="0.00"
-                            value={repaymentAmount}
-                            onChange={(e) => setRepaymentAmount(e.target.value)}
-                          />
-                        </div>
-                        <Button type="submit" disabled={repaymentSubmitting}>
-                          {repaymentSubmitting ? "Збереження…" : "Погасити"}
-                        </Button>
-                      </form>
+                      </div>
+                      <div className="rounded-lg border p-4">
+                        <h3 className="text-sm font-medium mb-3">
+                          Погасити доставку
+                        </h3>
+                        <form
+                          className="flex flex-wrap items-end gap-4"
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const amount = Number(repaymentAmount);
+                            if (!repaymentDate.trim()) {
+                              toast.error("Оберіть дату");
+                              return;
+                            }
+                            if (!(amount > 0)) {
+                              toast.error("Вкажіть суму більше нуля");
+                              return;
+                            }
+                            setRepaymentSubmitting(true);
+                            const result = await createRawCostRepayment(
+                              repaymentDate,
+                              amount,
+                            );
+                            setRepaymentSubmitting(false);
+                            if (result.ok) {
+                              toast.success("Погашення витрат збережено");
+                              setRepaymentDate("");
+                              setRepaymentAmount("");
+                              getRawRepaymentsSum(
+                                dateFrom || undefined,
+                                dateTo || undefined,
+                              ).then(setRepaymentsSum);
+                            } else {
+                              toast.error(result.error);
+                            }
+                          }}
+                        >
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="repayment-date"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Дата
+                            </Label>
+                            <Input
+                              id="repayment-date"
+                              type="date"
+                              value={repaymentDate}
+                              onChange={(e) => setRepaymentDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="repayment-amount"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Сума погашення (грн)
+                            </Label>
+                            <Input
+                              id="repayment-amount"
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              placeholder="0.00"
+                              value={repaymentAmount}
+                              onChange={(e) =>
+                                setRepaymentAmount(e.target.value)
+                              }
+                            />
+                          </div>
+                          <Button type="submit" disabled={repaymentSubmitting}>
+                            {repaymentSubmitting ? "Збереження…" : "Погасити"}
+                          </Button>
+                        </form>
+                      </div>
                     </div>
                   )}
                 </TabsContent>
