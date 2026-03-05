@@ -54,6 +54,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,10 +128,25 @@ export default function TripsPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [repaymentPageSize, setRepaymentPageSize] = useState(5);
+  const [repaymentPage, setRepaymentPage] = useState(1);
 
   const repaymentsSum = useMemo(
     () => repaymentsList.reduce((s, r) => s + r.amount, 0),
     [repaymentsList],
+  );
+
+  const repaymentTotalPages = Math.max(
+    1,
+    Math.ceil(repaymentsList.length / repaymentPageSize),
+  );
+  const paginatedRepayments = useMemo(
+    () =>
+      repaymentsList.slice(
+        (repaymentPage - 1) * repaymentPageSize,
+        repaymentPage * repaymentPageSize,
+      ),
+    [repaymentsList, repaymentPage, repaymentPageSize],
   );
 
   useEffect(() => {
@@ -136,6 +165,12 @@ export default function TripsPage() {
   useEffect(() => {
     refetchRepayments();
   }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (repaymentPage > repaymentTotalPages) {
+      setRepaymentPage(repaymentTotalPages);
+    }
+  }, [repaymentPage, repaymentTotalPages]);
 
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
@@ -772,72 +807,176 @@ export default function TripsPage() {
                     </div>
                   )}
                   {rawTotals && (
-                    <div className="mt-4 rounded-lg border p-4">
-                      <h3 className="text-sm font-medium mb-3">Погашення</h3>
-                      {repaymentsList.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4">
-                          Немає погашень за обраний період
-                        </p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Дата</TableHead>
-                              <TableHead className="text-right">Сума</TableHead>
-                              <TableHead className="w-[100px] text-right">
-                                Дії
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {repaymentsList.map((item) => (
-                              <TableRow key={item.id}>
-                                <TableCell className="tabular-nums">
-                                  {formatDate(
-                                    item.date.startsWith("20")
-                                      ? item.date.slice(0, 10)
-                                      : item.date,
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums font-medium">
-                                  {formatUah(item.amount)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex justify-end gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={() => {
-                                        setEditingRepayment(item);
-                                        setEditDate(item.date.slice(0, 10));
-                                        setEditAmount(
-                                          String(item.amount),
-                                        );
-                                      }}
-                                      aria-label="Редагувати"
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive"
-                                      onClick={() =>
-                                        setDeleteRepaymentId(item.id)
-                                      }
-                                      aria-label="Видалити"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
+                    <Accordion type="single" collapsible className="mt-4 w-full">
+                      <AccordionItem value="repayments" className="rounded-lg border px-4">
+                        <AccordionTrigger className="hover:no-underline">
+                          Погашення
+                          {repaymentsList.length > 0 &&
+                            ` (${repaymentsList.length})`}
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-4">
+                            <span className="text-sm text-muted-foreground">
+                              Погашення за обраний період
+                            </span>
+                            <Select
+                              value={String(repaymentPageSize)}
+                              onValueChange={(v) => {
+                                setRepaymentPageSize(Number(v));
+                                setRepaymentPage(1);
+                              }}
+                            >
+                              <SelectTrigger className="w-[72px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="5">5</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {repaymentsList.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-4">
+                              Немає погашень за обраний період
+                            </p>
+                          ) : (
+                            <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Дата</TableHead>
+                                    <TableHead className="text-right">
+                                      Сума
+                                    </TableHead>
+                                    <TableHead className="w-[100px] text-right">
+                                      Дії
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {paginatedRepayments.map((item) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell className="tabular-nums">
+                                        {formatDate(
+                                          item.date.startsWith("20")
+                                            ? item.date.slice(0, 10)
+                                            : item.date,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-right tabular-nums font-medium">
+                                        {formatUah(item.amount)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                              setEditingRepayment(item);
+                                              setEditDate(
+                                                item.date.slice(0, 10),
+                                              );
+                                              setEditAmount(
+                                                String(item.amount),
+                                              );
+                                            }}
+                                            aria-label="Редагувати"
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive hover:text-destructive"
+                                            onClick={() =>
+                                              setDeleteRepaymentId(item.id)
+                                            }
+                                            aria-label="Видалити"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              {repaymentTotalPages > 1 && (
+                                <div className="p-2 border-t">
+                                  <Pagination>
+                                    <PaginationContent className="flex-wrap justify-center gap-1">
+                                      <PaginationItem>
+                                        <PaginationPrevious
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setRepaymentPage((p) =>
+                                              Math.max(1, p - 1),
+                                            );
+                                          }}
+                                          aria-disabled={
+                                            repaymentPage <= 1
+                                          }
+                                          className={
+                                            repaymentPage <= 1
+                                              ? "pointer-events-none opacity-50"
+                                              : ""
+                                          }
+                                        />
+                                      </PaginationItem>
+                                      {Array.from(
+                                        { length: repaymentTotalPages },
+                                        (_, i) => i + 1,
+                                      ).map((p) => (
+                                        <PaginationItem key={p}>
+                                          <PaginationLink
+                                            href="#"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              setRepaymentPage(p);
+                                            }}
+                                            isActive={repaymentPage === p}
+                                          >
+                                            {p}
+                                          </PaginationLink>
+                                        </PaginationItem>
+                                      ))}
+                                      <PaginationItem>
+                                        <PaginationNext
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setRepaymentPage((p) =>
+                                              Math.min(
+                                                repaymentTotalPages,
+                                                p + 1,
+                                              ),
+                                            );
+                                          }}
+                                          aria-disabled={
+                                            repaymentPage >=
+                                            repaymentTotalPages
+                                          }
+                                          className={
+                                            repaymentPage >=
+                                            repaymentTotalPages
+                                              ? "pointer-events-none opacity-50"
+                                              : ""
+                                          }
+                                        />
+                                      </PaginationItem>
+                                    </PaginationContent>
+                                  </Pagination>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   )}
                   <Dialog
                     open={!!editingRepayment}
