@@ -49,7 +49,7 @@ export function HourlyWageForm({ shiftId, shiftOpenedAt, employeeCount }: Hourly
     );
     setIsSubmitting(false);
     if (result.ok) {
-      toast.success("Витрату додано до обліку (З/П Погодинна)");
+      toast.success("Витрату додано до обліку (З.П. Погодинна)");
       setHours("");
       setDescription("");
     } else {
@@ -109,7 +109,7 @@ export function HourlyWageForm({ shiftId, shiftOpenedAt, employeeCount }: Hourly
         </p>
       )}
       <Button type="submit" disabled={amount <= 0 || isSubmitting}>
-        {isSubmitting ? "Збереження…" : "Додати до обліку витрат (З/П Погодинна)"}
+        {isSubmitting ? "Збереження…" : "Додати до обліку витрат (З.П. Погодинна)"}
       </Button>
     </form>
   );

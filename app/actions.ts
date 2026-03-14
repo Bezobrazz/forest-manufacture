@@ -2095,10 +2095,21 @@ export async function createExpenseCategory(
 ) {
   try {
     const supabase = await createServerClient();
+    const trimmedName = name.trim();
+
+    const { data: existing } = await supabase
+      .from("expense_categories")
+      .select("*")
+      .eq("name", trimmedName)
+      .order("id", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) return existing;
 
     const { data, error } = await supabase
       .from("expense_categories")
-      .insert([{ name, description }])
+      .insert([{ name: trimmedName, description }])
       .select()
       .single();
 
@@ -2262,9 +2273,12 @@ export async function createRawCostRepayment(
     }
 
     const categories = await getExpenseCategories();
-    let category = (categories as { id: number; name: string }[]).find(
+    const rawMatches = (categories as { id: number; name: string }[]).filter(
       (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
     );
+    let category = rawMatches.length > 0
+      ? rawMatches.sort((a, b) => a.id - b.id)[0]
+      : null;
     if (!category) {
       const created = await createExpenseCategory(RAW_REPAYMENT_CATEGORY_NAME, null);
       category = { id: created.id, name: created.name };
@@ -2278,7 +2292,7 @@ export async function createRawCostRepayment(
   }
 }
 
-const HOURLY_WAGE_CATEGORY_NAME = "З/П Погодинна";
+const HOURLY_WAGE_CATEGORY_NAME = "З.П. Погодинна";
 
 export async function createHourlyWageExpense(
   amount: number,
@@ -2290,9 +2304,12 @@ export async function createHourlyWageExpense(
       return { ok: false, error: "Сума має бути більше нуля" };
     }
     const categories = await getExpenseCategories();
-    let category = (categories as { id: number; name: string }[]).find(
+    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
       (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
     );
+    let category = hourlyMatches.length > 0
+      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
+      : null;
     if (!category) {
       const created = await createExpenseCategory(HOURLY_WAGE_CATEGORY_NAME, null);
       category = { id: created.id, name: created.name };
@@ -2318,9 +2335,12 @@ export async function getRawRepayments(
   try {
     const supabase = await createServerClient();
     const categories = await getExpenseCategories();
-    const category = (categories as { id: number; name: string }[]).find(
+    const rawMatches = (categories as { id: number; name: string }[]).filter(
       (c) => c.name === RAW_REPAYMENT_CATEGORY_NAME
     );
+    const category = rawMatches.length > 0
+      ? rawMatches.sort((a, b) => a.id - b.id)[0]
+      : null;
     if (!category) return [];
 
     let query = supabase

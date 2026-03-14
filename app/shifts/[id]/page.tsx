@@ -402,7 +402,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
               Розрахунок погодинної роботи
             </CardTitle>
             <CardDescription>
-              Кількість годин × ставка (грн/год). Результат додається до обліку витрат — З/П Погодинна
+              Кількість годин × ставка (грн/год). Результат додається до обліку витрат — З.П. Погодинна
             </CardDescription>
           </CardHeader>
           <CardContent>
