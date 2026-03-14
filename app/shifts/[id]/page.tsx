@@ -406,7 +406,15 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <HourlyWageForm shiftId={shift.id} />
+            <HourlyWageForm
+              shiftId={shift.id}
+              shiftOpenedAt={
+                shift.opened_at ||
+                shift.created_at ||
+                shift.shift_date
+              }
+              employeeCount={shift.employees.length}
+            />
           </CardContent>
         </Card>
 
