@@ -2278,6 +2278,33 @@ export async function createRawCostRepayment(
   }
 }
 
+const HOURLY_WAGE_CATEGORY_NAME = "З/П Погодинна";
+
+export async function createHourlyWageExpense(
+  amount: number,
+  date: string,
+  description: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (amount <= 0) {
+      return { ok: false, error: "Сума має бути більше нуля" };
+    }
+    const categories = await getExpenseCategories();
+    let category = (categories as { id: number; name: string }[]).find(
+      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
+    );
+    if (!category) {
+      const created = await createExpenseCategory(HOURLY_WAGE_CATEGORY_NAME, null);
+      category = { id: created.id, name: created.name };
+    }
+    await createExpense(category.id, amount, description, date);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при збереженні";
+    return { ok: false, error: message };
+  }
+}
+
 export type RawRepaymentItem = {
   id: number;
   date: string;
