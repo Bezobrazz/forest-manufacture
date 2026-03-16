@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 interface ProductionItemsFormProps {
   shift: Shift;
@@ -24,7 +25,7 @@ export function ProductionItemsForm({
 }: ProductionItemsFormProps) {
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [pendingProducts, setPendingProducts] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [localProduction, setLocalProduction] =
     useState<Production[]>(existingProduction);
@@ -32,7 +33,6 @@ export function ProductionItemsForm({
 
   const router = useRouter();
 
-  // Ініціалізуємо кількості з існуючих даних
   useEffect(() => {
     const initialQuantities: Record<number, string> = {};
 
@@ -44,7 +44,6 @@ export function ProductionItemsForm({
     setLocalProduction(existingProduction);
   }, [existingProduction]);
 
-  // Функція для оновлення кількості продукту
   async function handleUpdateQuantity(productId: number) {
     if (pendingProducts.has(productId)) return;
 
@@ -71,28 +70,22 @@ export function ProductionItemsForm({
       console.log("Результат оновлення кількості продукції:", result);
 
       if (result.success && result.data && result.data.length > 0) {
-        // Оновлюємо локальний стан
         const updatedProduction = result.data[0] as Production;
 
-        // Оновлюємо локальний стан продукції
         setLocalProduction((prev) => {
-          // Перевіряємо, чи існує вже такий запис
           const existingIndex = prev.findIndex(
-            (p) => p.product_id === productId
+            (p) => p.product_id === productId,
           );
 
           if (existingIndex >= 0) {
-            // Оновлюємо існуючий запис
             const updated = [...prev];
             updated[existingIndex] = updatedProduction;
             return updated;
           } else {
-            // Додаємо новий запис
             return [...prev, updatedProduction];
           }
         });
 
-        // Викликаємо callback, якщо він є
         if (onProductionUpdated) {
           onProductionUpdated(updatedProduction);
         }
@@ -100,7 +93,6 @@ export function ProductionItemsForm({
         toast.success("Дані оновлено", {
           description: "Кількість продукції успішно оновлено",
         });
-        // Примусово оновлюємо сторінку
         setTimeout(() => {
           router.refresh();
         }, 1000); // Затримка в 1 секунду
@@ -123,7 +115,6 @@ export function ProductionItemsForm({
     }
   }
 
-  // Функція для оновлення значення в стані
   function handleQuantityChange(productId: number, value: string) {
     setQuantities((prev) => ({
       ...prev,
@@ -131,10 +122,8 @@ export function ProductionItemsForm({
     }));
   }
 
-  // Функція для отримання номера фракції з опису продукту
   function getFractionNumber(productDescription?: string): number {
     if (!productDescription) return 999;
-    // Ловить: 1 фракція, 2 фракц, 3 фр, 4 фр., 5 фракцiя
     const match = productDescription.match(/(\d)\s*(фракц(ія)?|фр\.?)/i);
     if (match) {
       return parseInt(match[1], 10);
@@ -142,13 +131,10 @@ export function ProductionItemsForm({
     return 999; // Якщо не знайдено, ставимо в кінець
   }
 
-  // Групуємо продукти за категоріями
   const productsByCategory: Record<string, Product[]> = {};
 
-  // Додаємо категорію "Без категорії"
   productsByCategory["Без категорії"] = [];
 
-  // Розподіляємо продукти за категоріями
   products.forEach((product) => {
     const categoryName = product.category?.name || "Без категорії";
     if (!productsByCategory[categoryName]) {
@@ -161,7 +147,6 @@ export function ProductionItemsForm({
     <div className="space-y-4">
       {Object.entries(productsByCategory).map(
         ([categoryName, categoryProducts]) =>
-          // Додаємо перевірку, щоб не відображати категорії без товарів
           categoryProducts.length > 0 && (
             <Card key={categoryName} className="mb-4">
               <CardContent className="p-4">
@@ -183,9 +168,8 @@ export function ProductionItemsForm({
                       return 0;
                     })
                     .map((product) => {
-                      // Використовуємо локальний стан для перевірки існуючих елементів
                       const existingItem = localProduction.find(
-                        (p) => p.product_id === product.id
+                        (p) => p.product_id === product.id,
                       );
                       const isPending = pendingProducts.has(product.id);
 
@@ -221,11 +205,10 @@ export function ProductionItemsForm({
                                 onClick={() => handleUpdateQuantity(product.id)}
                                 disabled={isPending || !quantities[product.id]}
                               >
-                                {isPending
-                                  ? "Оновлення..."
-                                  : existingItem
-                                  ? "Оновити"
-                                  : "Додати"}
+                                {isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                                ) : null}
+                                {existingItem ? "Оновити" : "Додати"}
                               </Button>
                             )}
                           </div>
@@ -235,7 +218,7 @@ export function ProductionItemsForm({
                 </div>
               </CardContent>
             </Card>
-          )
+          ),
       )}
     </div>
   );

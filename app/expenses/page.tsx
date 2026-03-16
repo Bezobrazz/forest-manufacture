@@ -285,8 +285,7 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), now.getMonth(), 1);
       case "week": {
         const day = now.getDay();
-        const saturdayOffset =
-          day === 6 ? 0 : day === 0 ? -1 : -(day + 1);
+        const saturdayOffset = day === 6 ? 0 : day === 0 ? -1 : -(day + 1);
         const startDate = new Date(now);
         startDate.setDate(now.getDate() + saturdayOffset);
         startDate.setHours(0, 0, 0, 0);
@@ -308,7 +307,7 @@ export default function ExpensesPage() {
         return new Date(now.getFullYear(), now.getMonth() + 1, 0);
       case "week": {
         const day = now.getDay();
-        const fridayOffset = day === 5 ? 0 : day === 6 ? -1 : 5 - day;
+        const fridayOffset = day === 5 ? 0 : day === 6 ? 6 : 5 - day;
         const endDate = new Date(now);
         endDate.setDate(now.getDate() + fridayOffset);
         endDate.setHours(23, 59, 59, 999);

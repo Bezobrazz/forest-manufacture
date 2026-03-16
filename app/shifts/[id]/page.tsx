@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
+import { HourlyWageForm } from "@/components/hourly-wage-form";
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
 import { getUserWithRole } from "@/lib/auth/get-user-role";
 import type { ShiftWithDetails } from "@/lib/types";
@@ -391,6 +392,29 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              Розрахунок погодинної роботи
+            </CardTitle>
+            <CardDescription>
+              Кількість годин × ставка (грн/год). Результат додається до обліку витрат — З.П. Погодинна
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <HourlyWageForm
+              shiftId={shift.id}
+              shiftOpenedAt={
+                shift.opened_at ||
+                shift.created_at ||
+                shift.shift_date
+              }
+              employeeCount={shift.employees.length}
+            />
           </CardContent>
         </Card>
 
