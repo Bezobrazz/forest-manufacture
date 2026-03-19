@@ -678,6 +678,14 @@ export default function TripDetailPage() {
               <span className="text-muted-foreground">Витрати всього</span>
               <span className="tabular-nums">{formatUah(trip.total_costs_uah)}</span>
             </div>
+            <div className="flex justify-between py-1.5 border-b">
+              <span className="text-muted-foreground">Витрати на пальне</span>
+              <span className="tabular-nums">{formatUah(trip.fuel_cost_uah)}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b">
+              <span className="text-muted-foreground">Витрати на амортизацію</span>
+              <span className="tabular-nums">{formatUah(trip.depreciation_cost_uah)}</span>
+            </div>
             {trip.trip_type !== "raw" && (
               <>
                 <div className="flex justify-between py-1.5 border-b">
