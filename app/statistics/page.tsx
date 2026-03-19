@@ -7,6 +7,7 @@ import {
   getShifts,
   getProducts,
   getProductCategories,
+  getExpenses,
   getSupplierDeliveries,
 } from "@/app/actions";
 import { getTrips } from "@/app/trips/actions";
@@ -59,6 +60,14 @@ type SupplierDeliveryLike = {
   created_at: string;
 };
 
+type ExpenseLike = {
+  amount: number;
+  date: string;
+  category?: {
+    name?: string | null;
+  } | null;
+};
+
 type TripLike = {
   trip_type: string | null;
   total_costs_uah: number | null;
@@ -80,6 +89,7 @@ export default function StatisticsPage() {
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseLike[]>([]);
   const [supplierDeliveries, setSupplierDeliveries] = useState<SupplierDeliveryLike[]>(
     []
   );
@@ -97,6 +107,7 @@ export default function StatisticsPage() {
           shiftsData,
           productsData,
           categoriesData,
+          expensesData,
           deliveriesData,
           tripsData,
         ] =
@@ -105,6 +116,7 @@ export default function StatisticsPage() {
             getShifts(),
             getProducts(),
             getProductCategories(),
+            getExpenses(),
             getSupplierDeliveries(),
             getTrips(),
           ]);
@@ -112,6 +124,7 @@ export default function StatisticsPage() {
         setProductionStats(stats);
         setProducts(productsData || []);
         setCategories(categoriesData || []);
+        setExpenses((expensesData || []) as ExpenseLike[]);
         setSupplierDeliveries((deliveriesData || []) as SupplierDeliveryLike[]);
         setTrips((tripsData || []) as TripLike[]);
 
@@ -125,6 +138,7 @@ export default function StatisticsPage() {
         setProducts([]);
         setCategories([]);
         setShifts([]);
+        setExpenses([]);
         setSupplierDeliveries([]);
         setTrips([]);
       } finally {
@@ -237,6 +251,33 @@ export default function StatisticsPage() {
       return sum + Number(delivery.quantity ?? 0);
     }, 0);
 
+  const sumHourlyWageCostsInRange = (startDay: string, endDay: string) =>
+    expenses.reduce((sum, expense) => {
+      const day = toDayKey(expense.date);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      const categoryName = String(expense.category?.name ?? "").trim();
+      if (categoryName !== "З.П. Погодинна") return sum;
+      return sum + Number(expense.amount ?? 0);
+    }, 0);
+
+  const sumProducedQuantityInRange = (startDay: string, endDay: string) =>
+    shifts.reduce((sum, shift) => {
+      if (shift.status !== "completed") return sum;
+      const day = toDayKey(shift.shift_date);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      const producedInShift =
+        shift.production?.reduce(
+          (acc, item) => acc + Number(item.quantity ?? 0),
+          0
+        ) ?? 0;
+      return sum + producedInShift;
+    }, 0);
+
+  const fixedRewardPerBag = useMemo(() => {
+    const firstRewardProduct = products.find((product) => Number(product.reward ?? 0) > 0);
+    return firstRewardProduct ? Number(firstRewardProduct.reward ?? 0) : 0;
+  }, [products]);
+
   const currentPeriodCostMetrics = useMemo(() => {
     const startDay = periodStartStr;
     const endDay = periodEndStr;
@@ -245,12 +286,18 @@ export default function StatisticsPage() {
     const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
     const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
     const tripBags = sumBagsInRange(startDay, endDay);
-
+    const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
+    const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const hourlyWagePerBag =
+      producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
-        ? purchaseCostPerBag + tripCostPerBag
+        ? purchaseCostPerBag +
+          tripCostPerBag +
+          fixedRewardPerBag +
+          hourlyWagePerBag
         : null;
 
     return {
@@ -258,11 +305,22 @@ export default function StatisticsPage() {
       purchaseBags,
       rawTripCosts,
       tripBags,
+      producedQuantity,
+      hourlyWageCosts,
       purchaseCostPerBag,
       tripCostPerBag,
+      fixedRewardPerBag,
+      hourlyWagePerBag,
       totalCostPerBag,
     };
-  }, [periodStartStr, periodEndStr, supplierDeliveries, trips]);
+  }, [
+    periodStartStr,
+    periodEndStr,
+    expenses,
+    fixedRewardPerBag,
+    supplierDeliveries,
+    trips,
+  ]);
 
   const previousPeriodCostMetrics = useMemo(() => {
     const prevStartDay = dateToYYYYMMDD(previousPeriodRange.prevStart);
@@ -272,18 +330,24 @@ export default function StatisticsPage() {
     const purchaseBags = sumPurchaseBagsInRange(prevStartDay, prevEndDay);
     const rawTripCosts = sumRawTripsCostsInRange(prevStartDay, prevEndDay);
     const tripBags = sumBagsInRange(prevStartDay, prevEndDay);
-
+    const hourlyWageCosts = sumHourlyWageCostsInRange(prevStartDay, prevEndDay);
+    const producedQuantity = sumProducedQuantityInRange(prevStartDay, prevEndDay);
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const hourlyWagePerBag =
+      producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
-        ? purchaseCostPerBag + tripCostPerBag
+        ? purchaseCostPerBag +
+          tripCostPerBag +
+          fixedRewardPerBag +
+          hourlyWagePerBag
         : null;
 
     return {
       totalCostPerBag,
     };
-  }, [previousPeriodRange, supplierDeliveries, trips]);
+  }, [previousPeriodRange, expenses, fixedRewardPerBag, supplierDeliveries, trips]);
 
   const getChangePercent = (current: number | null, previous: number | null) => {
     if (current == null || previous == null || previous === 0) return null;
@@ -297,7 +361,9 @@ export default function StatisticsPage() {
 
   const structureTotal =
     (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
-    (currentPeriodCostMetrics.tripCostPerBag ?? 0);
+    (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
+    (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
+    (currentPeriodCostMetrics.hourlyWagePerBag ?? 0);
   const structureRows = [
     {
       label: "Середня вартість мішка із закупок",
@@ -306,6 +372,14 @@ export default function StatisticsPage() {
     {
       label: "Середня вартість мішка з поїздок",
       value: currentPeriodCostMetrics.tripCostPerBag ?? 0,
+    },
+    {
+      label: "Винагорода на мішок (фіксована)",
+      value: currentPeriodCostMetrics.fixedRewardPerBag ?? 0,
+    },
+    {
+      label: "Погодинна З.П. на мішок",
+      value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
     },
   ].map((item) => ({
     ...item,
@@ -699,7 +773,8 @@ export default function StatisticsPage() {
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
             Тимчасова формула: середня вартість мішка із закупок + середня
-            вартість мішка з поїздок
+            вартість мішка з поїздок + фіксована винагорода за мішок + погодинна
+            З.П. на мішок (відносно готової продукції)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -763,6 +838,32 @@ export default function StatisticsPage() {
               <span className="text-muted-foreground">К-ть мішків у поїздках</span>
               <span className="tabular-nums">
                 {formatNumber(currentPeriodCostMetrics.tripBags)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Винагорода на мішок (фіксована)</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.fixedRewardPerBag, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Погодинна З.П. (сума)</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWageCosts, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">
+                К-ть готової продукції (база для погодинної З.П.)
+              </span>
+              <span className="tabular-nums">
+                {formatNumber(currentPeriodCostMetrics.producedQuantity)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Погодинна З.П. на мішок</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWagePerBag, "₴")}
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b font-medium">
