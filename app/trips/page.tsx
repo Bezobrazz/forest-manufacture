@@ -72,8 +72,11 @@ import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
+import { dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
+type PeriodFilter = "year" | "month" | "week";
+type RepaymentPeriodFilter = "all" | "year";
 
 function formatDate(s: string) {
   const d = new Date(s + "Z");
@@ -114,12 +117,15 @@ export default function TripsPage() {
   const [trips, setTrips] = useState<TripListItem[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [period, setPeriod] = useState<PeriodFilter>("year");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [repaymentDate, setRepaymentDate] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("");
+  const [repaymentPeriodFilter, setRepaymentPeriodFilter] =
+    useState<RepaymentPeriodFilter>("all");
+  const [repaymentYear, setRepaymentYear] = useState<number>(new Date().getFullYear());
   const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
   const [repaymentsList, setRepaymentsList] = useState<RawRepaymentItem[]>([]);
   const [editingRepayment, setEditingRepayment] = useState<RawRepaymentItem | null>(null);
@@ -149,6 +155,59 @@ export default function TripsPage() {
     [repaymentsList, repaymentPage, repaymentPageSize],
   );
 
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    trips.forEach((trip) => {
+      const rawDate = trip.trip_start_date ?? trip.trip_date;
+      if (!rawDate) return;
+      const year = new Date(rawDate).getFullYear();
+      if (Number.isFinite(year)) years.add(year);
+    });
+    const currentYear = new Date().getFullYear();
+    if (!years.has(currentYear)) years.add(currentYear);
+    return Array.from(years).sort((a, b) => b - a);
+  }, [trips]);
+
+  const repaymentAvailableYears = useMemo(() => {
+    const years = new Set<number>();
+    trips.forEach((trip) => {
+      if (trip.trip_type !== "raw") return;
+      const rawDate = trip.trip_start_date ?? trip.trip_date;
+      if (!rawDate) return;
+      const year = new Date(rawDate).getFullYear();
+      if (Number.isFinite(year)) years.add(year);
+    });
+    const currentYear = new Date().getFullYear();
+    if (!years.has(currentYear)) years.add(currentYear);
+    return Array.from(years).sort((a, b) => b - a);
+  }, [trips]);
+
+  const { startDate: periodStart, endDate: periodEnd } = useMemo(
+    () => getDateRangeForPeriod(period, selectedYear),
+    [period, selectedYear],
+  );
+  const dateFrom = dateToYYYYMMDD(periodStart);
+  const dateTo = dateToYYYYMMDD(periodEnd);
+
+  const repaymentYearRange = useMemo(
+    () => getDateRangeForPeriod("year", repaymentYear),
+    [repaymentYear],
+  );
+  const repaymentDateFrom = useMemo(
+    () =>
+      repaymentPeriodFilter === "year"
+        ? dateToYYYYMMDD(repaymentYearRange.startDate)
+        : undefined,
+    [repaymentPeriodFilter, repaymentYearRange],
+  );
+  const repaymentDateTo = useMemo(
+    () =>
+      repaymentPeriodFilter === "year"
+        ? dateToYYYYMMDD(repaymentYearRange.endDate)
+        : undefined,
+    [repaymentPeriodFilter, repaymentYearRange],
+  );
+
   useEffect(() => {
     Promise.all([getTrips(), getVehicles()]).then(
       ([tripsData, vehiclesData]) => {
@@ -160,11 +219,11 @@ export default function TripsPage() {
   }, []);
 
   const refetchRepayments = () =>
-    getRawRepayments(dateFrom || undefined, dateTo || undefined).then(setRepaymentsList);
+    getRawRepayments(repaymentDateFrom, repaymentDateTo).then(setRepaymentsList);
 
   useEffect(() => {
     refetchRepayments();
-  }, [dateFrom, dateTo]);
+  }, [repaymentDateFrom, repaymentDateTo]);
 
   useEffect(() => {
     if (repaymentPage > repaymentTotalPages) {
@@ -194,6 +253,10 @@ export default function TripsPage() {
   const rawTrips = useMemo(
     () => filteredTrips.filter((t) => t.trip_type === "raw"),
     [filteredTrips],
+  );
+  const rawTripsAll = useMemo(
+    () => trips.filter((t) => t.trip_type === "raw"),
+    [trips],
   );
 
   const commerceTotals = useMemo(() => {
@@ -245,6 +308,27 @@ export default function TripsPage() {
     const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
     return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
   }, [rawTrips]);
+
+  const rawTripsForRepaymentBlock = useMemo(() => {
+    if (repaymentPeriodFilter === "all") return rawTripsAll;
+    return rawTripsAll.filter((trip) => {
+      const tripDay = trip.trip_start_date ?? trip.trip_date;
+      const y = new Date(tripDay).getFullYear();
+      return y === repaymentYear;
+    });
+  }, [rawTripsAll, repaymentPeriodFilter, repaymentYear]);
+
+  const rawRepaymentTotals = useMemo(() => {
+    if (rawTripsForRepaymentBlock.length === 0) return null;
+    let sumTotalCostsUah = 0;
+    let sumBags = 0;
+    for (const t of rawTripsForRepaymentBlock) {
+      sumTotalCostsUah += t.total_costs_uah ?? 0;
+      sumBags += t.bags_count ?? 0;
+    }
+    const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
+    return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
+  }, [rawTripsForRepaymentBlock]);
 
   return (
     <div className="container py-6 space-y-6">
@@ -363,38 +447,57 @@ export default function TripsPage() {
             <CardHeader>
               <CardTitle>Фільтри</CardTitle>
               <CardDescription>
-                Обмежити список за датою, транспортом або статусом
+                Обмежити список за періодом, транспортом або статусом
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap items-end gap-4">
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="date-from"
-                    className="text-xs text-muted-foreground"
+                <div className="space-y-1.5 min-w-[120px]">
+                  <Label className="text-xs text-muted-foreground">Рік</Label>
+                  <Select
+                    value={selectedYear.toString()}
+                    onValueChange={(value) => setSelectedYear(parseInt(value, 10))}
                   >
-                    Дата від
-                  </Label>
-                  <Input
-                    id="date-from"
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
+                    <SelectTrigger>
+                      <SelectValue placeholder="Рік" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableYears.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label
-                    htmlFor="date-to"
-                    className="text-xs text-muted-foreground"
-                  >
-                    Дата до
-                  </Label>
-                  <Input
-                    id="date-to"
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
+                  <Label className="text-xs text-muted-foreground">Період</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant={period === "year" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPeriod("year")}
+                    >
+                      Рік
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={period === "month" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPeriod("month")}
+                    >
+                      Місяць
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={period === "week" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPeriod("week")}
+                    >
+                      Тиждень
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-1.5 min-w-[160px]">
                   <Label className="text-xs text-muted-foreground">
@@ -442,14 +545,12 @@ export default function TripsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {(dateFrom || dateTo || vehicleFilter || statusFilter) && (
+                {(vehicleFilter || statusFilter) && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setDateFrom("");
-                      setDateTo("");
                       setVehicleFilter("");
                       setStatusFilter("");
                     }}
@@ -695,9 +796,66 @@ export default function TripsPage() {
                       </div>
                     </div>
                   )}
-                  {rawTotals && (
+                  {rawRepaymentTotals && (
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <div className="rounded-lg border bg-muted/40 p-4">
+                        <div className="mb-3 flex flex-wrap items-end gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">
+                              Період блоку
+                            </Label>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  repaymentPeriodFilter === "all"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                onClick={() => setRepaymentPeriodFilter("all")}
+                              >
+                                Весь період
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  repaymentPeriodFilter === "year"
+                                    ? "default"
+                                    : "outline"
+                                }
+                                onClick={() => setRepaymentPeriodFilter("year")}
+                              >
+                                Рік
+                              </Button>
+                            </div>
+                          </div>
+                          {repaymentPeriodFilter === "year" && (
+                            <div className="space-y-1.5 min-w-[120px]">
+                              <Label className="text-xs text-muted-foreground">
+                                Обраний рік
+                              </Label>
+                              <Select
+                                value={String(repaymentYear)}
+                                onValueChange={(v) =>
+                                  setRepaymentYear(parseInt(v, 10))
+                                }
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Рік" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {repaymentAvailableYears.map((year) => (
+                                    <SelectItem key={year} value={String(year)}>
+                                      {year}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
                         <h3 className="text-sm font-medium mb-3">
                           Залишилось погасити
                         </h3>
@@ -707,7 +865,7 @@ export default function TripsPage() {
                               Всього витрат
                             </span>
                             <span className="tabular-nums font-medium">
-                              {formatUah(rawTotals.sumTotalCostsUah)}
+                              {formatUah(rawRepaymentTotals.sumTotalCostsUah)}
                             </span>
                           </div>
                           <div className="flex justify-between gap-2">
@@ -726,7 +884,7 @@ export default function TripsPage() {
                               {formatUah(
                                 Math.max(
                                   0,
-                                  rawTotals.sumTotalCostsUah - repaymentsSum,
+                                  rawRepaymentTotals.sumTotalCostsUah - repaymentsSum,
                                 ),
                               )}
                             </span>
@@ -806,7 +964,7 @@ export default function TripsPage() {
                       </div>
                     </div>
                   )}
-                  {rawTotals && (
+                  {rawRepaymentTotals && (
                     <Accordion type="single" collapsible className="mt-4 w-full">
                       <AccordionItem value="repayments" className="rounded-lg border px-4">
                         <AccordionTrigger className="hover:no-underline">
