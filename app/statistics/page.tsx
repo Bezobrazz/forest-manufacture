@@ -7,7 +7,9 @@ import {
   getShifts,
   getProducts,
   getProductCategories,
+  getSupplierDeliveries,
 } from "@/app/actions";
+import { getTrips } from "@/app/trips/actions";
 import {
   Card,
   CardContent,
@@ -51,6 +53,20 @@ import {
 
 type PeriodFilter = "year" | "month" | "week";
 
+type SupplierDeliveryLike = {
+  quantity: number;
+  price_per_unit: number | null;
+  created_at: string;
+};
+
+type TripLike = {
+  trip_type: string | null;
+  total_costs_uah: number | null;
+  bags_count: number | null;
+  trip_start_date: string | null;
+  trip_date: string;
+};
+
 export default function StatisticsPage() {
   const [period, setPeriod] = useState<PeriodFilter>("year");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -64,6 +80,10 @@ export default function StatisticsPage() {
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [supplierDeliveries, setSupplierDeliveries] = useState<SupplierDeliveryLike[]>(
+    []
+  );
+  const [trips, setTrips] = useState<TripLike[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showMonthlyChart, setShowMonthlyChart] = useState(false);
   const [showAverageChart, setShowAverageChart] = useState(false);
@@ -72,17 +92,28 @@ export default function StatisticsPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [stats, shiftsData, productsData, categoriesData] =
+        const [
+          stats,
+          shiftsData,
+          productsData,
+          categoriesData,
+          deliveriesData,
+          tripsData,
+        ] =
           await Promise.all([
             getProductionStats(period, selectedYear),
             getShifts(),
             getProducts(),
             getProductCategories(),
+            getSupplierDeliveries(),
+            getTrips(),
           ]);
 
         setProductionStats(stats);
         setProducts(productsData || []);
         setCategories(categoriesData || []);
+        setSupplierDeliveries((deliveriesData || []) as SupplierDeliveryLike[]);
+        setTrips((tripsData || []) as TripLike[]);
 
         const completedShifts = (shiftsData || []).filter(
           (shift) => shift.status === "completed"
@@ -94,6 +125,8 @@ export default function StatisticsPage() {
         setProducts([]);
         setCategories([]);
         setShifts([]);
+        setSupplierDeliveries([]);
+        setTrips([]);
       } finally {
         setIsLoading(false);
       }
@@ -148,6 +181,136 @@ export default function StatisticsPage() {
   );
   const periodStartStr = dateToYYYYMMDD(periodStart);
   const periodEndStr = dateToYYYYMMDD(periodEnd);
+
+  const previousPeriodRange = useMemo(() => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const rangeDays =
+      Math.floor((periodEnd.getTime() - periodStart.getTime()) / DAY_MS) + 1;
+    const prevEnd = new Date(periodStart);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    prevEnd.setHours(23, 59, 59, 999);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevEnd.getDate() - rangeDays + 1);
+    prevStart.setHours(0, 0, 0, 0);
+    return { prevStart, prevEnd };
+  }, [periodStart, periodEnd]);
+
+  const toDayKey = (value?: string | null): string => {
+    if (!value) return "";
+    return String(value).slice(0, 10);
+  };
+
+  const isDayInRange = (day: string, startDay: string, endDay: string) => {
+    if (!day) return false;
+    return day >= startDay && day <= endDay;
+  };
+
+  const sumRawTripsCostsInRange = (startDay: string, endDay: string) =>
+    trips.reduce((sum, trip) => {
+      if (trip.trip_type !== "raw") return sum;
+      const day = toDayKey(trip.trip_start_date || trip.trip_date);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      return sum + Number(trip.total_costs_uah ?? 0);
+    }, 0);
+
+  const sumBagsInRange = (startDay: string, endDay: string) =>
+    trips.reduce((sum, trip) => {
+      if (trip.trip_type !== "raw") return sum;
+      const day = toDayKey(trip.trip_start_date || trip.trip_date);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      return sum + Number(trip.bags_count ?? 0);
+    }, 0);
+
+  const sumPurchaseCostsInRange = (startDay: string, endDay: string) =>
+    supplierDeliveries.reduce((sum, delivery) => {
+      const day = toDayKey(delivery.created_at);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      const amount =
+        Number(delivery.quantity ?? 0) * Number(delivery.price_per_unit ?? 0);
+      return amount > 0 ? sum + amount : sum;
+    }, 0);
+
+  const sumPurchaseBagsInRange = (startDay: string, endDay: string) =>
+    supplierDeliveries.reduce((sum, delivery) => {
+      const day = toDayKey(delivery.created_at);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      return sum + Number(delivery.quantity ?? 0);
+    }, 0);
+
+  const currentPeriodCostMetrics = useMemo(() => {
+    const startDay = periodStartStr;
+    const endDay = periodEndStr;
+
+    const purchaseCosts = sumPurchaseCostsInRange(startDay, endDay);
+    const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
+    const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
+    const tripBags = sumBagsInRange(startDay, endDay);
+
+    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
+    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const totalCostPerBag =
+      purchaseCostPerBag != null && tripCostPerBag != null
+        ? purchaseCostPerBag + tripCostPerBag
+        : null;
+
+    return {
+      purchaseCosts,
+      purchaseBags,
+      rawTripCosts,
+      tripBags,
+      purchaseCostPerBag,
+      tripCostPerBag,
+      totalCostPerBag,
+    };
+  }, [periodStartStr, periodEndStr, supplierDeliveries, trips]);
+
+  const previousPeriodCostMetrics = useMemo(() => {
+    const prevStartDay = dateToYYYYMMDD(previousPeriodRange.prevStart);
+    const prevEndDay = dateToYYYYMMDD(previousPeriodRange.prevEnd);
+
+    const purchaseCosts = sumPurchaseCostsInRange(prevStartDay, prevEndDay);
+    const purchaseBags = sumPurchaseBagsInRange(prevStartDay, prevEndDay);
+    const rawTripCosts = sumRawTripsCostsInRange(prevStartDay, prevEndDay);
+    const tripBags = sumBagsInRange(prevStartDay, prevEndDay);
+
+    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
+    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const totalCostPerBag =
+      purchaseCostPerBag != null && tripCostPerBag != null
+        ? purchaseCostPerBag + tripCostPerBag
+        : null;
+
+    return {
+      totalCostPerBag,
+    };
+  }, [previousPeriodRange, supplierDeliveries, trips]);
+
+  const getChangePercent = (current: number | null, previous: number | null) => {
+    if (current == null || previous == null || previous === 0) return null;
+    return ((current - previous) / previous) * 100;
+  };
+
+  const totalDeltaPercent = getChangePercent(
+    currentPeriodCostMetrics.totalCostPerBag,
+    previousPeriodCostMetrics.totalCostPerBag
+  );
+
+  const structureTotal =
+    (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
+    (currentPeriodCostMetrics.tripCostPerBag ?? 0);
+  const structureRows = [
+    {
+      label: "Середня вартість мішка із закупок",
+      value: currentPeriodCostMetrics.purchaseCostPerBag ?? 0,
+    },
+    {
+      label: "Середня вартість мішка з поїздок",
+      value: currentPeriodCostMetrics.tripCostPerBag ?? 0,
+    },
+  ].map((item) => ({
+    ...item,
+    percent: structureTotal > 0 ? (item.value / structureTotal) * 100 : 0,
+  }));
 
   const shiftsInPeriod = useMemo(() => {
     return shifts.filter((shift) => {
@@ -530,6 +693,114 @@ export default function StatisticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Собівартість мішка</CardTitle>
+          <CardDescription>
+            Тимчасова формула: середня вартість мішка із закупок + середня
+            вартість мішка з поїздок
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border bg-muted/40 p-4">
+              <p className="text-xs text-muted-foreground mb-1">
+                Середня вартість мішка із закупок
+              </p>
+              <p className="text-xl font-semibold tabular-nums">
+                {currentPeriodCostMetrics.purchaseCostPerBag != null
+                  ? formatNumberWithUnit(currentPeriodCostMetrics.purchaseCostPerBag, "₴")
+                  : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/40 p-4">
+              <p className="text-xs text-muted-foreground mb-1">
+                Середня вартість мішка з поїздок
+              </p>
+              <p className="text-xl font-semibold tabular-nums">
+                {currentPeriodCostMetrics.tripCostPerBag != null
+                  ? formatNumberWithUnit(currentPeriodCostMetrics.tripCostPerBag, "₴")
+                  : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/40 p-4">
+              <p className="text-xs text-muted-foreground mb-1">
+                Підсумкова собівартість мішка
+              </p>
+              <p className="text-xl font-semibold tabular-nums">
+                {currentPeriodCostMetrics.totalCostPerBag != null
+                  ? formatNumberWithUnit(currentPeriodCostMetrics.totalCostPerBag, "₴")
+                  : "—"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Δ до попер. періоду:{" "}
+                {totalDeltaPercent != null ? formatPercentage(totalDeltaPercent, 1) : "—"}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Закупки (сума)</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.purchaseCosts, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">К-ть мішків у закупках</span>
+              <span className="tabular-nums">
+                {formatNumber(currentPeriodCostMetrics.purchaseBags)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Поїздки (сума витрат)</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.rawTripCosts, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">К-ть мішків у поїздках</span>
+              <span className="tabular-nums">
+                {formatNumber(currentPeriodCostMetrics.tripBags)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b font-medium">
+              <span className="text-muted-foreground">Підсумкова собівартість/мішок</span>
+              <span className="tabular-nums">
+                {currentPeriodCostMetrics.totalCostPerBag != null
+                  ? formatNumberWithUnit(currentPeriodCostMetrics.totalCostPerBag, "₴")
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium mb-3">
+              Структура підсумкової собівартості (за мішок)
+            </h3>
+            <div className="space-y-3">
+              {structureRows.map((row) => (
+                <div key={row.label} className="space-y-1">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className="tabular-nums">
+                      {formatNumberWithUnit(row.value, "₴")} (
+                      {formatPercentage(row.percent, 1)})
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary/80"
+                      style={{ width: `${Math.max(row.percent, 0)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Картка з помісячним графіком */}
       {showMonthlyChart && (
