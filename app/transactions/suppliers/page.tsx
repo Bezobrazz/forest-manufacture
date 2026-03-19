@@ -373,6 +373,7 @@ export default function SupplierTransactionsPage() {
       displayDate: string;
       items: SupplierTransactionItem[];
       sum: number;
+      bagsCount: number;
     }> = [];
     let current: (typeof groups)[0] | null = null;
     for (const item of paginatedTransactions) {
@@ -399,13 +400,21 @@ export default function SupplierTransactionsPage() {
           displayDate: dateStr ? formatDate(dateStr + "T12:00:00.000Z") : "—",
           items: [],
           sum: 0,
+          bagsCount: 0,
         };
         groups.push(current);
       }
       current.items.push(item);
       current.sum += rowSum;
+      if (item.type === "delivery") {
+        const d = item.data as SupplierDelivery;
+        current.bagsCount += Number(d.quantity) || 0;
+      }
     }
-    groups.forEach((g) => (g.sum = Math.round(g.sum * 100) / 100));
+    groups.forEach((g) => {
+      g.sum = Math.round(g.sum * 100) / 100;
+      g.bagsCount = Math.round(g.bagsCount * 100) / 100;
+    });
     return groups;
   }, [paginatedTransactions]);
 
@@ -1521,6 +1530,11 @@ export default function SupplierTransactionsPage() {
                                 })}{" "}
                                 ₴
                               </span>
+                              {" • "}
+                              <span className="font-semibold">
+                                {formatNumberWithUnit(group.bagsCount, "шт")}
+                              </span>{" "}
+                              мішків
                             </TableCell>
                           </TableRow>
                         </React.Fragment>
