@@ -94,6 +94,10 @@ import { EditSupplierDeliveryDialog } from "@/components/edit-supplier-delivery-
 import { DeleteSupplierDeliveryButton } from "@/components/delete-supplier-delivery-button";
 import { DeleteSupplierAdvanceButton } from "@/components/delete-supplier-advance-button";
 import { EditSupplierAdvanceDialog } from "@/components/edit-supplier-advance-dialog";
+import { getPackingBagPurchases, type PackingBagPurchase } from "@/app/packing-bags/actions";
+import { PackingBagList } from "@/components/packing-bag-list";
+import { PackingBagForm } from "@/components/packing-bag-form";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function LoadingSkeleton() {
   return (
@@ -155,6 +159,7 @@ export default function SupplierTransactionsPage() {
     Product[]
   >([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [packingBagPurchases, setPackingBagPurchases] = useState<PackingBagPurchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
@@ -204,6 +209,7 @@ export default function SupplierTransactionsPage() {
         materialsData,
         productsMaterialsData,
         warehousesData,
+        packingBagPurchasesData,
       ] = await Promise.all([
         getSupplierDeliveries(),
         getSupplierAdvanceTransactions(),
@@ -211,6 +217,7 @@ export default function SupplierTransactionsPage() {
         getMaterials(),
         getProductsByCategoryName("Матеріали"),
         getWarehouses(),
+        getPackingBagPurchases(),
       ]);
       setDeliveries(deliveriesData);
       setAdvanceTransactions(advanceData);
@@ -218,6 +225,7 @@ export default function SupplierTransactionsPage() {
       setMaterials(materialsData);
       setProductsMaterialsCategory(productsMaterialsData);
       setWarehouses(warehousesData);
+      setPackingBagPurchases(packingBagPurchasesData);
 
       const mainWarehouse = warehousesData.find((w) =>
         w.name.toLowerCase().includes("main"),
@@ -253,6 +261,16 @@ export default function SupplierTransactionsPage() {
       setSupplierPopoverOpen(false);
     } catch (error) {
       console.error("Помилка оновлення постачальників:", error);
+    }
+  };
+
+  const refreshPackingBagPurchases = async () => {
+    try {
+      const purchases = await getPackingBagPurchases();
+      setPackingBagPurchases(purchases);
+    } catch (refreshError) {
+      console.error("Помилка оновлення покупок мішків:", refreshError);
+      toast.error("Не вдалося оновити покупки мішків");
     }
   };
 
@@ -658,6 +676,13 @@ export default function SupplierTransactionsPage() {
         </div>
       </div>
 
+      <Tabs defaultValue="transactions" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="transactions">Транзакції</TabsTrigger>
+          <TabsTrigger value="packing-bags">Мішки (кора)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="transactions" className="space-y-6">
       {!isLoading && !databaseError && (
         <Card>
           <CardHeader>
@@ -1624,6 +1649,47 @@ export default function SupplierTransactionsPage() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        <TabsContent value="packing-bags" className="space-y-6">
+          {databaseError ? (
+            <div className="py-8">
+              <DatabaseError onRetry={loadData} />
+            </div>
+          ) : isLoading ? (
+            <LoadingSkeleton />
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Покупки мішків (кора)</CardTitle>
+                  <CardDescription>
+                    Окремий облік покупок: дата покупки, кількість, ціна
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PackingBagList
+                    items={packingBagPurchases}
+                    onRefresh={refreshPackingBagPurchases}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Додати покупку мішків</CardTitle>
+                  <CardDescription>
+                    Заповніть обов&apos;язкові поля: дата покупки, кількість, ціна
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PackingBagForm onCreated={refreshPackingBagPurchases} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
       <Dialog
         open={addSupplierDialogOpen}
         onOpenChange={setAddSupplierDialogOpen}
