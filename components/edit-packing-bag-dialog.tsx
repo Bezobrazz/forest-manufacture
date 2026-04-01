@@ -16,8 +16,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 
 interface EditPackingBagDialogProps {
   item: PackingBagPurchase;
@@ -27,6 +35,10 @@ interface EditPackingBagDialogProps {
 export function EditPackingBagDialog({ item, onUpdated }: EditPackingBagDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(
+    item.purchase_date ? new Date(`${item.purchase_date}T12:00:00.000Z`) : undefined
+  );
   const [formData, setFormData] = useState({
     purchase_date: item.purchase_date,
     quantity: String(item.quantity),
@@ -79,12 +91,45 @@ export function EditPackingBagDialog({ item, onUpdated }: EditPackingBagDialogPr
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Дата покупки *</Label>
-            <Input
-              type="date"
-              value={formData.purchase_date}
-              onChange={(e) => setFormData((prev) => ({ ...prev, purchase_date: e.target.value }))}
-              required
-            />
+            <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !purchaseDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {purchaseDate ? (
+                    formatDate(
+                      purchaseDate instanceof Date
+                        ? purchaseDate.toISOString()
+                        : new Date(purchaseDate).toISOString()
+                    )
+                  ) : (
+                    <span>Оберіть дату</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={purchaseDate}
+                  onSelect={(nextDate) => {
+                    setPurchaseDate(nextDate);
+                    setFormData((prev) => ({
+                      ...prev,
+                      purchase_date: nextDate ? dateToYYYYMMDD(nextDate) : "",
+                    }));
+                    if (nextDate) setDatePopoverOpen(false);
+                  }}
+                  locale={uk}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="space-y-2">
             <Label>Кількість *</Label>

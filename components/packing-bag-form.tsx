@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 
 interface PackingBagFormProps {
   onCreated?: () => Promise<void>;
@@ -14,8 +23,10 @@ interface PackingBagFormProps {
 
 export function PackingBagForm({ onCreated }: PackingBagFormProps) {
   const [isPending, setIsPending] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(new Date());
   const [formData, setFormData] = useState({
-    purchase_date: "",
+    purchase_date: dateToYYYYMMDD(new Date()),
     quantity: "",
     price_uah: "",
   });
@@ -38,7 +49,13 @@ export function PackingBagForm({ onCreated }: PackingBagFormProps) {
       toast.success("Запис додано", {
         description: "Покупку мішків успішно додано",
       });
-      setFormData({ purchase_date: "", quantity: "", price_uah: "" });
+      const now = new Date();
+      setPurchaseDate(now);
+      setFormData({
+        purchase_date: dateToYYYYMMDD(now),
+        quantity: "",
+        price_uah: "",
+      });
       await onCreated?.();
     } catch (error) {
       console.error("Помилка створення покупки мішків:", error);
@@ -54,13 +71,46 @@ export function PackingBagForm({ onCreated }: PackingBagFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="bag-purchase-date">Дата покупки *</Label>
-        <Input
-          id="bag-purchase-date"
-          type="date"
-          value={formData.purchase_date}
-          onChange={(e) => setFormData((prev) => ({ ...prev, purchase_date: e.target.value }))}
-          required
-        />
+        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              id="bag-purchase-date"
+              type="button"
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !purchaseDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {purchaseDate ? (
+                formatDate(
+                  purchaseDate instanceof Date
+                    ? purchaseDate.toISOString()
+                    : new Date(purchaseDate).toISOString()
+                )
+              ) : (
+                <span>Оберіть дату</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarComponent
+              mode="single"
+              selected={purchaseDate}
+              onSelect={(nextDate) => {
+                setPurchaseDate(nextDate);
+                setFormData((prev) => ({
+                  ...prev,
+                  purchase_date: nextDate ? dateToYYYYMMDD(nextDate) : "",
+                }));
+                if (nextDate) setDatePopoverOpen(false);
+              }}
+              locale={uk}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="space-y-2">
         <Label htmlFor="bag-quantity">Кількість *</Label>

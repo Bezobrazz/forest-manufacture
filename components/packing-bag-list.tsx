@@ -35,7 +35,12 @@ export function PackingBagList({ items, onRefresh }: PackingBagListProps) {
           </div>
           <div className="flex items-center">
             <EditPackingBagDialog item={item} onUpdated={onRefresh} />
-            <DeletePackingBagButton id={item.id} onDeleted={onRefresh} />
+            <DeletePackingBagButton
+              id={item.id}
+              purchaseDate={item.purchase_date}
+              totalUah={item.total_uah ?? item.quantity * item.price_uah}
+              onDeleted={onRefresh}
+            />
           </div>
         </div>
       ))}

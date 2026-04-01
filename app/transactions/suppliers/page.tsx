@@ -168,6 +168,9 @@ export default function SupplierTransactionsPage() {
     undefined,
   );
   const [dateFilterTo, setDateFilterTo] = useState<Date | undefined>(undefined);
+  const [deliveryDatePopoverOpen, setDeliveryDatePopoverOpen] = useState(false);
+  const [dateFilterFromPopoverOpen, setDateFilterFromPopoverOpen] = useState(false);
+  const [dateFilterToPopoverOpen, setDateFilterToPopoverOpen] = useState(false);
   const [sortBy, setSortBy] = useState<"date" | "supplier" | "product">("date");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -698,7 +701,10 @@ export default function SupplierTransactionsPage() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="delivery-date">Дата закупівлі</Label>
-                <Popover>
+                <Popover
+                  open={deliveryDatePopoverOpen}
+                  onOpenChange={setDeliveryDatePopoverOpen}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       id="delivery-date"
@@ -724,7 +730,10 @@ export default function SupplierTransactionsPage() {
                     <CalendarComponent
                       mode="single"
                       selected={deliveryDate}
-                      onSelect={setDeliveryDate}
+                      onSelect={(date) => {
+                        setDeliveryDate(date);
+                        if (date) setDeliveryDatePopoverOpen(false);
+                      }}
                       locale={uk}
                       initialFocus
                     />
@@ -1211,7 +1220,10 @@ export default function SupplierTransactionsPage() {
             <div className="mb-4 space-y-3">
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Popover>
+                  <Popover
+                    open={dateFilterFromPopoverOpen}
+                    onOpenChange={setDateFilterFromPopoverOpen}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -1235,12 +1247,18 @@ export default function SupplierTransactionsPage() {
                       <CalendarComponent
                         mode="single"
                         selected={dateFilterFrom}
-                        onSelect={setDateFilterFrom}
+                        onSelect={(date) => {
+                          setDateFilterFrom(date);
+                          if (date) setDateFilterFromPopoverOpen(false);
+                        }}
                         locale={uk}
                       />
                     </PopoverContent>
                   </Popover>
-                  <Popover>
+                  <Popover
+                    open={dateFilterToPopoverOpen}
+                    onOpenChange={setDateFilterToPopoverOpen}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -1264,7 +1282,10 @@ export default function SupplierTransactionsPage() {
                       <CalendarComponent
                         mode="single"
                         selected={dateFilterTo}
-                        onSelect={setDateFilterTo}
+                        onSelect={(date) => {
+                          setDateFilterTo(date);
+                          if (date) setDateFilterToPopoverOpen(false);
+                        }}
                         locale={uk}
                       />
                     </PopoverContent>
