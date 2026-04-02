@@ -81,3 +81,9 @@
 - When generating code, provide only the necessary files or snippets.
 - Do not repeat unchanged code.
 - Do not include explanations unless explicitly requested.
+
+## 11. Date Picker Usage
+
+- For date selection in forms, dialogs, and filters, use the existing `Calendar` date picker from `@/components/ui/calendar`.
+- Prefer the existing project pattern with `Popover` + `Calendar` instead of native date inputs or custom date pickers.
+- Do not introduce new date picker libraries or duplicate calendar components.
