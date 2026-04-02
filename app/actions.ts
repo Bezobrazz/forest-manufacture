@@ -3104,6 +3104,131 @@ export async function addSupplierAdvance(formData: FormData) {
   }
 }
 
+export async function updateSupplierAdvanceAmount(formData: FormData) {
+  try {
+    const supabase = await createServerClient();
+
+    const supplierId = Number(formData.get("supplier_id"));
+    const targetAdvance = Number(formData.get("advance"));
+
+    if (!supplierId) {
+      return {
+        success: false,
+        error: "Оберіть постачальника",
+      };
+    }
+    if (!Number.isFinite(targetAdvance) || targetAdvance < 0) {
+      return {
+        success: false,
+        error: "Введіть коректну суму авансу",
+      };
+    }
+
+    const { data: supplierRow, error: supplierError } = await supabase
+      .from("suppliers")
+      .select("advance")
+      .eq("id", supplierId)
+      .single();
+
+    if (supplierError) {
+      console.error("Error fetching supplier before advance update:", supplierError);
+      return { success: false, error: supplierError.message };
+    }
+
+    const currentAdvance = Number(supplierRow?.advance ?? 0);
+    const normalizedTargetAdvance = Math.round(targetAdvance * 100) / 100;
+    const delta = Math.round((normalizedTargetAdvance - currentAdvance) * 100) / 100;
+
+    if (delta === 0) {
+      return { success: true };
+    }
+
+    const deliveryDate = formData.get("delivery_date") as string;
+    const createdAt = deliveryDate
+      ? new Date(deliveryDate + "T12:00:00.000Z").toISOString()
+      : new Date().toISOString();
+
+    const { error: insertError } = await supabase
+      .from("supplier_advance_transactions")
+      .insert({
+        supplier_id: supplierId,
+        amount: delta,
+        created_at: createdAt,
+      });
+
+    if (insertError) {
+      console.error("Error inserting supplier advance update transaction:", insertError);
+      return { success: false, error: insertError.message };
+    }
+
+    const { error: updateError } = await supabase
+      .from("suppliers")
+      .update({ advance: normalizedTargetAdvance })
+      .eq("id", supplierId);
+
+    if (updateError) {
+      console.error("Error updating supplier advance amount:", updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateSupplierAdvanceAmount:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні авансу",
+    };
+  }
+}
+
+export async function updateSupplierMaterialsBalanceAmount(formData: FormData) {
+  try {
+    const supabase = await createServerClient();
+
+    const supplierId = Number(formData.get("supplier_id"));
+    const targetBalance = Number(formData.get("materials_balance"));
+
+    if (!supplierId) {
+      return {
+        success: false,
+        error: "Оберіть постачальника",
+      };
+    }
+    if (!Number.isFinite(targetBalance)) {
+      return {
+        success: false,
+        error: "Введіть коректний баланс матеріалів",
+      };
+    }
+
+    const normalizedTargetBalance = Math.round(targetBalance * 100) / 100;
+
+    const { error: updateError } = await supabase
+      .from("suppliers")
+      .update({ materials_balance: normalizedTargetBalance })
+      .eq("id", supplierId);
+
+    if (updateError) {
+      console.error("Error updating supplier materials balance amount:", updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    revalidatePath("/transactions/suppliers");
+    revalidatePath("/suppliers");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateSupplierMaterialsBalanceAmount:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні балансу матеріалів",
+    };
+  }
+}
+
 export async function deleteSupplierAdvanceTransaction(advanceId: number) {
   try {
     const supabase = await createServerClient();

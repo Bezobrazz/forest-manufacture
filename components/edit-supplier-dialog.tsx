@@ -4,7 +4,11 @@ import type React from "react";
 
 import { useState, useEffect } from "react";
 import type { Supplier } from "@/lib/types";
-import { updateSupplier, addSupplierAdvance } from "@/app/actions";
+import {
+  updateSupplier,
+  updateSupplierAdvanceAmount,
+  updateSupplierMaterialsBalanceAmount,
+} from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,7 +49,14 @@ export function EditSupplierDialog({
     name: supplier.name,
     phone: supplier.phone || "",
     notes: supplier.notes || "",
-    advanceAmount: "",
+    advanceAmount:
+      typeof supplier.advance === "number"
+        ? (Math.round(Number(supplier.advance) * 100) / 100).toString()
+        : "0",
+    materialsBalance:
+      typeof supplier.materials_balance === "number"
+        ? (Math.round(Number(supplier.materials_balance) * 100) / 100).toString()
+        : "0",
     advanceDate: new Date(),
   });
 
@@ -55,7 +66,14 @@ export function EditSupplierDialog({
       name: supplier.name,
       phone: supplier.phone || "",
       notes: supplier.notes || "",
-      advanceAmount: "",
+      advanceAmount:
+        typeof supplier.advance === "number"
+          ? (Math.round(Number(supplier.advance) * 100) / 100).toString()
+          : "0",
+      materialsBalance:
+        typeof supplier.materials_balance === "number"
+          ? (Math.round(Number(supplier.materials_balance) * 100) / 100).toString()
+          : "0",
       advanceDate: new Date(),
     });
   }, [supplier]);
@@ -88,17 +106,44 @@ export function EditSupplierDialog({
       }
 
       const advanceAmt = Number(formData.advanceAmount);
-      if (advanceAmt > 0) {
-        const advanceFormData = new FormData();
-        advanceFormData.append("supplier_id", formData.id.toString());
-        advanceFormData.append("advance", formData.advanceAmount);
-        advanceFormData.append("delivery_date", dateToYYYYMMDD(formData.advanceDate));
-        const advanceResult = await addSupplierAdvance(advanceFormData);
-        if (!advanceResult.success) {
-          toast.error("Помилка", {
-            description: advanceResult.error || "Не вдалося додати аванс",
-          });
-        }
+      if (!Number.isFinite(advanceAmt) || advanceAmt < 0) {
+        toast.error("Помилка", {
+          description: "Введіть коректну суму авансу (0 або більше)",
+        });
+        return;
+      }
+
+      const advanceFormData = new FormData();
+      advanceFormData.append("supplier_id", formData.id.toString());
+      advanceFormData.append("advance", formData.advanceAmount);
+      advanceFormData.append("delivery_date", dateToYYYYMMDD(formData.advanceDate));
+      const advanceResult = await updateSupplierAdvanceAmount(advanceFormData);
+      if (!advanceResult.success) {
+        toast.error("Помилка", {
+          description: advanceResult.error || "Не вдалося оновити аванс",
+        });
+        return;
+      }
+
+      const materialsBalance = Number(formData.materialsBalance);
+      if (!Number.isFinite(materialsBalance)) {
+        toast.error("Помилка", {
+          description: "Введіть коректний баланс матеріалів",
+        });
+        return;
+      }
+
+      const materialsFormData = new FormData();
+      materialsFormData.append("supplier_id", formData.id.toString());
+      materialsFormData.append("materials_balance", formData.materialsBalance);
+      const materialsResult =
+        await updateSupplierMaterialsBalanceAmount(materialsFormData);
+      if (!materialsResult.success) {
+        toast.error("Помилка", {
+          description:
+            materialsResult.error || "Не вдалося оновити баланс матеріалів",
+        });
+        return;
       }
 
       setOpen(false);
@@ -175,7 +220,7 @@ export function EditSupplierDialog({
             />
           </div>
           <div className="space-y-2 border-t pt-4">
-            <Label htmlFor={`advance-${supplier.id}`}>Додати аванс (₴)</Label>
+            <Label htmlFor={`advance-${supplier.id}`}>Аванс (₴)</Label>
             <div className="flex gap-2">
               <Input
                 id={`advance-${supplier.id}`}
@@ -216,6 +261,32 @@ export function EditSupplierDialog({
                 Поточний баланс: {supplier.advance.toFixed(2)} ₴
               </p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`materials-balance-${supplier.id}`}>
+              Баланс матеріалів
+            </Label>
+            <Input
+              id={`materials-balance-${supplier.id}`}
+              name="materialsBalance"
+              type="number"
+              placeholder="0"
+              value={formData.materialsBalance}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  materialsBalance: e.target.value,
+                }))
+              }
+              step="0.01"
+            />
+            {typeof supplier.materials_balance === "number" &&
+              supplier.materials_balance !== 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Поточний баланс матеріалів:{" "}
+                  {supplier.materials_balance.toFixed(2)}
+                </p>
+              )}
           </div>
           <DialogFooter>
             <Button
