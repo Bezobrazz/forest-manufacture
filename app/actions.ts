@@ -4245,8 +4245,122 @@ export async function getTotalInventory() {
 
 // Оптимізована функція для завантаження всіх даних головної сторінки
 export async function getHomePageData() {
+  const getCurrentWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay();
+    const saturdayOffset = day === 6 ? 0 : day === 0 ? -1 : -(day + 1);
+
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() + saturdayOffset);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+
+    return { startDate, endDate };
+  };
+
+  const getCurrentWeekTotalExpenses = async () => {
+    try {
+      const supabase = await createServerClient();
+      const { startDate, endDate } = getCurrentWeekRange();
+      const startIso = startDate.toISOString();
+      const endIso = endDate.toISOString();
+
+      const [expensesResult, deliveriesResult, shiftsResult] = await Promise.all([
+        supabase
+          .from("expenses")
+          .select("amount, date")
+          .gte("date", startIso)
+          .lte("date", endIso),
+        supabase
+          .from("supplier_deliveries")
+          .select("quantity, price_per_unit, created_at")
+          .gte("created_at", startIso)
+          .lte("created_at", endIso),
+        supabase
+          .from("shifts")
+          .select(
+            `
+            id,
+            shift_date,
+            created_at,
+            status,
+            production(
+              quantity,
+              product:products(reward)
+            )
+          `
+          )
+          .eq("status", "completed"),
+      ]);
+
+      if (expensesResult.error) {
+        console.error(
+          "Error fetching weekly expense records:",
+          expensesResult.error
+        );
+      }
+      if (deliveriesResult.error) {
+        console.error(
+          "Error fetching weekly supplier deliveries:",
+          deliveriesResult.error
+        );
+      }
+      if (shiftsResult.error) {
+        console.error("Error fetching weekly wage shifts:", shiftsResult.error);
+      }
+
+      const directExpensesTotal = (expensesResult.data ?? []).reduce(
+        (sum, expense) => sum + (Number(expense.amount) || 0),
+        0
+      );
+
+      const supplierPurchasesTotal = (deliveriesResult.data ?? []).reduce(
+        (sum, delivery) =>
+          sum +
+          (Number(delivery.quantity) || 0) *
+            (Number(delivery.price_per_unit) || 0),
+        0
+      );
+
+      const wageTotal = (shiftsResult.data ?? [])
+        .filter((shift) => {
+          const shiftDate = new Date(shift.shift_date || shift.created_at);
+          return shiftDate >= startDate && shiftDate <= endDate;
+        })
+        .reduce((sum, shift) => {
+          const shiftWage =
+            shift.production?.reduce(
+              (shiftSum: number, item: any) =>
+                shiftSum +
+                (Number(item.quantity) || 0) *
+                  (Number(item.product?.reward) || 0),
+              0
+            ) ?? 0;
+          return sum + shiftWage;
+        }, 0);
+
+      return Math.round((directExpensesTotal + supplierPurchasesTotal + wageTotal) * 100) / 100;
+    } catch (error) {
+      console.error("Error in getCurrentWeekTotalExpenses:", error);
+      return 0;
+    }
+  };
+
   // Завантажуємо дані паралельно, але з кешуванням
-  const [recentShifts, activeShiftsCount, employeesCount, productsCount, materialsCount, totalInventory, productionStats, activeTasks] = await Promise.all([
+  const [
+    recentShifts,
+    activeShiftsCount,
+    employeesCount,
+    productsCount,
+    materialsCount,
+    totalInventory,
+    productionStats,
+    activeTasks,
+    currentWeekTotalExpenses,
+  ] = await Promise.all([
     getRecentShifts(10),
     getActiveShiftsCount(),
     getEmployeesCount(),
@@ -4255,6 +4369,7 @@ export async function getHomePageData() {
     getTotalInventory(),
     getProductionStats("year"),
     getActiveTasks(),
+    getCurrentWeekTotalExpenses(),
   ]);
 
   return {
@@ -4266,5 +4381,6 @@ export async function getHomePageData() {
     totalInventory,
     productionStats,
     activeTasks,
+    currentWeekTotalExpenses,
   };
 }

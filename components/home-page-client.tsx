@@ -69,6 +69,7 @@ type HomePageData = {
   productsCount: number;
   materialsCount: number;
   totalInventory: number;
+  currentWeekTotalExpenses: number;
   productionStats: {
     totalProduction: number;
     productionByCategory: Record<string, number>;
@@ -520,12 +521,12 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
                 <span>Облік витрат</span>
               </CardTitle>
               <CardDescription className="truncate">
-                Кількість витрат за тиждень
+                Загальні витрати поточного тижня
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">
-                {formatNumber(initialData.activeShiftsCount)}
+                {formatNumberWithUnit(initialData.currentWeekTotalExpenses, "₴")}
               </div>
             </CardContent>
             <CardFooter>
