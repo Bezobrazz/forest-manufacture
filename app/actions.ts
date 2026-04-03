@@ -140,7 +140,8 @@ export async function getInventoryTransactions(): Promise<
 export async function updateInventoryQuantity(
   productId: number,
   quantity: number,
-  notes = ""
+  notes = "",
+  adjustmentDate?: string
 ) {
   console.log(
     `Початок оновлення інвентаря для продукту ${productId}, нова кількість: ${quantity}`
@@ -219,6 +220,12 @@ export async function updateInventoryQuantity(
       notes: notes || "Ручне коригування кількості",
     };
 
+    if (adjustmentDate && adjustmentDate.trim().length >= 10) {
+      transactionData.created_at = new Date(
+        `${adjustmentDate.trim().slice(0, 10)}T12:00:00.000Z`
+      ).toISOString();
+    }
+
     if (mainWarehouse?.id) {
       transactionData.warehouse_id = mainWarehouse.id;
     }
@@ -257,6 +264,7 @@ export async function shipInventory(formData: FormData) {
     const productId = Number.parseInt(formData.get("product_id") as string);
     const quantity = Number.parseFloat(formData.get("quantity") as string);
     const notes = formData.get("notes") as string;
+    const shipmentDateRaw = formData.get("shipment_date") as string | null;
 
     if (!productId || isNaN(quantity) || quantity <= 0) {
       return {
@@ -319,6 +327,12 @@ export async function shipInventory(formData: FormData) {
         transaction_type: "shipment",
         notes: notes || "Відвантаження продукції",
       };
+
+      if (shipmentDateRaw && shipmentDateRaw.trim().length >= 10) {
+        transactionData.created_at = new Date(
+          `${shipmentDateRaw.trim().slice(0, 10)}T12:00:00.000Z`
+        ).toISOString();
+      }
 
       if (mainWarehouse?.id) {
         transactionData.warehouse_id = mainWarehouse.id;

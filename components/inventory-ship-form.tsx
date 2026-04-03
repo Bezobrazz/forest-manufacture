@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -16,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Inventory } from "@/lib/types";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 
 interface InventoryShipFormProps {
   inventory: Inventory[];
@@ -52,6 +61,7 @@ export function InventoryShipForm({
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [shipmentDate, setShipmentDate] = useState<Date>(new Date());
 
   // Фільтруємо інвентар, щоб показувати тільки продукти з кількістю > 0
   const availableInventory = inventory.filter((item) => item.quantity > 0);
@@ -119,6 +129,7 @@ export function InventoryShipForm({
       formData.append("product_id", selectedProduct);
       formData.append("quantity", quantity);
       formData.append("notes", notes);
+      formData.append("shipment_date", dateToYYYYMMDD(shipmentDate));
 
       const result = await shipInventory(formData);
 
@@ -127,6 +138,7 @@ export function InventoryShipForm({
         setSelectedProduct("");
         setQuantity("");
         setNotes("");
+        setShipmentDate(new Date());
 
         // Показуємо тост
         toast.success("Успішно", {
@@ -211,6 +223,40 @@ export function InventoryShipForm({
             Доступно на складі: {maxQuantity} шт
           </p>
         )}
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="shipment-date">Дата відвантаження</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="shipment-date"
+              type="button"
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !shipmentDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {shipmentDate ? (
+                formatDate(shipmentDate.toISOString())
+              ) : (
+                <span>Оберіть дату</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={shipmentDate}
+              onSelect={(date) => {
+                if (date) setShipmentDate(date);
+              }}
+              locale={uk}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="space-y-2">
         <Label htmlFor="notes">Примітки</Label>

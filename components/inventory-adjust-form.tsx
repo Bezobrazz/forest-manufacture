@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -17,6 +24,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Product } from "@/lib/types";
 import { useRouter } from "next/navigation";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 
 function LoadingSkeleton() {
   return (
@@ -45,6 +54,7 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [adjustmentDate, setAdjustmentDate] = useState<Date>(new Date());
   const router = useRouter();
 
   useEffect(() => {
@@ -94,7 +104,8 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
       const result = await updateInventoryQuantity(
         productId,
         quantityValue,
-        notes
+        notes,
+        dateToYYYYMMDD(adjustmentDate)
       );
 
       if (result.success) {
@@ -106,6 +117,7 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
         setSelectedProduct("");
         setQuantity("");
         setNotes("");
+        setAdjustmentDate(new Date());
         router.refresh();
       } else {
         toast.error("Помилка", {
@@ -163,6 +175,40 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
         <p className="text-xs text-muted-foreground">
           Вкажіть загальну кількість продукції, яка повинна бути на складі
         </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="adjustment-date">Дата коригування</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="adjustment-date"
+              type="button"
+              variant="outline"
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !adjustmentDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {adjustmentDate ? (
+                formatDate(adjustmentDate.toISOString())
+              ) : (
+                <span>Оберіть дату</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={adjustmentDate}
+              onSelect={(date) => {
+                if (date) setAdjustmentDate(date);
+              }}
+              locale={uk}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="space-y-2">
         <Label htmlFor="notes">Примітки</Label>
