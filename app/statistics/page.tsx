@@ -114,8 +114,10 @@ export default function StatisticsPage() {
   const [barkShipmentsDetailLoading, setBarkShipmentsDetailLoading] =
     useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showMonthlyChart, setShowMonthlyChart] = useState(false);
-  const [showAverageChart, setShowAverageChart] = useState(false);
+  const [monthlyProductionChartOpen, setMonthlyProductionChartOpen] =
+    useState(false);
+  const [averageProductionChartOpen, setAverageProductionChartOpen] =
+    useState(false);
 
   useEffect(() => {
     if (!barkShipmentsDetailOpen) return;
@@ -771,7 +773,7 @@ export default function StatisticsPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => setShowMonthlyChart(!showMonthlyChart)}
+              onClick={() => setMonthlyProductionChartOpen(true)}
             >
               Детальніше
             </Button>
@@ -814,7 +816,7 @@ export default function StatisticsPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => setShowAverageChart(!showAverageChart)}
+              onClick={() => setAverageProductionChartOpen(true)}
             >
               Детальніше
             </Button>
@@ -997,6 +999,116 @@ export default function StatisticsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={monthlyProductionChartOpen}
+        onOpenChange={setMonthlyProductionChartOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Помісячний графік виробництва</DialogTitle>
+            <DialogDescription>
+              Динаміка виробленої продукції по місяцях {selectedYear} року
+              (період на сторінці: {periodLabel})
+            </DialogDescription>
+          </DialogHeader>
+          {monthlyProductionData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Немає даних про виробництво
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyProductionData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  label={{
+                    value: "Кількість (шт)",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                />
+                <Tooltip
+                  formatter={(value: number) =>
+                    formatNumberWithUnit(value, "шт")
+                  }
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "6px",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="production"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={averageProductionChartOpen}
+        onOpenChange={setAverageProductionChartOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Помісячний графік середнього виробництва</DialogTitle>
+            <DialogDescription>
+              Динаміка середньої кількості продукції на зміну по місяцях{" "}
+              {selectedYear} року (період на сторінці: {periodLabel})
+            </DialogDescription>
+          </DialogHeader>
+          {monthlyAverageProductionData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Немає даних про виробництво
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyAverageProductionData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  label={{
+                    value: "Середнє (шт/зміну)",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                />
+                <Tooltip
+                  formatter={(value: number) =>
+                    formatNumberWithUnit(value, "шт", {
+                      maximumFractionDigits: 1,
+                    })
+                  }
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "6px",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="average"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
@@ -1131,120 +1243,6 @@ export default function StatisticsPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Картка з помісячним графіком */}
-      {showMonthlyChart && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <span>Помісячний графік виробництва</span>
-            </CardTitle>
-            <CardDescription>
-              Динаміка виробленої продукції по місяцях {selectedYear} року
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {monthlyProductionData.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Немає даних про виробництво
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyProductionData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    label={{
-                      value: "Кількість (шт)",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                  />
-                  <Tooltip
-                    formatter={(value: number) =>
-                      formatNumberWithUnit(value, "шт")
-                    }
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "6px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="production"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Картка з графіком середнього виробництва */}
-      {showAverageChart && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <span>Помісячний графік середнього виробництва</span>
-            </CardTitle>
-            <CardDescription>
-              Динаміка середньої кількості продукції на зміну по місяцях {selectedYear} року
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {monthlyAverageProductionData.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Немає даних про виробництво
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyAverageProductionData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    label={{
-                      value: "Середнє (шт/зміну)",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                  />
-                  <Tooltip
-                    formatter={(value: number) =>
-                      formatNumberWithUnit(value, "шт", {
-                        maximumFractionDigits: 1,
-                      })
-                    }
-                    labelStyle={{ color: "hsl(var(--foreground))" }}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "6px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="average"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))", r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-6 md:grid-cols-2 mb-8">
         <Card className="md:col-span-1">
