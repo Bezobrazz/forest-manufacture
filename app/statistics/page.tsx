@@ -12,6 +12,7 @@ import {
   getBarkShipmentsTotal,
   getBarkShipmentsBreakdown,
   type BarkShipmentsBreakdown,
+  type StatisticsDateRange,
 } from "@/app/actions";
 import { getTrips } from "@/app/trips/actions";
 import {
@@ -24,6 +25,7 @@ import {
 import {
   ArrowLeft,
   BarChart,
+  Calendar as CalendarIcon,
   Package,
   PieChart,
   Truck,
@@ -47,12 +49,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarRangePicker } from "@/components/ui/calendar";
+import {
+  cn,
   dateToYYYYMMDD,
+  formatDate,
   formatNumber,
   formatNumberWithUnit,
   getDateRangeForPeriod,
   formatPercentage,
+  inclusiveCalendarDaysBetween,
 } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 import {
   LineChart,
   Line,
@@ -118,6 +130,24 @@ export default function StatisticsPage() {
     useState(false);
   const [averageProductionChartOpen, setAverageProductionChartOpen] =
     useState(false);
+  const [filterDateRange, setFilterDateRange] = useState<{
+    from?: Date;
+    to?: Date;
+  }>({});
+
+  const statsDateRange = useMemo((): StatisticsDateRange | null => {
+    if (filterDateRange.from && filterDateRange.to) {
+      return {
+        start: dateToYYYYMMDD(filterDateRange.from),
+        end: dateToYYYYMMDD(filterDateRange.to),
+      };
+    }
+    return null;
+  }, [filterDateRange.from, filterDateRange.to]);
+
+  const statsDateRangeKey = statsDateRange
+    ? `${statsDateRange.start}_${statsDateRange.end}`
+    : "";
 
   useEffect(() => {
     if (!barkShipmentsDetailOpen) return;
@@ -126,7 +156,11 @@ export default function StatisticsPage() {
     setBarkShipmentsDetailLoading(true);
     (async () => {
       try {
-        const data = await getBarkShipmentsBreakdown(period, selectedYear);
+        const data = await getBarkShipmentsBreakdown(
+          period,
+          selectedYear,
+          statsDateRange
+        );
         if (!cancelled) {
           setBarkShipmentsBreakdown(data);
         }
@@ -137,6 +171,7 @@ export default function StatisticsPage() {
             byProduct: [],
             timeSeries: [],
             chartCaption: "",
+            usesMonthlyTimeBuckets: false,
           });
         }
       } finally {
@@ -148,7 +183,7 @@ export default function StatisticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [barkShipmentsDetailOpen, period, selectedYear]);
+  }, [barkShipmentsDetailOpen, period, selectedYear, statsDateRangeKey]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -165,14 +200,14 @@ export default function StatisticsPage() {
           barkShipped,
         ] =
           await Promise.all([
-            getProductionStats(period, selectedYear),
+            getProductionStats(period, selectedYear, statsDateRange),
             getShifts(),
             getProducts(),
             getProductCategories(),
             getExpenses(),
             getSupplierDeliveries(),
             getTrips(),
-            getBarkShipmentsTotal(period, selectedYear),
+            getBarkShipmentsTotal(period, selectedYear, statsDateRange),
           ]);
 
         setProductionStats(stats);
@@ -203,7 +238,7 @@ export default function StatisticsPage() {
     };
 
     loadData();
-  }, [period, selectedYear]);
+  }, [period, selectedYear, statsDateRangeKey]);
 
   const { totalProduction, productionByCategory } = productionStats;
 
@@ -245,10 +280,21 @@ export default function StatisticsPage() {
     (a, b) => b[1] - a[1]
   );
 
-  const { startDate: periodStart, endDate: periodEnd } = useMemo(
-    () => getDateRangeForPeriod(period, selectedYear),
-    [period, selectedYear]
-  );
+  const { startDate: periodStart, endDate: periodEnd } = useMemo(() => {
+    if (statsDateRange) {
+      const [ys, ms, ds] = statsDateRange.start
+        .split("-")
+        .map((x) => Number.parseInt(x, 10));
+      const [ye, me, de] = statsDateRange.end
+        .split("-")
+        .map((x) => Number.parseInt(x, 10));
+      return {
+        startDate: new Date(ys, ms - 1, ds, 0, 0, 0, 0),
+        endDate: new Date(ye, me - 1, de, 23, 59, 59, 999),
+      };
+    }
+    return getDateRangeForPeriod(period, selectedYear);
+  }, [statsDateRange, period, selectedYear]);
   const periodStartStr = dateToYYYYMMDD(periodStart);
   const periodEndStr = dateToYYYYMMDD(periodEnd);
 
@@ -457,6 +503,13 @@ export default function StatisticsPage() {
     shiftsWithProduction > 0 ? totalProduction / shiftsWithProduction : 0;
 
   const periodLabel = useMemo(() => {
+    if (statsDateRange) {
+      const fmt = (ymd: string) => {
+        const [y, m, d] = ymd.split("-").map((x) => Number.parseInt(x, 10));
+        return `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+      };
+      return `${fmt(statsDateRange.start)} — ${fmt(statsDateRange.end)}`;
+    }
     if (period === "year") return `Рік ${selectedYear}`;
     if (period === "month") {
       const monthNames = [
@@ -466,7 +519,14 @@ export default function StatisticsPage() {
       return `${monthNames[new Date().getMonth()]} ${selectedYear}`;
     }
     return "Поточний тиждень";
-  }, [period, selectedYear]);
+  }, [period, selectedYear, statsDateRange]);
+
+  const productionChartUsesMonthlyBuckets = useMemo(() => {
+    if (!statsDateRange) return true;
+    return (
+      inclusiveCalendarDaysBetween(statsDateRange.start, statsDateRange.end) > 45
+    );
+  }, [statsDateRange]);
 
   // Функція для отримання назв місяців українською
   const getMonthName = (monthIndex: number): string => {
@@ -503,6 +563,81 @@ export default function StatisticsPage() {
   }, [shifts]);
 
   const monthlyProductionData = useMemo(() => {
+    if (statsDateRange) {
+      const { start, end } = statsDateRange;
+      const days = inclusiveCalendarDaysBetween(start, end);
+      const shiftDay = (shift: ShiftWithDetails) =>
+        shift.shift_date ? String(shift.shift_date).slice(0, 10) : "";
+
+      if (days > 45) {
+        const monthlyData: Record<string, number> = {};
+        const [sy, sm] = start.split("-").map((x) => Number.parseInt(x, 10));
+        const [ey, em] = end.split("-").map((x) => Number.parseInt(x, 10));
+        let cur = new Date(sy, sm - 1, 1);
+        const last = new Date(ey, em - 1, 1);
+        while (cur <= last) {
+          const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+          monthlyData[key] = 0;
+          cur.setMonth(cur.getMonth() + 1);
+        }
+        shifts.forEach((shift) => {
+          if (shift.status !== "completed" || !shift.production) return;
+          const sd = shiftDay(shift);
+          if (!sd || sd < start || sd > end) return;
+          const shiftDate = new Date(shift.shift_date as string);
+          const monthKey = `${shiftDate.getFullYear()}-${String(shiftDate.getMonth() + 1).padStart(2, "0")}`;
+          if (!(monthKey in monthlyData)) return;
+          let shiftTotal = 0;
+          shift.production.forEach((item) => {
+            shiftTotal += item.quantity;
+          });
+          monthlyData[monthKey] += shiftTotal;
+        });
+        return Object.entries(monthlyData)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value], i) => {
+            const [, month] = key.split("-");
+            const yi = key.slice(0, 4);
+            return {
+              month: `${getMonthName(Number.parseInt(month, 10) - 1)} ${yi}`,
+              production: value,
+              monthIndex: i,
+            };
+          });
+      }
+
+      const dailyData: Record<string, number> = {};
+      const [sy, sm, sd0] = start.split("-").map((x) => Number.parseInt(x, 10));
+      const [ey, em, ed0] = end.split("-").map((x) => Number.parseInt(x, 10));
+      let walk = new Date(sy, sm - 1, sd0);
+      const endWalk = new Date(ey, em - 1, ed0);
+      while (walk <= endWalk) {
+        dailyData[dateToYYYYMMDD(walk)] = 0;
+        walk.setDate(walk.getDate() + 1);
+      }
+      shifts.forEach((shift) => {
+        if (shift.status !== "completed" || !shift.production) return;
+        const sd = shiftDay(shift);
+        if (!sd || !(sd in dailyData)) return;
+        let shiftTotal = 0;
+        shift.production.forEach((item) => {
+          shiftTotal += item.quantity;
+        });
+        dailyData[sd] += shiftTotal;
+      });
+      return Object.keys(dailyData)
+        .sort()
+        .map((key, i) => {
+          const [y, m, d] = key.split("-").map((x) => Number.parseInt(x, 10));
+          const dt = new Date(y, m - 1, d);
+          return {
+            month: `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}`,
+            production: dailyData[key],
+            monthIndex: i,
+          };
+        });
+    }
+
     const monthlyData: Record<string, number> = {};
 
     for (let month = 0; month < 12; month++) {
@@ -517,7 +652,6 @@ export default function StatisticsPage() {
         const month = shiftDate.getMonth() + 1;
         const monthKey = `${year}-${String(month).padStart(2, "0")}`;
 
-        // Підраховуємо загальну кількість продукції за зміну
         let shiftTotal = 0;
         shift.production.forEach((item) => {
           shiftTotal += item.quantity;
@@ -531,7 +665,7 @@ export default function StatisticsPage() {
 
     return Object.entries(monthlyData)
       .map(([key, value]) => {
-        const [year, month] = key.split("-");
+        const [, month] = key.split("-");
         return {
           month: getMonthName(parseInt(month) - 1),
           production: value,
@@ -539,9 +673,90 @@ export default function StatisticsPage() {
         };
       })
       .sort((a, b) => a.monthIndex - b.monthIndex);
-  }, [shifts, selectedYear]);
+  }, [shifts, selectedYear, statsDateRange]);
 
   const monthlyAverageProductionData = useMemo(() => {
+    if (statsDateRange) {
+      const { start, end } = statsDateRange;
+      const days = inclusiveCalendarDaysBetween(start, end);
+      const shiftDay = (shift: ShiftWithDetails) =>
+        shift.shift_date ? String(shift.shift_date).slice(0, 10) : "";
+
+      if (days > 45) {
+        const monthlyData: Record<
+          string,
+          { total: number; shiftsCount: number }
+        > = {};
+        const [sy, sm] = start.split("-").map((x) => Number.parseInt(x, 10));
+        const [ey, em] = end.split("-").map((x) => Number.parseInt(x, 10));
+        let cur = new Date(sy, sm - 1, 1);
+        const last = new Date(ey, em - 1, 1);
+        while (cur <= last) {
+          const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+          monthlyData[key] = { total: 0, shiftsCount: 0 };
+          cur.setMonth(cur.getMonth() + 1);
+        }
+        shifts.forEach((shift) => {
+          if (shift.status !== "completed" || !shift.production) return;
+          const sd = shiftDay(shift);
+          if (!sd || sd < start || sd > end) return;
+          const shiftDate = new Date(shift.shift_date as string);
+          const monthKey = `${shiftDate.getFullYear()}-${String(shiftDate.getMonth() + 1).padStart(2, "0")}`;
+          if (!(monthKey in monthlyData)) return;
+          let shiftTotal = 0;
+          shift.production.forEach((item) => {
+            shiftTotal += item.quantity;
+          });
+          monthlyData[monthKey].total += shiftTotal;
+          monthlyData[monthKey].shiftsCount += 1;
+        });
+        return Object.entries(monthlyData)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, data], i) => ({
+            month: `${getMonthName(Number.parseInt(key.split("-")[1], 10) - 1)} ${key.slice(0, 4)}`,
+            average:
+              data.shiftsCount > 0 ? data.total / data.shiftsCount : 0,
+            monthIndex: i,
+          }));
+      }
+
+      const dailyData: Record<string, { total: number; shiftsCount: number }> =
+        {};
+      const [sy, sm, sd0] = start.split("-").map((x) => Number.parseInt(x, 10));
+      const [ey, em, ed0] = end.split("-").map((x) => Number.parseInt(x, 10));
+      let walk = new Date(sy, sm - 1, sd0);
+      const endWalk = new Date(ey, em - 1, ed0);
+      while (walk <= endWalk) {
+        dailyData[dateToYYYYMMDD(walk)] = { total: 0, shiftsCount: 0 };
+        walk.setDate(walk.getDate() + 1);
+      }
+      shifts.forEach((shift) => {
+        if (shift.status !== "completed" || !shift.production) return;
+        const sd = shiftDay(shift);
+        if (!sd || !(sd in dailyData)) return;
+        let shiftTotal = 0;
+        shift.production.forEach((item) => {
+          shiftTotal += item.quantity;
+        });
+        dailyData[sd].total += shiftTotal;
+        dailyData[sd].shiftsCount += 1;
+      });
+      return Object.keys(dailyData)
+        .sort()
+        .map((key, i) => {
+          const [y, m, d] = key.split("-").map((x) => Number.parseInt(x, 10));
+          const dt = new Date(y, m - 1, d);
+          return {
+            month: `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}`,
+            average:
+              dailyData[key].shiftsCount > 0
+                ? dailyData[key].total / dailyData[key].shiftsCount
+                : 0,
+            monthIndex: i,
+          };
+        });
+    }
+
     const monthlyData: Record<string, { total: number; shiftsCount: number }> =
       {};
 
@@ -557,7 +772,6 @@ export default function StatisticsPage() {
         const month = shiftDate.getMonth() + 1;
         const monthKey = `${year}-${String(month).padStart(2, "0")}`;
 
-        // Підраховуємо загальну кількість продукції за зміну
         let shiftTotal = 0;
         shift.production.forEach((item) => {
           shiftTotal += item.quantity;
@@ -574,7 +788,7 @@ export default function StatisticsPage() {
 
     return Object.entries(monthlyData)
       .map(([key, data]) => {
-        const [year, month] = key.split("-");
+        const [, month] = key.split("-");
         const average =
           data.shiftsCount > 0 ? data.total / data.shiftsCount : 0;
         return {
@@ -584,7 +798,7 @@ export default function StatisticsPage() {
         };
       })
       .sort((a, b) => a.monthIndex - b.monthIndex);
-  }, [shifts, selectedYear]);
+  }, [shifts, selectedYear, statsDateRange]);
 
   if (isLoading) {
     return (
@@ -718,7 +932,10 @@ export default function StatisticsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Select
             value={selectedYear.toString()}
-            onValueChange={(value) => setSelectedYear(parseInt(value))}
+            onValueChange={(value) => {
+              setSelectedYear(parseInt(value, 10));
+              setFilterDateRange({});
+            }}
           >
             <SelectTrigger className="w-[100px] sm:w-[120px]">
               <SelectValue placeholder="Рік" />
@@ -732,26 +949,103 @@ export default function StatisticsPage() {
             </SelectContent>
           </Select>
           <Button
-            variant={period === "year" ? "default" : "outline"}
-            onClick={() => setPeriod("year")}
+            variant={
+              period === "year" && !statsDateRange ? "default" : "outline"
+            }
+            onClick={() => {
+              setPeriod("year");
+              setFilterDateRange({});
+            }}
             className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Рік
           </Button>
           <Button
             variant={period === "month" ? "default" : "outline"}
-            onClick={() => setPeriod("month")}
+            onClick={() => {
+              setPeriod("month");
+              setFilterDateRange({});
+            }}
             className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Місяць
           </Button>
           <Button
             variant={period === "week" ? "default" : "outline"}
-            onClick={() => setPeriod("week")}
+            onClick={() => {
+              setPeriod("week");
+              setFilterDateRange({});
+            }}
             className="text-xs sm:text-sm px-2 sm:px-4"
           >
             Тиждень
           </Button>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={statsDateRange ? "default" : "outline"}
+                className={cn(
+                  "justify-start text-left font-normal text-xs sm:text-sm px-2 sm:px-4 min-w-[140px] sm:min-w-[180px]",
+                  !statsDateRange &&
+                    !filterDateRange.from &&
+                    "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                {statsDateRange ? (
+                  <>
+                    {formatDate(
+                      `${statsDateRange.start}T12:00:00.000Z`
+                    )}{" "}
+                    —{" "}
+                    {formatDate(`${statsDateRange.end}T12:00:00.000Z`)}
+                  </>
+                ) : filterDateRange.from ? (
+                  <>
+                    {formatDate(
+                      `${dateToYYYYMMDD(filterDateRange.from)}T12:00:00.000Z`
+                    )}{" "}
+                    <span className="text-muted-foreground">— …</span>
+                  </>
+                ) : (
+                  <span>Діапазон дат</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <CalendarRangePicker
+                initialFocus
+                mode="range"
+                defaultMonth={filterDateRange.from}
+                selected={filterDateRange}
+                onSelect={(range) => {
+                  if (range) {
+                    setFilterDateRange({
+                      from: range.from,
+                      to: range.to,
+                    });
+                  } else {
+                    setFilterDateRange({});
+                  }
+                }}
+                numberOfMonths={2}
+                locale={uk}
+                weekStartsOn={6}
+              />
+              <div className="border-t p-2 flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => setFilterDateRange({})}
+                >
+                  Скинути діапазон
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -931,7 +1225,7 @@ export default function StatisticsPage() {
 
               <div>
                 <h3 className="text-sm font-medium mb-1">
-                  {period === "year"
+                  {barkShipmentsBreakdown?.usesMonthlyTimeBuckets
                     ? "Помісячний графік"
                     : "Графік по днях"}
                 </h3>
@@ -961,9 +1255,21 @@ export default function StatisticsPage() {
                         dataKey="label"
                         tick={{ fontSize: 11 }}
                         interval={0}
-                        angle={period === "year" ? 0 : -35}
-                        textAnchor={period === "year" ? "middle" : "end"}
-                        height={period === "year" ? 32 : 56}
+                        angle={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 0
+                            : -35
+                        }
+                        textAnchor={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? "middle"
+                            : "end"
+                        }
+                        height={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 32
+                            : 56
+                        }
                       />
                       <YAxis
                         tick={{ fontSize: 12 }}
@@ -988,7 +1294,11 @@ export default function StatisticsPage() {
                         dataKey="quantity"
                         fill="hsl(var(--primary))"
                         radius={[4, 4, 0, 0]}
-                        maxBarSize={period === "year" ? 48 : 28}
+                        maxBarSize={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 48
+                            : 28
+                        }
                       />
                     </RechartsBarChart>
                   </ResponsiveContainer>
@@ -1005,10 +1315,30 @@ export default function StatisticsPage() {
       >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Помісячний графік виробництва</DialogTitle>
+            <DialogTitle>
+              {productionChartUsesMonthlyBuckets
+                ? "Помісячний графік виробництва"
+                : "Виробництво по днях"}
+            </DialogTitle>
             <DialogDescription>
-              Динаміка виробленої продукції по місяцях {selectedYear} року
-              (період на сторінці: {periodLabel})
+              {statsDateRange ? (
+                productionChartUsesMonthlyBuckets ? (
+                  <>
+                    Динаміка виробленої продукції по місяцях за період{" "}
+                    {periodLabel}
+                  </>
+                ) : (
+                  <>
+                    Динаміка виробленої продукції по днях за період{" "}
+                    {periodLabel}
+                  </>
+                )
+              ) : (
+                <>
+                  Динаміка виробленої продукції по місяцях {selectedYear} року
+                  (період на сторінці: {periodLabel})
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           {monthlyProductionData.length === 0 ? (
@@ -1019,7 +1349,14 @@ export default function StatisticsPage() {
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={monthlyProductionData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 12 }}
+                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
+                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
+                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                  interval={0}
+                />
                 <YAxis
                   tick={{ fontSize: 12 }}
                   label={{
@@ -1059,10 +1396,30 @@ export default function StatisticsPage() {
       >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Помісячний графік середнього виробництва</DialogTitle>
+            <DialogTitle>
+              {productionChartUsesMonthlyBuckets
+                ? "Помісячний графік середнього виробництва"
+                : "Середнє виробництво по днях"}
+            </DialogTitle>
             <DialogDescription>
-              Динаміка середньої кількості продукції на зміну по місяцях{" "}
-              {selectedYear} року (період на сторінці: {periodLabel})
+              {statsDateRange ? (
+                productionChartUsesMonthlyBuckets ? (
+                  <>
+                    Динаміка середньої кількості на зміну по місяцях за період{" "}
+                    {periodLabel}
+                  </>
+                ) : (
+                  <>
+                    Динаміка середньої кількості на зміну по днях за період{" "}
+                    {periodLabel}
+                  </>
+                )
+              ) : (
+                <>
+                  Динаміка середньої кількості продукції на зміну по місяцях{" "}
+                  {selectedYear} року (період на сторінці: {periodLabel})
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           {monthlyAverageProductionData.length === 0 ? (
@@ -1073,7 +1430,14 @@ export default function StatisticsPage() {
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={monthlyAverageProductionData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 12 }}
+                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
+                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
+                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                  interval={0}
+                />
                 <YAxis
                   tick={{ fontSize: 12 }}
                   label={{

@@ -123,6 +123,21 @@ export function getDateRangeForPeriod(
   }
 }
 
+/** Кількість календарних днів від startYmd до endYmd включно (локальні дати). */
+export function inclusiveCalendarDaysBetween(
+  startYmd: string,
+  endYmd: string
+): number {
+  const [ys, ms, ds] = startYmd.split("-").map((x) => Number.parseInt(x, 10));
+  const [ye, me, de] = endYmd.split("-").map((x) => Number.parseInt(x, 10));
+  const a = new Date(ys, ms - 1, ds);
+  const b = new Date(ye, me - 1, de);
+  return Math.max(
+    0,
+    Math.floor((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  );
+}
+
 export function formatNumber(
   value: number,
   options: {

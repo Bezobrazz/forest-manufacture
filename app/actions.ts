@@ -16,7 +16,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { getDateRangeForPeriod } from "@/lib/utils";
+import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 // Отримання інформації про склад
@@ -594,6 +594,40 @@ export async function getProductCategories(): Promise<ProductCategory[]> {
   }
 }
 
+export type StatisticsDateRange = {
+  start: string;
+  end: string;
+};
+
+function normalizeStatisticsRange(
+  range: StatisticsDateRange
+): StatisticsDateRange {
+  if (range.start <= range.end) return range;
+  return { start: range.end, end: range.start };
+}
+
+function resolveStatisticsRange(
+  period: "year" | "month" | "week",
+  year?: number,
+  range?: StatisticsDateRange | null
+): { startDate: Date; endDate: Date; startStr: string; endStr: string } {
+  if (range?.start && range?.end) {
+    const r = normalizeStatisticsRange(range);
+    const [ys, ms, ds] = r.start.split("-").map((x) => Number.parseInt(x, 10));
+    const [ye, me, de] = r.end.split("-").map((x) => Number.parseInt(x, 10));
+    const startDate = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
+    const endDate = new Date(ye, me - 1, de, 23, 59, 59, 999);
+    return { startDate, endDate, startStr: r.start, endStr: r.end };
+  }
+  const { startDate, endDate } = getDateRangeForPeriod(period, year);
+  return {
+    startDate,
+    endDate,
+    startStr: dateToYYYYMMDD(startDate),
+    endStr: dateToYYYYMMDD(endDate),
+  };
+}
+
 function isBarkFinishedProductName(name: string): boolean {
   const n = name.toLowerCase();
   if (!n.includes("кора")) return false;
@@ -603,11 +637,16 @@ function isBarkFinishedProductName(name: string): boolean {
 
 export async function getBarkShipmentsTotal(
   period: "year" | "month" | "week" = "year",
-  year?: number
+  year?: number,
+  dateRange?: StatisticsDateRange | null
 ): Promise<{ totalShipped: number }> {
   try {
     const supabase = await createServerClient();
-    const { startDate, endDate } = getDateRangeForPeriod(period, year);
+    const { startDate, endDate } = resolveStatisticsRange(
+      period,
+      year,
+      dateRange ?? null
+    );
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
 
@@ -702,14 +741,77 @@ function buildBarkShipmentTimeBuckets(
   return map;
 }
 
-function barkShipmentBucketKeyForRow(
-  period: "year" | "month" | "week",
-  d: Date
-): string {
-  if (period === "year") {
+function barkShipmentBucketKey(monthly: boolean, d: Date): string {
+  if (monthly) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function inclusiveDaysLocalBoundary(startDate: Date, endDate: Date): number {
+  const d0 = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate()
+  );
+  const d1 = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth(),
+    endDate.getDate()
+  );
+  return (
+    Math.floor((d1.getTime() - d0.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  );
+}
+
+function buildBarkShipmentBucketsResolved(
+  period: "year" | "month" | "week",
+  startDate: Date,
+  endDate: Date,
+  explicitRange: boolean
+): {
+  buckets: Map<string, { label: string; quantity: number }>;
+  monthlyKeys: boolean;
+} {
+  if (explicitRange) {
+    const days = inclusiveDaysLocalBoundary(startDate, endDate);
+    const monthlyKeys = days > 45;
+    const map = new Map<string, { label: string; quantity: number }>();
+    if (monthlyKeys) {
+      let cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+      const last = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      while (cur <= last) {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+        map.set(key, {
+          label: `${BARK_BREAKDOWN_MONTH_NAMES_UK[cur.getMonth()]} ${cur.getFullYear()}`,
+          quantity: 0,
+        });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    } else {
+      const d = new Date(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate()
+      );
+      const end = new Date(
+        endDate.getFullYear(),
+        endDate.getMonth(),
+        endDate.getDate()
+      );
+      while (d <= end) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const label = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+        map.set(key, { label, quantity: 0 });
+        d.setDate(d.getDate() + 1);
+      }
+    }
+    return { buckets: map, monthlyKeys };
+  }
+  return {
+    buckets: buildBarkShipmentTimeBuckets(period, startDate, endDate),
+    monthlyKeys: period === "year",
+  };
 }
 
 function rowProductName(row: {
@@ -729,26 +831,35 @@ export type BarkShipmentsBreakdown = {
   byProduct: { productName: string; quantity: number }[];
   timeSeries: { label: string; quantity: number }[];
   chartCaption: string;
+  usesMonthlyTimeBuckets: boolean;
 };
 
 export async function getBarkShipmentsBreakdown(
   period: "year" | "month" | "week" = "year",
-  year?: number
+  year?: number,
+  dateRange?: StatisticsDateRange | null
 ): Promise<BarkShipmentsBreakdown> {
   const empty = (): BarkShipmentsBreakdown => ({
     byProduct: [],
     timeSeries: [],
     chartCaption: "",
+    usesMonthlyTimeBuckets: false,
   });
 
   try {
     const supabase = await createServerClient();
-    const { startDate, endDate } = getDateRangeForPeriod(period, year);
+    const { startDate, endDate, startStr, endStr } = resolveStatisticsRange(
+      period,
+      year,
+      dateRange ?? null
+    );
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
+    const explicitRange = Boolean(dateRange?.start && dateRange?.end);
 
-    const chartCaption =
-      period === "year"
+    const chartCaption = explicitRange
+      ? `Період ${startStr} — ${endStr}`
+      : period === "year"
         ? `Помісячна динаміка за ${startDate.getFullYear()} рік`
         : period === "month"
           ? "Відвантаження по днях обраного місяця"
@@ -786,11 +897,13 @@ export async function getBarkShipmentsBreakdown(
     }
 
     const byProductMap = new Map<string, number>();
-    const timeBuckets = buildBarkShipmentTimeBuckets(
-      period,
-      startDate,
-      endDate
-    );
+    const { buckets: timeBuckets, monthlyKeys } =
+      buildBarkShipmentBucketsResolved(
+        period,
+        startDate,
+        endDate,
+        explicitRange
+      );
 
     for (const row of rows ?? []) {
       const qty = Math.abs(Number(row.quantity ?? 0));
@@ -801,7 +914,7 @@ export async function getBarkShipmentsBreakdown(
 
       const d = new Date(row.created_at as string);
       if (Number.isNaN(d.getTime())) continue;
-      const bKey = barkShipmentBucketKeyForRow(period, d);
+      const bKey = barkShipmentBucketKey(monthlyKeys, d);
       const bucket = timeBuckets.get(bKey);
       if (bucket) {
         bucket.quantity += qty;
@@ -816,20 +929,27 @@ export async function getBarkShipmentsBreakdown(
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, v]) => ({ label: v.label, quantity: v.quantity }));
 
-    return { byProduct, timeSeries, chartCaption };
+    return {
+      byProduct,
+      timeSeries,
+      chartCaption,
+      usesMonthlyTimeBuckets: monthlyKeys,
+    };
   } catch (error) {
     console.error("getBarkShipmentsBreakdown:", error);
     return {
       byProduct: [],
       timeSeries: [],
       chartCaption: "",
+      usesMonthlyTimeBuckets: false,
     };
   }
 }
 
 export async function getProductionStats(
   period: "year" | "month" | "week" = "year",
-  year?: number
+  year?: number,
+  dateRange?: StatisticsDateRange | null
 ): Promise<{
   totalProduction: number;
   productionByCategory: Record<string, number>;
@@ -837,11 +957,13 @@ export async function getProductionStats(
   try {
     const supabase = await createServerClient();
 
-    const { startDate, endDate } = getDateRangeForPeriod(period, year);
+    const { startStr, endStr } = resolveStatisticsRange(
+      period,
+      year,
+      dateRange ?? null
+    );
 
     try {
-      const startStr = startDate.toISOString().split("T")[0];
-      const endStr = endDate.toISOString().split("T")[0];
 
       const { data: shiftsData, error: shiftsError } = await supabase
         .from("shifts")
