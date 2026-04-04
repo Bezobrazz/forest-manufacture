@@ -34,7 +34,8 @@ export async function getPackingBagPurchases(): Promise<PackingBagPurchase[]> {
     .from("packing_bag_purchases")
     .select("*")
     .eq("user_id", user.id)
-    .order("purchase_date", { ascending: false });
+    .order("purchase_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error fetching packing bag purchases:", error);

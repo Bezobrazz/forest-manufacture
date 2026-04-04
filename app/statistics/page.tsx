@@ -11,9 +11,14 @@ import {
   getSupplierDeliveries,
   getBarkShipmentsTotal,
   getBarkShipmentsBreakdown,
+  getPackingBagPurchases,
   type BarkShipmentsBreakdown,
   type StatisticsDateRange,
 } from "@/app/actions";
+import {
+  PACKING_BAG_PRODUCT_NAME,
+  type PackingBagPurchase,
+} from "@/lib/packing-bags/packing-bag-purchase";
 import { getTrips } from "@/app/trips/actions";
 import {
   Card,
@@ -101,6 +106,13 @@ type TripLike = {
   trip_date: string;
 };
 
+const priceUahFromLatestPackingBagPurchase = (purchases: PackingBagPurchase[]) => {
+  const row = purchases[0];
+  if (!row) return 0;
+  const n = Number(row.price_uah);
+  return Number.isFinite(n) ? n : 0;
+};
+
 export default function StatisticsPage() {
   const [period, setPeriod] = useState<PeriodFilter>("year");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -119,6 +131,7 @@ export default function StatisticsPage() {
     []
   );
   const [trips, setTrips] = useState<TripLike[]>([]);
+  const [latestPackingBagPriceUah, setLatestPackingBagPriceUah] = useState(0);
   const [barkShipmentsTotal, setBarkShipmentsTotal] = useState(0);
   const [barkShipmentsDetailOpen, setBarkShipmentsDetailOpen] = useState(false);
   const [barkShipmentsBreakdown, setBarkShipmentsBreakdown] =
@@ -196,6 +209,7 @@ export default function StatisticsPage() {
           categoriesData,
           expensesData,
           deliveriesData,
+          packingBagPurchasesData,
           tripsData,
           barkShipped,
         ] =
@@ -206,6 +220,7 @@ export default function StatisticsPage() {
             getProductCategories(),
             getExpenses(),
             getSupplierDeliveries(),
+            getPackingBagPurchases(),
             getTrips(),
             getBarkShipmentsTotal(period, selectedYear, statsDateRange),
           ]);
@@ -216,6 +231,9 @@ export default function StatisticsPage() {
         setCategories(categoriesData || []);
         setExpenses((expensesData || []) as ExpenseLike[]);
         setSupplierDeliveries((deliveriesData || []) as SupplierDeliveryLike[]);
+        setLatestPackingBagPriceUah(
+          priceUahFromLatestPackingBagPurchase(packingBagPurchasesData || [])
+        );
         setTrips((tripsData || []) as TripLike[]);
 
         const completedShifts = (shiftsData || []).filter(
@@ -230,6 +248,7 @@ export default function StatisticsPage() {
         setShifts([]);
         setExpenses([]);
         setSupplierDeliveries([]);
+        setLatestPackingBagPriceUah(0);
         setTrips([]);
         setBarkShipmentsTotal(0);
       } finally {
@@ -394,12 +413,14 @@ export default function StatisticsPage() {
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
         ? purchaseCostPerBag +
           tripCostPerBag +
           fixedRewardPerBag +
-          hourlyWagePerBag
+          hourlyWagePerBag +
+          packingBagFromLatestTx
         : null;
 
     return {
@@ -413,6 +434,7 @@ export default function StatisticsPage() {
       tripCostPerBag,
       fixedRewardPerBag,
       hourlyWagePerBag,
+      packingBagFromLatestTx,
       totalCostPerBag,
     };
   }, [
@@ -422,6 +444,8 @@ export default function StatisticsPage() {
     fixedRewardPerBag,
     supplierDeliveries,
     trips,
+    latestPackingBagPriceUah,
+    shifts,
   ]);
 
   const previousPeriodCostMetrics = useMemo(() => {
@@ -438,18 +462,28 @@ export default function StatisticsPage() {
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
         ? purchaseCostPerBag +
           tripCostPerBag +
           fixedRewardPerBag +
-          hourlyWagePerBag
+          hourlyWagePerBag +
+          packingBagFromLatestTx
         : null;
 
     return {
       totalCostPerBag,
     };
-  }, [previousPeriodRange, expenses, fixedRewardPerBag, supplierDeliveries, trips]);
+  }, [
+    previousPeriodRange,
+    expenses,
+    fixedRewardPerBag,
+    supplierDeliveries,
+    trips,
+    latestPackingBagPriceUah,
+    shifts,
+  ]);
 
   const getChangePercent = (current: number | null, previous: number | null) => {
     if (current == null || previous == null || previous === 0) return null;
@@ -465,7 +499,8 @@ export default function StatisticsPage() {
     (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
     (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
-    (currentPeriodCostMetrics.hourlyWagePerBag ?? 0);
+    (currentPeriodCostMetrics.hourlyWagePerBag ?? 0) +
+    (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
   const structureRows = [
     {
       label: "Середня вартість мішка із закупок",
@@ -482,6 +517,10 @@ export default function StatisticsPage() {
     {
       label: "Погодинна З.П. на мішок",
       value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
+    },
+    {
+      label: `«${PACKING_BAG_PRODUCT_NAME}» (остання закупівля)`,
+      value: currentPeriodCostMetrics.packingBagFromLatestTx ?? 0,
     },
   ].map((item) => ({
     ...item,
@@ -1477,9 +1516,10 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
-            Тимчасова формула: середня вартість мішка із закупок + середня
-            вартість мішка з поїздок + фіксована винагорода за мішок + погодинна
-            З.П. на мішок (відносно готової продукції)
+            Тимчасова формула: середня вартість мішка із закупок + середня вартість
+            мішка з поїздок + фіксована винагорода за мішок + погодинна З.П. на мішок
+            (відносно готової продукції) + ціна за шт «{PACKING_BAG_PRODUCT_NAME}» з
+            останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClient } from "@/lib/supabase/server";
+import { getPackingBagPurchases as loadPackingBagPurchases } from "@/app/packing-bags/actions";
 import type {
   Employee,
   Product,
@@ -3183,6 +3184,10 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
     console.error("Error in getSupplierDeliveries:", error);
     return [];
   }
+}
+
+export async function getPackingBagPurchases() {
+  return loadPackingBagPurchases();
 }
 
 export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceTransaction[]> {

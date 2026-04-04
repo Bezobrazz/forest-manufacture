@@ -11,6 +11,7 @@ import {
   getWarehouses,
   createSupplierDelivery,
   addSupplierAdvance,
+  getPackingBagPurchases,
 } from "@/app/actions";
 import {
   Card,
@@ -94,7 +95,7 @@ import { EditSupplierDeliveryDialog } from "@/components/edit-supplier-delivery-
 import { DeleteSupplierDeliveryButton } from "@/components/delete-supplier-delivery-button";
 import { DeleteSupplierAdvanceButton } from "@/components/delete-supplier-advance-button";
 import { EditSupplierAdvanceDialog } from "@/components/edit-supplier-advance-dialog";
-import { getPackingBagPurchases, type PackingBagPurchase } from "@/app/packing-bags/actions";
+import type { PackingBagPurchase } from "@/lib/packing-bags/packing-bag-purchase";
 import { PackingBagList } from "@/components/packing-bag-list";
 import { PackingBagForm } from "@/components/packing-bag-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
