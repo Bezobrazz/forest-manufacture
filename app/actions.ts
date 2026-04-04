@@ -18,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
+import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
@@ -602,13 +603,6 @@ function resolveStatisticsRange(
     startStr: dateToYYYYMMDD(startDate),
     endStr: dateToYYYYMMDD(endDate),
   };
-}
-
-function isBarkFinishedProductName(name: string): boolean {
-  const n = name.toLowerCase();
-  if (!n.includes("кора")) return false;
-  if (n.includes("мішок") || n.includes("пакувальн")) return false;
-  return true;
 }
 
 export async function getBarkShipmentsTotal(
