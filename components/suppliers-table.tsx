@@ -111,21 +111,26 @@ export function SuppliersTable({
                   )}
                 </TableCell>
                 <TableCell className="min-w-[100px] text-right">
-                  {typeof supplier.advance === "number" &&
-                  supplier.advance !== 0 ? (
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium tabular-nums">
-                        {formatNumber(supplier.advance, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{" "}
-                        ₴
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  {(() => {
+                    const adv =
+                      supplier.advance == null || supplier.advance === ""
+                        ? NaN
+                        : Number(supplier.advance);
+                    return Number.isFinite(adv) && adv !== 0 ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="font-medium tabular-nums">
+                          {formatNumber(adv, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          ₴
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="text-right min-w-[80px] w-[100px]">
                   <div className="flex items-center justify-end gap-1">

@@ -3650,6 +3650,13 @@ export async function updateSupplierDelivery(formData: FormData) {
       };
     }
 
+    const rowPrice = (currentDelivery as { price_per_unit?: unknown }).price_per_unit;
+    const resolvedPricePerUnit =
+      pricePerUnit ??
+      (rowPrice != null && String(rowPrice).trim() !== ""
+        ? Math.round(Number(rowPrice) * 100) / 100
+        : null);
+
     const createdAt = deliveryDate
       ? new Date(deliveryDate + "T12:00:00.000Z").toISOString()
       : undefined;
@@ -3659,7 +3666,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       product_id: productId,
       warehouse_id: warehouseId,
       quantity: quantity,
-      price_per_unit: pricePerUnit,
+      price_per_unit: resolvedPricePerUnit,
       material_product_id: materialProductId ?? null,
       material_quantity: materialQuantity ?? null,
     };
@@ -3862,8 +3869,8 @@ export async function updateSupplierDelivery(formData: FormData) {
     }
 
     const newAmount =
-      pricePerUnit != null
-        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
+      resolvedPricePerUnit != null
+        ? Math.round(Number(quantity) * resolvedPricePerUnit * 100) / 100
         : 0;
     const oldAdvanceUsed = Number((currentDelivery as { advance_used?: number }).advance_used ?? 0);
     const oldSupplierIdFromRow = Number(

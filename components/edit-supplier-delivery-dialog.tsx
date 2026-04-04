@@ -187,7 +187,7 @@ export function EditSupplierDeliveryDialog({
       submitFormData.append("product_id", formData.product_id);
       submitFormData.append("warehouse_id", formData.warehouse_id);
       submitFormData.append("quantity", formData.quantity);
-      if (formData.price_per_unit) {
+      if (formData.price_per_unit.trim() !== "") {
         submitFormData.append("price_per_unit", formData.price_per_unit);
       }
       submitFormData.append(

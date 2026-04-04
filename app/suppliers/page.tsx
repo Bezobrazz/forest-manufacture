@@ -141,9 +141,9 @@ export default function SuppliersPage() {
         return a.name.localeCompare(b.name, "uk");
       }
       if (sortBy === "advance") {
-        return (b.advance ?? 0) - (a.advance ?? 0);
+        return Number(b.advance ?? 0) - Number(a.advance ?? 0);
       }
-      return (b.materials_balance ?? 0) - (a.materials_balance ?? 0);
+      return Number(b.materials_balance ?? 0) - Number(a.materials_balance ?? 0);
     });
 
     return filtered;
@@ -184,11 +184,11 @@ export default function SuppliersPage() {
 
   const totalSuppliers = suppliers.length;
   const materialsBalanceTotal = suppliers.reduce(
-    (sum, s) => sum + (s.materials_balance ?? 0),
+    (sum, s) => sum + Number(s.materials_balance ?? 0),
     0,
   );
   const advanceBalanceTotal = suppliers.reduce(
-    (sum, s) => sum + (s.advance ?? 0),
+    (sum, s) => sum + Number(s.advance ?? 0),
     0,
   );
 
