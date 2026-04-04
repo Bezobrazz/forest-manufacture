@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -81,36 +81,40 @@ type HomePageClientProps = {
   initialData: HomePageData;
 };
 
+const DEFAULT_VISIBLE_CARDS: DefaultCards = {
+  shifts: true,
+  employees: true,
+  products: true,
+  materials: true,
+  inventory: true,
+  expenses: true,
+};
+
 export function HomePageClient({ initialData }: HomePageClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const allowPersistVisibleCards = useRef(false);
 
-  const defaultCards: DefaultCards = {
-    shifts: true,
-    employees: true,
-    products: true,
-    materials: true,
-    inventory: true,
-    expenses: true,
-  };
+  const [visibleCards, setVisibleCards] =
+    useState<DefaultCards>(DEFAULT_VISIBLE_CARDS);
 
-  // Ініціалізація стану з localStorage
-  const [visibleCards, setVisibleCards] = useState<DefaultCards>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("visibleCards");
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch {
-          return defaultCards;
-        }
-      }
-    }
-    return defaultCards;
-  });
-
-  // Оновлення localStorage при зміні стану
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("visibleCards");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<DefaultCards>;
+        setVisibleCards({ ...DEFAULT_VISIBLE_CARDS, ...parsed });
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+    queueMicrotask(() => {
+      allowPersistVisibleCards.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!allowPersistVisibleCards.current) return;
     localStorage.setItem("visibleCards", JSON.stringify(visibleCards));
   }, [visibleCards]);
 
@@ -246,16 +250,7 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
         <div className="mb-4 flex justify-end">
           <Button
             variant="secondary"
-            onClick={() =>
-              setVisibleCards({
-                shifts: true,
-                employees: true,
-                products: true,
-                materials: true,
-                inventory: true,
-                expenses: true,
-              })
-            }
+            onClick={() => setVisibleCards({ ...DEFAULT_VISIBLE_CARDS })}
           >
             Показати приховані
           </Button>

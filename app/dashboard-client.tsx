@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -74,6 +74,14 @@ type DefaultCards = {
   products: boolean;
   inventory: boolean;
   expenses: boolean;
+};
+
+const DEFAULT_VISIBLE_CARDS: DefaultCards = {
+  shifts: true,
+  employees: true,
+  products: true,
+  inventory: true,
+  expenses: true,
 };
 
 function LoadingSkeleton() {
@@ -211,30 +219,27 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState(false);
 
-  const defaultCards: DefaultCards = {
-    shifts: true,
-    employees: true,
-    products: true,
-    inventory: true,
-    expenses: true,
-  };
-  // Ініціалізація стану з localStorage
-  const [visibleCards, setVisibleCards] = useState<DefaultCards>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("visibleCards");
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch {
-          return defaultCards;
-        }
-      }
-    }
-    return defaultCards;
-  });
+  const allowPersistVisibleCards = useRef(false);
+  const [visibleCards, setVisibleCards] =
+    useState<DefaultCards>(DEFAULT_VISIBLE_CARDS);
 
-  // Оновлення localStorage при зміні стану
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("visibleCards");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<DefaultCards>;
+        setVisibleCards({ ...DEFAULT_VISIBLE_CARDS, ...parsed });
+      }
+    } catch {
+      // ignore
+    }
+    queueMicrotask(() => {
+      allowPersistVisibleCards.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!allowPersistVisibleCards.current) return;
     localStorage.setItem("visibleCards", JSON.stringify(visibleCards));
   }, [visibleCards]);
 
@@ -402,15 +407,7 @@ export default function HomePage() {
         <div className="mb-4 flex justify-end">
           <Button
             variant="secondary"
-            onClick={() =>
-              setVisibleCards({
-                shifts: true,
-                employees: true,
-                products: true,
-                inventory: true,
-                expenses: true,
-              })
-            }
+            onClick={() => setVisibleCards({ ...DEFAULT_VISIBLE_CARDS })}
           >
             Показати приховані
           </Button>
