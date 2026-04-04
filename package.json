@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test lib/trips/calc.test.ts",
+    "test": "node --import tsx --test lib/trips/calc.test.ts lib/inventory/inventoryView.test.ts lib/production/parseProductionForm.test.ts",
     "delete-user": "tsx scripts/delete-user.ts"
   },
   "dependencies": {

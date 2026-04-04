@@ -17,6 +17,8 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
+import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
 
@@ -52,31 +54,9 @@ export async function getInventory(): Promise<Inventory[]> {
       }
     }
 
-    const result: Inventory[] = [];
+    const legacyRows = !oldInventoryError && oldInventoryData ? oldInventoryData : [];
 
-    if (!oldInventoryError && oldInventoryData) {
-      const finishedProducts = oldInventoryData.filter(
-        (item) =>
-          item.product?.product_type !== "material" &&
-          (item.product?.product_type === "finished" ||
-            (item.product?.product_type === null && item.product?.reward !== null))
-      );
-      result.push(...(finishedProducts as Inventory[]));
-    }
-
-    const warehouseInventory = warehouseInventoryData
-      .filter((item) => item.product?.product_type === "material")
-      .map((item) => ({
-        id: item.id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        updated_at: item.updated_at,
-        product: item.product,
-      })) as Inventory[];
-
-    result.push(...warehouseInventory);
-
-    return result;
+    return mergeInventoryForDisplay(legacyRows, warehouseInventoryData);
   } catch (error) {
     console.error("Error in getInventory:", error);
     try {
@@ -376,16 +356,11 @@ export async function updateProduction(formData: FormData) {
   try {
     const supabase = await createServerClient();
 
-    const shiftId = Number.parseInt(formData.get("shift_id") as string);
-    const productId = Number.parseInt(formData.get("product_id") as string);
-    const quantity = Number.parseFloat(formData.get("quantity") as string);
-
-    if (!shiftId || !productId || isNaN(quantity)) {
-      return {
-        success: false,
-        error: "Необхідно вказати зміну, продукт та кількість",
-      };
+    const parsed = parseProductionFormData(formData);
+    if (!parsed.ok) {
+      return { success: false, error: parsed.error };
     }
+    const { shiftId, productId, quantity } = parsed;
 
     try {
       const { data: existingData, error: checkError } = await supabase
@@ -1142,7 +1117,11 @@ export async function completeShift(shiftId: number) {
         return { success: false, error: "Зміну не знайдено" };
       }
 
-      // 1.1 Отримуємо інформацію про вироблену продукцію
+      if (shiftData.status !== "active") {
+        return { success: false, error: "Зміна вже завершена" };
+      }
+
+      // Дані для Telegram (до атомарного закриття — той самий зріз production)
       console.log("Fetching production data...");
       const { data: productionData, error: productionError } = await supabase
         .from("production")
@@ -1167,136 +1146,31 @@ export async function completeShift(shiftId: number) {
         return { success: false, error: productionError.message };
       }
 
-      // Об'єднуємо дані
       shiftData.production = productionData || [];
 
-      // 1.2 Отримуємо ID Main warehouse для транзакцій
-      const { data: mainWarehouse, error: warehouseError } = await supabase
-        .from("warehouses")
-        .select("id")
-        .ilike("name", "%main%")
-        .limit(1)
-        .single();
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        "complete_shift_apply_production",
+        { p_shift_id: shiftId }
+      );
 
-      if (warehouseError) {
-        console.error("Error fetching main warehouse:", warehouseError);
-        // Продовжуємо без warehouse_id, але це може призвести до проблем
+      if (rpcError) {
+        console.error("complete_shift_apply_production RPC error:", rpcError);
+        return { success: false, error: rpcError.message };
       }
 
-      // 2. Оновлюємо інвентар та створюємо транзакції
-      const transactionErrors: string[] = [];
-      for (const item of shiftData.production || []) {
-        // 2.1 Отримуємо поточну кількість на складі
-        const { data: inventoryData, error: inventoryError } = await supabase
-          .from("inventory")
-          .select("quantity, id")
-          .eq("product_id", item.product.id)
-          .maybeSingle();
+      const completion = rpcResult as
+        | { success?: boolean; error?: string }
+        | null;
 
-        if (inventoryError && inventoryError.code !== "PGRST116") {
-          console.error("Error fetching inventory data:", inventoryError);
-          transactionErrors.push(
-            `Помилка отримання інвентаря для продукту ${item.product.name}: ${inventoryError.message}`
-          );
-          continue; // Продовжуємо з наступним продуктом
-        }
-
-        const currentQuantity = inventoryData?.quantity || 0;
-        const newQuantity = currentQuantity + item.quantity;
-
-        // 2.2 Оновлюємо кількість на складі
-        let updateError;
-
-        if (inventoryData) {
-          // Якщо запис існує, оновлюємо його
-          const updateResult = await supabase
-            .from("inventory")
-            .update({
-              quantity: newQuantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", inventoryData.id);
-
-          updateError = updateResult.error;
-        } else {
-          // Якщо запису немає, створюємо новий
-          const insertResult = await supabase.from("inventory").insert({
-            product_id: item.product.id,
-            quantity: item.quantity,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-
-          updateError = insertResult.error;
-        }
-
-        if (updateError) {
-          console.error("Error updating inventory:", updateError);
-          transactionErrors.push(
-            `Помилка оновлення інвентаря для продукту ${item.product.name}: ${updateError.message}`
-          );
-          continue; // Продовжуємо з наступним продуктом
-        }
-
-        // 2.3 Додаємо запис про транзакцію
-        const transactionData: any = {
-          product_id: item.product.id,
-          quantity: item.quantity,
-          transaction_type: "production",
-          reference_id: shiftId,
-          notes: `Виробництво на зміні #${shiftId} (автоматичне додавання при закритті зміни)`,
-        };
-
-        // Додаємо warehouse_id, якщо він є
-        if (mainWarehouse?.id) {
-          transactionData.warehouse_id = mainWarehouse.id;
-        }
-
-        const { error: transactionError, data: transactionDataResult } =
-          await supabase
-            .from("inventory_transactions")
-            .insert(transactionData)
-            .select();
-
-        if (transactionError) {
-          console.error(
-            "Error creating inventory transaction:",
-            transactionError,
-            "Transaction data:",
-            transactionData
-          );
-          transactionErrors.push(
-            `Помилка створення транзакції для продукту ${item.product.name}: ${transactionError.message}`
-          );
-          // Продовжуємо обробку інших продуктів
-        } else {
-          console.log(
-            "Successfully created inventory transaction:",
-            transactionDataResult
-          );
-        }
+      if (!completion?.success) {
+        const msg =
+          completion?.error ||
+          "Не вдалося завершити зміну (атомарна операція в БД)";
+        console.error("complete_shift_apply_production failed:", completion);
+        return { success: false, error: msg };
       }
 
-      // Якщо є помилки створення транзакцій, повертаємо їх
-      if (transactionErrors.length > 0) {
-        console.error("Errors during transaction creation:", transactionErrors);
-        return {
-          success: false,
-          error: `Помилки при створенні транзакцій:\n${transactionErrors.join("\n")}`,
-        };
-      }
-
-      // 3. Змінюємо статус зміни на "completed"
-      const { data, error } = await supabase
-        .from("shifts")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", shiftId)
-        .select();
-
-      if (error) {
-        console.error("Error completing shift:", error);
-        return { success: false, error: error.message };
-      }
+      const data = [{ id: shiftId, status: "completed" as const }];
 
       // 4. Формуємо та відправляємо сповіщення в Telegram
       const productionSummary = shiftData.production?.reduce(

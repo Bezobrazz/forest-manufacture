@@ -29,6 +29,7 @@ import { formatDateTime, formatNumberWithUnit } from "@/lib/utils";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
 import { useEffect, useState } from "react";
+import { isFinishedProductRow } from "@/lib/inventory/inventoryView";
 import type { Inventory, InventoryTransaction, Product } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -210,11 +211,7 @@ export default function InventoryPage() {
 
   // Розділяємо інвентар на готову продукцію та виробничі матеріали
   // Використовуємо product_type для правильного розділення
-  const finishedProducts = inventory.filter(
-    (item) =>
-      item.product?.product_type === "finished" ||
-      (item.product?.product_type === null && item.product?.reward !== null)
-  );
+  const finishedProducts = inventory.filter(isFinishedProductRow);
 
   // Для матеріалів: об'єднуємо дані з inventory та всі матеріали з products
   // щоб показати всі матеріали, навіть якщо їх кількість = 0
