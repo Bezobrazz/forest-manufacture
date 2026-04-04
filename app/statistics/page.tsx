@@ -9,6 +9,9 @@ import {
   getProductCategories,
   getExpenses,
   getSupplierDeliveries,
+  getBarkShipmentsTotal,
+  getBarkShipmentsBreakdown,
+  type BarkShipmentsBreakdown,
 } from "@/app/actions";
 import { getTrips } from "@/app/trips/actions";
 import {
@@ -23,6 +26,7 @@ import {
   BarChart,
   Package,
   PieChart,
+  Truck,
   TrendingUp,
 } from "lucide-react";
 import type { ShiftWithDetails, Product, ProductCategory } from "@/lib/types";
@@ -36,6 +40,13 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   dateToYYYYMMDD,
   formatNumber,
   formatNumberWithUnit,
@@ -45,6 +56,8 @@ import {
 import {
   LineChart,
   Line,
+  BarChart as RechartsBarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -94,9 +107,46 @@ export default function StatisticsPage() {
     []
   );
   const [trips, setTrips] = useState<TripLike[]>([]);
+  const [barkShipmentsTotal, setBarkShipmentsTotal] = useState(0);
+  const [barkShipmentsDetailOpen, setBarkShipmentsDetailOpen] = useState(false);
+  const [barkShipmentsBreakdown, setBarkShipmentsBreakdown] =
+    useState<BarkShipmentsBreakdown | null>(null);
+  const [barkShipmentsDetailLoading, setBarkShipmentsDetailLoading] =
+    useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showMonthlyChart, setShowMonthlyChart] = useState(false);
   const [showAverageChart, setShowAverageChart] = useState(false);
+
+  useEffect(() => {
+    if (!barkShipmentsDetailOpen) return;
+    let cancelled = false;
+    setBarkShipmentsBreakdown(null);
+    setBarkShipmentsDetailLoading(true);
+    (async () => {
+      try {
+        const data = await getBarkShipmentsBreakdown(period, selectedYear);
+        if (!cancelled) {
+          setBarkShipmentsBreakdown(data);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setBarkShipmentsBreakdown({
+            byProduct: [],
+            timeSeries: [],
+            chartCaption: "",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setBarkShipmentsDetailLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [barkShipmentsDetailOpen, period, selectedYear]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -110,6 +160,7 @@ export default function StatisticsPage() {
           expensesData,
           deliveriesData,
           tripsData,
+          barkShipped,
         ] =
           await Promise.all([
             getProductionStats(period, selectedYear),
@@ -119,9 +170,11 @@ export default function StatisticsPage() {
             getExpenses(),
             getSupplierDeliveries(),
             getTrips(),
+            getBarkShipmentsTotal(period, selectedYear),
           ]);
 
         setProductionStats(stats);
+        setBarkShipmentsTotal(barkShipped?.totalShipped ?? 0);
         setProducts(productsData || []);
         setCategories(categoriesData || []);
         setExpenses((expensesData || []) as ExpenseLike[]);
@@ -141,6 +194,7 @@ export default function StatisticsPage() {
         setExpenses([]);
         setSupplierDeliveries([]);
         setTrips([]);
+        setBarkShipmentsTotal(0);
       } finally {
         setIsLoading(false);
       }
@@ -550,8 +604,8 @@ export default function StatisticsPage() {
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3 mb-8">
-          {[1, 2, 3].map((i) => (
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mb-8">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
               <CardHeader className="pb-2">
                 <Skeleton className="h-5 w-40 mb-2" />
@@ -559,7 +613,7 @@ export default function StatisticsPage() {
               </CardHeader>
               <CardContent>
                 <Skeleton className="h-10 w-24 mb-4" />
-                {(i === 1 || i === 3) && (
+                {(i === 1 || i === 3 || i === 4) && (
                   <Skeleton className="h-10 w-full" />
                 )}
               </CardContent>
@@ -699,7 +753,7 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3 mb-8">
+      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mb-8">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2">
@@ -766,7 +820,182 @@ export default function StatisticsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-primary" />
+              <span>Відвантажено кори</span>
+            </CardTitle>
+            <CardDescription>
+              Готова продукція з назвою «кора» (без мішків), за датою
+              відвантаження зі складу
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold mb-4">
+              {formatNumberWithUnit(barkShipmentsTotal, "шт")}
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setBarkShipmentsBreakdown(null);
+                setBarkShipmentsDetailOpen(true);
+              }}
+            >
+              Детальніше
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog
+        open={barkShipmentsDetailOpen}
+        onOpenChange={setBarkShipmentsDetailOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Відвантаження кори</DialogTitle>
+            <DialogDescription>
+              Деталізація за обраний період: {periodLabel}
+            </DialogDescription>
+          </DialogHeader>
+
+          {barkShipmentsDetailLoading ? (
+            <div className="space-y-4 py-2">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-[280px] w-full" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-sm font-medium mb-3">По фракціях</h3>
+                {!barkShipmentsBreakdown?.byProduct.length ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Немає відвантажень кори за цей період
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left font-medium p-3">
+                            Фракція (продукт)
+                          </th>
+                          <th className="text-right font-medium p-3 w-[120px]">
+                            Кількість
+                          </th>
+                          <th className="text-right font-medium p-3 w-[100px]">
+                            Частка
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const totalQty =
+                            barkShipmentsBreakdown.byProduct.reduce(
+                              (s, r) => s + r.quantity,
+                              0
+                            );
+                          return barkShipmentsBreakdown.byProduct.map(
+                            (row) => {
+                              const pct =
+                                totalQty > 0
+                                  ? (row.quantity / totalQty) * 100
+                                  : 0;
+                              return (
+                                <tr
+                                  key={row.productName}
+                                  className="border-b last:border-0"
+                                >
+                                  <td className="p-3">{row.productName}</td>
+                                  <td className="p-3 text-right tabular-nums">
+                                    {formatNumberWithUnit(row.quantity, "шт")}
+                                  </td>
+                                  <td className="p-3 text-right tabular-nums text-muted-foreground">
+                                    {formatPercentage(pct, 1)}
+                                  </td>
+                                </tr>
+                              );
+                            }
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-1">
+                  {period === "year"
+                    ? "Помісячний графік"
+                    : "Графік по днях"}
+                </h3>
+                {barkShipmentsBreakdown?.chartCaption ? (
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {barkShipmentsBreakdown.chartCaption}
+                  </p>
+                ) : null}
+                {!barkShipmentsBreakdown?.timeSeries.length ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Немає даних для графіка
+                  </p>
+                ) : barkShipmentsBreakdown.timeSeries.every(
+                    (p) => p.quantity === 0
+                  ) ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Усі періоди без відвантажень
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <RechartsBarChart
+                      data={barkShipmentsBreakdown.timeSeries}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11 }}
+                        interval={0}
+                        angle={period === "year" ? 0 : -35}
+                        textAnchor={period === "year" ? "middle" : "end"}
+                        height={period === "year" ? 32 : 56}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12 }}
+                        label={{
+                          value: "Шт.",
+                          angle: -90,
+                          position: "insideLeft",
+                        }}
+                      />
+                      <Tooltip
+                        formatter={(value: number) =>
+                          formatNumberWithUnit(value, "шт")
+                        }
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "6px",
+                        }}
+                      />
+                      <Bar
+                        dataKey="quantity"
+                        fill="hsl(var(--primary))"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={period === "year" ? 48 : 28}
+                      />
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Card className="mb-8">
         <CardHeader>

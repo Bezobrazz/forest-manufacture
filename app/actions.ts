@@ -594,6 +594,239 @@ export async function getProductCategories(): Promise<ProductCategory[]> {
   }
 }
 
+function isBarkFinishedProductName(name: string): boolean {
+  const n = name.toLowerCase();
+  if (!n.includes("кора")) return false;
+  if (n.includes("мішок") || n.includes("пакувальн")) return false;
+  return true;
+}
+
+export async function getBarkShipmentsTotal(
+  period: "year" | "month" | "week" = "year",
+  year?: number
+): Promise<{ totalShipped: number }> {
+  try {
+    const supabase = await createServerClient();
+    const { startDate, endDate } = getDateRangeForPeriod(period, year);
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
+    const { data: products, error: productsError } = await supabase
+      .from("products")
+      .select("id, name, product_type")
+      .or("product_type.eq.finished,product_type.is.null");
+
+    if (productsError) {
+      console.error("getBarkShipmentsTotal products:", productsError);
+      return { totalShipped: 0 };
+    }
+
+    const barkProductIds = (products ?? [])
+      .filter((p) => p.name && isBarkFinishedProductName(p.name))
+      .map((p) => p.id);
+
+    if (barkProductIds.length === 0) {
+      return { totalShipped: 0 };
+    }
+
+    const { data: rows, error: txError } = await supabase
+      .from("inventory_transactions")
+      .select("quantity")
+      .eq("transaction_type", "shipment")
+      .in("product_id", barkProductIds)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso);
+
+    if (txError) {
+      console.error("getBarkShipmentsTotal transactions:", txError);
+      return { totalShipped: 0 };
+    }
+
+    const totalShipped = (rows ?? []).reduce(
+      (sum, row) => sum + Math.abs(Number(row.quantity ?? 0)),
+      0
+    );
+
+    return { totalShipped };
+  } catch (error) {
+    console.error("getBarkShipmentsTotal:", error);
+    return { totalShipped: 0 };
+  }
+}
+
+const BARK_BREAKDOWN_MONTH_NAMES_UK = [
+  "Січень",
+  "Лютий",
+  "Березень",
+  "Квітень",
+  "Травень",
+  "Червень",
+  "Липень",
+  "Серпень",
+  "Вересень",
+  "Жовтень",
+  "Листопад",
+  "Грудень",
+] as const;
+
+function buildBarkShipmentTimeBuckets(
+  period: "year" | "month" | "week",
+  startDate: Date,
+  endDate: Date
+): Map<string, { label: string; quantity: number }> {
+  const map = new Map<string, { label: string; quantity: number }>();
+  if (period === "year") {
+    const y = startDate.getFullYear();
+    for (let m = 0; m < 12; m++) {
+      const key = `${y}-${String(m + 1).padStart(2, "0")}`;
+      map.set(key, { label: BARK_BREAKDOWN_MONTH_NAMES_UK[m], quantity: 0 });
+    }
+  } else {
+    const d = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      startDate.getDate()
+    );
+    const end = new Date(
+      endDate.getFullYear(),
+      endDate.getMonth(),
+      endDate.getDate()
+    );
+    while (d <= end) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const label = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+      map.set(key, { label, quantity: 0 });
+      d.setDate(d.getDate() + 1);
+    }
+  }
+  return map;
+}
+
+function barkShipmentBucketKeyForRow(
+  period: "year" | "month" | "week",
+  d: Date
+): string {
+  if (period === "year") {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function rowProductName(row: {
+  product?: { name?: string | null } | { name?: string | null }[] | null;
+}): string {
+  const p = row.product;
+  if (p && !Array.isArray(p) && typeof p === "object" && "name" in p) {
+    return String((p as { name?: string | null }).name ?? "Без назви");
+  }
+  if (Array.isArray(p) && p[0]?.name != null) {
+    return String(p[0].name);
+  }
+  return "Без назви";
+}
+
+export type BarkShipmentsBreakdown = {
+  byProduct: { productName: string; quantity: number }[];
+  timeSeries: { label: string; quantity: number }[];
+  chartCaption: string;
+};
+
+export async function getBarkShipmentsBreakdown(
+  period: "year" | "month" | "week" = "year",
+  year?: number
+): Promise<BarkShipmentsBreakdown> {
+  const empty = (): BarkShipmentsBreakdown => ({
+    byProduct: [],
+    timeSeries: [],
+    chartCaption: "",
+  });
+
+  try {
+    const supabase = await createServerClient();
+    const { startDate, endDate } = getDateRangeForPeriod(period, year);
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
+    const chartCaption =
+      period === "year"
+        ? `Помісячна динаміка за ${startDate.getFullYear()} рік`
+        : period === "month"
+          ? "Відвантаження по днях обраного місяця"
+          : "Відвантаження по днях поточного тижня";
+
+    const { data: products, error: productsError } = await supabase
+      .from("products")
+      .select("id, name, product_type")
+      .or("product_type.eq.finished,product_type.is.null");
+
+    if (productsError) {
+      console.error("getBarkShipmentsBreakdown products:", productsError);
+      return { ...empty(), chartCaption };
+    }
+
+    const barkProductIds = (products ?? [])
+      .filter((p) => p.name && isBarkFinishedProductName(p.name))
+      .map((p) => p.id);
+
+    if (barkProductIds.length === 0) {
+      return { ...empty(), chartCaption };
+    }
+
+    const { data: rows, error: txError } = await supabase
+      .from("inventory_transactions")
+      .select("quantity, created_at, product:products(name)")
+      .eq("transaction_type", "shipment")
+      .in("product_id", barkProductIds)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso);
+
+    if (txError) {
+      console.error("getBarkShipmentsBreakdown transactions:", txError);
+      return { ...empty(), chartCaption };
+    }
+
+    const byProductMap = new Map<string, number>();
+    const timeBuckets = buildBarkShipmentTimeBuckets(
+      period,
+      startDate,
+      endDate
+    );
+
+    for (const row of rows ?? []) {
+      const qty = Math.abs(Number(row.quantity ?? 0));
+      if (qty <= 0) continue;
+
+      const pname = rowProductName(row);
+      byProductMap.set(pname, (byProductMap.get(pname) ?? 0) + qty);
+
+      const d = new Date(row.created_at as string);
+      if (Number.isNaN(d.getTime())) continue;
+      const bKey = barkShipmentBucketKeyForRow(period, d);
+      const bucket = timeBuckets.get(bKey);
+      if (bucket) {
+        bucket.quantity += qty;
+      }
+    }
+
+    const byProduct = Array.from(byProductMap.entries())
+      .map(([productName, quantity]) => ({ productName, quantity }))
+      .sort((a, b) => b.quantity - a.quantity);
+
+    const timeSeries = Array.from(timeBuckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => ({ label: v.label, quantity: v.quantity }));
+
+    return { byProduct, timeSeries, chartCaption };
+  } catch (error) {
+    console.error("getBarkShipmentsBreakdown:", error);
+    return {
+      byProduct: [],
+      timeSeries: [],
+      chartCaption: "",
+    };
+  }
+}
+
 export async function getProductionStats(
   period: "year" | "month" | "week" = "year",
   year?: number
