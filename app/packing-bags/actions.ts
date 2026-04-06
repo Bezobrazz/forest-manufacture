@@ -2,6 +2,7 @@
 
 import { createServerSupabaseClient, getServerUser } from "@/lib/supabase/server-auth";
 import { packingBagPurchaseSchema } from "@/lib/packing-bags/schemas";
+import { checkPackingBagLowStockAndNotify } from "@/lib/packing-bags/stock-alert";
 import { revalidatePath } from "next/cache";
 
 export type PackingBagPurchase = {
@@ -233,6 +234,7 @@ export async function createPackingBagPurchase(payload: SavePayload) {
     return { ok: false, error: txError.message };
   }
 
+  await checkPackingBagLowStockAndNotify({ trigger: "immediate" });
   revalidateBagPages();
   return { ok: true };
 }
@@ -319,6 +321,7 @@ export async function updatePackingBagPurchase(id: number, payload: SavePayload)
     if (txInsertError) return { ok: false, error: txInsertError.message };
   }
 
+  await checkPackingBagLowStockAndNotify({ trigger: "immediate" });
   revalidateBagPages();
   return { ok: true };
 }
@@ -347,6 +350,7 @@ export async function deletePackingBagPurchase(id: number) {
     .eq("user_id", user.id);
 
   if (error) return { ok: false, error: error.message };
+  await checkPackingBagLowStockAndNotify({ trigger: "immediate" });
   revalidateBagPages();
   return { ok: true };
 }

@@ -20,6 +20,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
+import { checkPackingBagLowStockAndNotify } from "@/lib/packing-bags/stock-alert";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
 
@@ -1239,6 +1240,7 @@ ${Object.entries(productsByCategory)
 `;
 
       await sendTelegramMessage(message);
+      await checkPackingBagLowStockAndNotify({ trigger: "immediate" });
 
       // Оновлюємо кеш для сторінки інвентаря та головної сторінки
       revalidatePath("/inventory");

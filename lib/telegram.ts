@@ -6,25 +6,49 @@ interface TelegramConfig {
 }
 
 export async function getTelegramConfig(): Promise<TelegramConfig | null> {
+  const envConfig = {
+    botToken: process.env.TELEGRAM_BOT_TOKEN,
+    chatId: process.env.TELEGRAM_CHAT_ID,
+  };
+
+  if (envConfig.botToken && envConfig.chatId) {
+    return {
+      botToken: envConfig.botToken,
+      chatId: envConfig.chatId,
+    };
+  }
+
+  if (!envConfig.botToken) {
+    console.error("Telegram bot token is missing");
+    return null;
+  }
+
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("settings")
-    .select("telegram_bot_token, telegram_chat_id")
+    .select("telegram_chat_id")
     .single();
 
   if (error || !data) {
-    console.error("Error fetching Telegram config:", error);
+    console.error("Error fetching Telegram chat id:", error);
+    return null;
+  }
+
+  if (!data.telegram_chat_id) {
+    console.error("Telegram chat id is missing");
     return null;
   }
 
   return {
-    botToken: data.telegram_bot_token,
+    botToken: envConfig.botToken,
     chatId: data.telegram_chat_id,
   };
 }
 
-export async function sendTelegramMessage(message: string): Promise<boolean> {
+export async function sendTelegramMessage(
+  message: string
+): Promise<boolean> {
   const config = await getTelegramConfig();
 
   if (!config) {

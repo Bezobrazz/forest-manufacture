@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/packing-bag-low-stock",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
