@@ -3083,6 +3083,44 @@ export async function getSupplierAdvanceTransactions(): Promise<SupplierAdvanceT
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
+/** UTC calendar day YYYY-MM-DD (matches rows stored as …T12:00:00.000Z from the form). */
+function utcCalendarDayFromIso(isoTimestamptz: string): string {
+  const d = new Date(isoTimestamptz);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function endOfUtcCalendarDayIso(ymd: string): string {
+  const day = ymd.trim().slice(0, 10);
+  return new Date(`${day}T23:59:59.999Z`).toISOString();
+}
+
+function supplierDeliveryYmdFromFormOrRow(
+  formDeliveryDate: FormDataEntryValue | null | undefined,
+  rowCreatedAt: string | undefined,
+): string {
+  if (formDeliveryDate !== null && formDeliveryDate !== undefined) {
+    const raw = String(formDeliveryDate).trim();
+    if (raw.length >= 10) return raw.slice(0, 10);
+  }
+  if (rowCreatedAt) return utcCalendarDayFromIso(rowCreatedAt);
+  return utcCalendarDayFromIso(new Date().toISOString());
+}
+
+/** Other deliveries that occur strictly before this one in (calendar day, then id) order. */
+function isChronologicallyPriorSupplierDelivery(
+  other: { id: number; created_at: string },
+  deliveryYmd: string,
+  currentDeliveryId: number,
+): boolean {
+  const otherYmd = utcCalendarDayFromIso(other.created_at);
+  if (otherYmd < deliveryYmd) return true;
+  if (otherYmd > deliveryYmd) return false;
+  return Number(other.id) < Number(currentDeliveryId);
+}
+
 async function syncSupplierAdvanceFromLedger(
   supabase: SupabaseServerClient,
   supplierId: number,
@@ -3252,25 +3290,33 @@ export async function createSupplierDelivery(formData: FormData) {
         ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
         : 0;
     if (purchaseAmount > 0 && data?.id) {
-      const deliveryCreatedAt = (data as { created_at?: string }).created_at ?? new Date().toISOString();
+      const deliveryYmd = supplierDeliveryYmdFromFormOrRow(
+        deliveryDate,
+        (data as { created_at?: string }).created_at,
+      );
+      const advanceCutoffIso = endOfUtcCalendarDayIso(deliveryYmd);
       const { data: advances } = await supabase
         .from("supplier_advance_transactions")
         .select("amount")
         .eq("supplier_id", supplierId)
-        .lte("created_at", deliveryCreatedAt);
+        .lte("created_at", advanceCutoffIso);
       const advancesSum = (advances ?? []).reduce(
         (s, r) => s + Number(r.amount ?? 0),
         0,
       );
-      const { data: prevDeliveries } = await supabase
+      const { data: allDeliveriesForPool } = await supabase
         .from("supplier_deliveries")
-        .select("advance_used")
-        .eq("supplier_id", supplierId)
-        .lt("created_at", deliveryCreatedAt);
-      const advanceUsedSum = (prevDeliveries ?? []).reduce(
-        (s, r) => s + Number(r.advance_used ?? 0),
-        0,
-      );
+        .select("advance_used, created_at, id")
+        .eq("supplier_id", supplierId);
+      const advanceUsedSum = (allDeliveriesForPool ?? [])
+        .filter((d) =>
+          isChronologicallyPriorSupplierDelivery(
+            d,
+            deliveryYmd,
+            data.id as number,
+          ),
+        )
+        .reduce((s, r) => s + Number(r.advance_used ?? 0), 0);
       const availableAdvance = Math.max(
         0,
         Math.round((advancesSum - advanceUsedSum) * 100) / 100,
@@ -3878,15 +3924,20 @@ export async function updateSupplierDelivery(formData: FormData) {
     const oldSupplierIdFromRow = Number(
       (currentDelivery as { supplier_id: number }).supplier_id,
     );
-    const deliveryCreatedAt =
-      (createdAt ? new Date(createdAt) : new Date((currentDelivery as { created_at?: string }).created_at ?? 0)).toISOString();
+    const deliveryYmd =
+      typeof deliveryDateRaw === "string" && deliveryDateRaw.trim().length >= 10
+        ? deliveryDateRaw.trim().slice(0, 10)
+        : utcCalendarDayFromIso(
+            (currentDelivery as { created_at: string }).created_at,
+          );
+    const advanceCutoffIso = endOfUtcCalendarDayIso(deliveryYmd);
 
     if (newAmount > 0) {
       const { data: advances } = await supabase
         .from("supplier_advance_transactions")
         .select("amount")
         .eq("supplier_id", supplierId)
-        .lte("created_at", deliveryCreatedAt);
+        .lte("created_at", advanceCutoffIso);
       const advancesSum = (advances ?? []).reduce(
         (s, r) => s + Number(r.amount ?? 0),
         0,
@@ -3899,8 +3950,7 @@ export async function updateSupplierDelivery(formData: FormData) {
         .filter(
           (d) =>
             d.id !== deliveryId &&
-            (new Date(d.created_at).getTime() < new Date(deliveryCreatedAt).getTime() ||
-              (new Date(d.created_at).getTime() === new Date(deliveryCreatedAt).getTime() && (d.id as number) < deliveryId)),
+            isChronologicallyPriorSupplierDelivery(d, deliveryYmd, deliveryId),
         )
         .reduce((s, r) => s + Number(r.advance_used ?? 0), 0);
       const availableAdvance = Math.max(
