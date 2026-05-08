@@ -645,98 +645,35 @@ export default function StatisticsPage() {
   const barkProductionByFractionData = useMemo(() => {
     if (barkFractionNames.length === 0) return [];
 
-    const buckets: Record<string, Record<string, number | string>> = {};
-    const ensureBucket = (bucketKey: string, label: string, monthIndex: number) => {
-      if (!buckets[bucketKey]) {
-        const initial: Record<string, number | string> = {
-          label,
-          monthIndex,
-        };
-        barkFractionNames.forEach((fractionName) => {
-          initial[fractionName] = 0;
-        });
-        buckets[bucketKey] = initial;
-      }
-    };
-
-    if (productionChartUsesMonthlyBuckets) {
-      if (statsDateRange) {
-        const [startYear, startMonth] = statsDateRange.start
-          .split("-")
-          .map((x) => Number.parseInt(x, 10));
-        const [endYear, endMonth] = statsDateRange.end
-          .split("-")
-          .map((x) => Number.parseInt(x, 10));
-        let cursor = new Date(startYear, startMonth - 1, 1);
-        const endCursor = new Date(endYear, endMonth - 1, 1);
-        let idx = 0;
-        while (cursor <= endCursor) {
-          const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
-          ensureBucket(
-            key,
-            `${getMonthName(cursor.getMonth())} ${cursor.getFullYear()}`,
-            idx
-          );
-          cursor.setMonth(cursor.getMonth() + 1);
-          idx += 1;
-        }
-      } else {
-        for (let month = 0; month < 12; month += 1) {
-          const key = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
-          ensureBucket(key, getMonthName(month), month);
-        }
-      }
-    } else {
-      const startDay = dateToYYYYMMDD(periodStart);
-      const endDay = dateToYYYYMMDD(periodEnd);
-      let cursor = new Date(periodStart);
-      let idx = 0;
-      while (cursor <= periodEnd) {
-        const key = dateToYYYYMMDD(cursor);
-        ensureBucket(
-          key,
-          `${String(cursor.getDate()).padStart(2, "0")}.${String(cursor.getMonth() + 1).padStart(2, "0")}`,
-          idx
-        );
-        cursor.setDate(cursor.getDate() + 1);
-        idx += 1;
-      }
-      if (!statsDateRange && period !== "year" && startDay === endDay) {
-        // no-op, залишаємо 1 точку для коротких періодів
-      }
-    }
-
-    shiftsInPeriod.forEach((shift) => {
-      if (shift.status !== "completed" || !shift.production) return;
-      const shiftDate = new Date(shift.shift_date);
-      const bucketKey = productionChartUsesMonthlyBuckets
-        ? `${shiftDate.getFullYear()}-${String(shiftDate.getMonth() + 1).padStart(2, "0")}`
-        : String(shift.shift_date).slice(0, 10);
-      const bucket = buckets[bucketKey];
-      if (!bucket) return;
-      shift.production.forEach((item) => {
-        const product = barkProductsById.get(item.product_id);
-        if (!product) return;
-        const fractionName = product.name;
-        if (!barkFractionNames.includes(fractionName)) return;
-        bucket[fractionName] = Number(bucket[fractionName] ?? 0) + Number(item.quantity ?? 0);
-      });
+    const sortedShifts = [...shiftsInPeriod].sort((a, b) => {
+      const dateA = String(a.shift_date ?? "");
+      const dateB = String(b.shift_date ?? "");
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      return Number(a.id) - Number(b.id);
     });
 
-    return Object.entries(buckets)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, value]) => value);
-  }, [
-    barkFractionNames,
-    barkProductsById,
-    period,
-    periodEnd,
-    periodStart,
-    productionChartUsesMonthlyBuckets,
-    selectedYear,
-    shiftsInPeriod,
-    statsDateRange,
-  ]);
+    return sortedShifts.map((shift, index) => {
+      const row: Record<string, number | string> = {};
+      const shiftDate = new Date(shift.shift_date);
+      const dateLabel = `${String(shiftDate.getDate()).padStart(2, "0")}.${String(
+        shiftDate.getMonth() + 1
+      ).padStart(2, "0")}`;
+      row.label = `${dateLabel} • зміна ${index + 1}`;
+
+      barkFractionNames.forEach((fractionName) => {
+        row[fractionName] = 0;
+      });
+
+      shift.production?.forEach((item) => {
+        const product = barkProductsById.get(item.product_id);
+        if (!product) return;
+        if (!barkFractionNames.includes(product.name)) return;
+        row[product.name] = Number(row[product.name] ?? 0) + Number(item.quantity ?? 0);
+      });
+
+      return row;
+    });
+  }, [barkFractionNames, barkProductsById, shiftsInPeriod]);
 
   const monthlyProductionData = useMemo(() => {
     if (statsDateRange) {
@@ -2031,7 +1968,7 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Динаміка кори по фракціях</CardTitle>
           <CardDescription>
-            Лінійний графік виробництва кори з фільтрами по кожній фракції
+            Лінійний графік виробництва кори по кожній завершеній зміні
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2089,9 +2026,9 @@ export default function StatisticsPage() {
                     <XAxis
                       dataKey="label"
                       tick={{ fontSize: 12 }}
-                      angle={productionChartUsesMonthlyBuckets ? 0 : -35}
-                      textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
-                      height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                      angle={-35}
+                      textAnchor="end"
+                      height={72}
                       interval={0}
                     />
                     <YAxis
