@@ -32,6 +32,7 @@ import { useEffect, useState } from "react";
 import { isFinishedProductRow } from "@/lib/inventory/inventoryView";
 import type { Inventory, InventoryTransaction, Product } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 function LoadingSkeleton() {
   return (
@@ -295,7 +296,7 @@ export default function InventoryPage() {
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -303,6 +304,7 @@ export default function InventoryPage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <QuickActionsButton />
       </div>
 
       <div className="mb-8">

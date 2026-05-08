@@ -19,6 +19,7 @@ import { CategoryForm } from "@/components/category-form";
 import { DatabaseError } from "@/components/database-error";
 import { Box } from "lucide-react";
 import type { Product, ProductCategory } from "@/lib/types";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Product[]>([]);
@@ -85,7 +86,7 @@ export default function MaterialsPage() {
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -93,6 +94,7 @@ export default function MaterialsPage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <QuickActionsButton />
       </div>
 
       {databaseError ? (

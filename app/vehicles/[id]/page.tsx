@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ArrowLeft, Car } from "lucide-react";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 export default function VehicleEditPage() {
   const params = useParams();
@@ -60,13 +61,16 @@ export default function VehicleEditPage() {
   return (
     <div className="container py-6 max-w-lg space-y-6">
       <div>
-        <Link
-          href="/vehicles"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Назад до транспорту
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            href="/vehicles"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Назад до транспорту
+          </Link>
+          <QuickActionsButton />
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <Car className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-bold">Редагування транспорту</h1>

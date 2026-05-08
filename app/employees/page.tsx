@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { ArrowLeft, User } from "lucide-react";
 import { requireRole } from "@/lib/auth/require-role";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 export default async function EmployeesPage() {
   // Перевірка прав доступу - дозволено для всіх авторизованих користувачів
@@ -20,7 +21,7 @@ export default async function EmployeesPage() {
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -28,6 +29,7 @@ export default async function EmployeesPage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <QuickActionsButton />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

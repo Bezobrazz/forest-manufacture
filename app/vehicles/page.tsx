@@ -17,6 +17,7 @@ import { EditVehicleDialog } from "@/components/edit-vehicle-dialog";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 function LoadingSkeleton() {
   return (
@@ -97,13 +98,16 @@ export default function VehiclesPage() {
     <div className="container py-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex-1">
-          <Link
-            href="/"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Назад</span>
-          </Link>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <Link
+              href="/"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Назад</span>
+            </Link>
+            <QuickActionsButton />
+          </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               <Car className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -122,7 +126,9 @@ export default function VehiclesPage() {
             Список транспортних засобів для поїздок
           </p>
         </div>
-        <AddVehicleDialog onVehicleAdded={loadData} />
+        <div className="flex items-center gap-2">
+          <AddVehicleDialog onVehicleAdded={loadData} />
+        </div>
       </div>
 
       {databaseError ? (

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { NavigationButton } from "@/components/navigation-button";
 import { ShiftDatePicker } from "@/components/shift-date-picker";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 
 import {
@@ -210,7 +211,7 @@ export default async function ShiftsPage({
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -218,6 +219,7 @@ export default async function ShiftsPage({
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <QuickActionsButton />
       </div>
 
       <div className="flex flex-col gap-4 mb-6">

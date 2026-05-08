@@ -82,6 +82,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -1066,7 +1067,7 @@ export default function StatisticsPage() {
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -1074,6 +1075,7 @@ export default function StatisticsPage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <QuickActionsButton />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

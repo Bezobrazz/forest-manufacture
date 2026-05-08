@@ -156,7 +156,12 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
           <LogoutButton />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                data-quick-actions-trigger="true"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
                 <Menu className="h-4 w-4" />
                 <span>Швидкі дії</span>
               </Button>

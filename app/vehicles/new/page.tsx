@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Car } from "lucide-react";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 export default function NewVehiclePage() {
   const router = useRouter();
@@ -23,13 +24,16 @@ export default function NewVehiclePage() {
   return (
     <div className="container py-6 space-y-6">
       <div>
+        <div className="mb-4 flex items-center justify-between gap-4">
         <Link
           href="/vehicles"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Назад до транспорту</span>
         </Link>
+          <QuickActionsButton />
+        </div>
         <div className="flex items-center gap-2">
           <Car className="h-6 w-6" />
           <h1 className="text-2xl font-bold">Додати транспорт</h1>

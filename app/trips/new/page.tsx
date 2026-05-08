@@ -31,6 +31,7 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -268,6 +269,7 @@ export default function NewTripPage() {
     return (
       <div className="container py-6 max-w-3xl">
         <div className="mb-6">
+          <div className="flex items-center justify-between gap-4">
           <Link
             href="/trips"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -275,6 +277,8 @@ export default function NewTripPage() {
             <ArrowLeft className="h-4 w-4" />
             <span>Назад до поїздок</span>
           </Link>
+            <QuickActionsButton />
+          </div>
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-6 w-6 text-muted-foreground" />
             <h1 className="text-2xl font-bold">Нова поїздка</h1>
@@ -351,6 +355,7 @@ export default function NewTripPage() {
   return (
     <div className="container py-6 max-w-3xl">
       <div className="mb-6">
+        <div className="flex items-center justify-between gap-4">
         <Link
           href="/trips"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -358,6 +363,8 @@ export default function NewTripPage() {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад до поїздок</span>
         </Link>
+          <QuickActionsButton />
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <MapPin className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-bold">Нова поїздка</h1>

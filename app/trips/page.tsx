@@ -73,6 +73,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
 import { dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
 type PeriodFilter = "year" | "month" | "week";
@@ -334,13 +335,16 @@ export default function TripsPage() {
     <div className="container py-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex-1">
-          <Link
-            href="/"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Назад</span>
-          </Link>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <Link
+              href="/"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Назад</span>
+            </Link>
+            <QuickActionsButton />
+          </div>
           <div className="flex items-center gap-2">
             <MapPin className="h-6 w-6" />
             <h1 className="text-2xl font-bold">Поїздки</h1>
@@ -349,12 +353,14 @@ export default function TripsPage() {
             Список поїздок та прибутковість
           </p>
         </div>
-        <Button asChild>
-          <Link href="/trips/new" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Нова поїздка
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/trips/new" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Нова поїздка
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

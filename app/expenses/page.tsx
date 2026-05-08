@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { uk } from "date-fns/locale";
+import { QuickActionsButton } from "@/components/quick-actions-button";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
@@ -928,8 +929,8 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-wrap items-center justify-between mb-8">
-        <div>
+      <div className="flex flex-wrap items-start justify-between mb-8 gap-4">
+        <div className="w-full flex items-center justify-between">
           <Link
             href="/"
             className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-2"
@@ -937,6 +938,9 @@ export default function ExpensesPage() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Назад
           </Link>
+          <QuickActionsButton />
+        </div>
+        <div>
           <h1 className="text-3xl font-bold">Облік витрат</h1>
           <p className="text-muted-foreground mb-2">
             Управління витратами на виробництві
