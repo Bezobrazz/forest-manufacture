@@ -10,6 +10,7 @@ import { AddEmployeeToShift } from "@/components/add-employee-to-shift";
 import { CompleteShiftButton } from "@/components/complete-shift-button";
 import { DeleteShiftButton } from "@/components/delete-shift-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -17,15 +18,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/utils";
 import {
   ArrowLeft,
+  Box,
   Calendar,
+  Car,
+  CheckSquare,
   Clock,
-  User,
-  Package,
   DollarSign,
+  MapPin,
+  Menu,
+  PieChart,
+  Plus,
+  ShoppingCart,
+  Truck,
+  User,
+  Users,
+  Package,
+  Boxes,
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
@@ -136,7 +154,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
 
   return (
     <div className="container py-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <Link
           href="/"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -144,6 +162,94 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           <ArrowLeft className="h-4 w-4" />
           <span>Назад</span>
         </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Menu className="h-4 w-4" />
+              <span>Швидкі дії</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <Link href="/shifts/new" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Plus className="h-4 w-4 mr-2" />
+                <span>Створити нову зміну</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/employees" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Users className="h-4 w-4 mr-2" />
+                <span>Керувати працівниками</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/products" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Package className="h-4 w-4 mr-2" />
+                <span>Керувати продукцією</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/materials" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Box className="h-4 w-4 mr-2" />
+                <span>Керувати матеріалами</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/inventory" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Boxes className="h-4 w-4 mr-2" />
+                <span>Управління складом</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/tasks" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <CheckSquare className="h-4 w-4 mr-2" />
+                <span>Задачі</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/statistics" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <PieChart className="h-4 w-4 mr-2" />
+                <span>Статистика виробництва</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/expenses" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <DollarSign className="h-4 w-4 mr-2" />
+                <span>Облік витрат</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/suppliers" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Truck className="h-4 w-4 mr-2" />
+                <span>Постачальники</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/vehicles" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <Car className="h-4 w-4 mr-2" />
+                <span>Транспорт</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/trips" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <MapPin className="h-4 w-4 mr-2" />
+                <span>Поїздки</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/transactions/suppliers" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                <span>Закупка</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/user" className="w-full">
+              <DropdownMenuItem className="cursor-pointer">
+                <User className="h-4 w-4 mr-2" />
+                <span>Мій профіль</span>
+              </DropdownMenuItem>
+            </Link>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex flex-col gap-6">
