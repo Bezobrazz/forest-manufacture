@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getShifts } from "@/app/actions";
+import { getExpenses, getShifts } from "@/app/actions";
 import {
   Card,
   CardContent,
@@ -44,6 +44,7 @@ export default async function ShiftsPage({
   }>;
 }) {
   const shifts = await getShifts();
+  const expenses = await getExpenses();
 
   const params = await searchParams;
 
@@ -62,6 +63,28 @@ export default async function ShiftsPage({
   const detailedShifts = shifts.filter(
     (shift) => shift.status === "completed",
   );
+  const completedShiftIds = new Set(detailedShifts.map((shift) => shift.id));
+
+  const hourlyExpensesByShiftId = new Map<number, number>();
+
+  expenses.forEach((expense) => {
+    const isHourlyWageCategory =
+      expense?.category?.name === "З.П. Погодинна";
+    if (!isHourlyWageCategory) return;
+
+    const description = expense.description ?? "";
+    const shiftMatch = description.match(/Зміна\s*#(\d+)/i);
+    if (!shiftMatch) return;
+
+    const shiftId = Number.parseInt(shiftMatch[1], 10);
+    if (!completedShiftIds.has(shiftId)) return;
+
+    const currentAmount = hourlyExpensesByShiftId.get(shiftId) ?? 0;
+    hourlyExpensesByShiftId.set(
+      shiftId,
+      currentAmount + Number(expense.amount ?? 0),
+    );
+  });
 
   // Функція для отримання дня тижня з дати
   const getDayOfWeek = (dateString: string) => {
@@ -138,6 +161,8 @@ export default async function ShiftsPage({
         }
       });
     }
+
+    shiftWages += hourlyExpensesByShiftId.get(shift.id) ?? 0;
 
     weeklyTotalWages += shiftWages;
 
@@ -255,10 +280,10 @@ export default async function ShiftsPage({
           </CardTitle>
           <CardDescription>
             {useDateRange
-              ? `Підсумок заробітної плати за завершеними змінами з ${formatDate(
+              ? `Підсумок заробітної плати (продукція + погодинні витрати) за завершеними змінами з ${formatDate(
                   startDate!.toISOString(),
                 )} по ${formatDate(endDate!.toISOString())}`
-              : `Підсумок заробітної плати за завершеними змінами тижня ${currentWeek}`}
+              : `Підсумок заробітної плати (продукція + погодинні витрати) за завершеними змінами тижня ${currentWeek}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -406,6 +431,8 @@ export default async function ShiftsPage({
                             }
                           });
                         }
+
+                        shiftWages += hourlyExpensesByShiftId.get(shift.id) ?? 0;
 
                         if (shiftWages > 0) {
                           return (
