@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getShifts, getShiftDetails } from "@/app/actions";
+import { getShifts } from "@/app/actions";
 import {
   Card,
   CardContent,
@@ -59,14 +59,9 @@ export default async function ShiftsPage({
   const startDate = params.startDate ? new Date(params.startDate) : null;
   const endDate = params.endDate ? new Date(params.endDate) : null;
 
-  const completedShifts = shifts.filter(
+  const detailedShifts = shifts.filter(
     (shift) => shift.status === "completed",
   );
-  const shiftsWithDetails = await Promise.all(
-    completedShifts.map(async (shift) => await getShiftDetails(shift.id)),
-  );
-
-  const detailedShifts = shiftsWithDetails.filter(Boolean);
 
   // Функція для отримання дня тижня з дати
   const getDayOfWeek = (dateString: string) => {
