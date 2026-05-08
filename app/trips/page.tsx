@@ -74,6 +74,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
 import { dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
 type PeriodFilter = "year" | "month" | "week";
@@ -336,13 +337,7 @@ export default function TripsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex-1">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <Link
-              href="/"
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Назад</span>
-            </Link>
+            <PreviousPageButton fallbackHref="/" />
             <QuickActionsButton />
           </div>
           <div className="flex items-center gap-2">

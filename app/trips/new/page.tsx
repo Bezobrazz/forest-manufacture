@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -270,13 +271,7 @@ export default function NewTripPage() {
       <div className="container py-6 max-w-3xl">
         <div className="mb-6">
           <div className="flex items-center justify-between gap-4">
-          <Link
-            href="/trips"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Назад до поїздок</span>
-          </Link>
+            <PreviousPageButton fallbackHref="/trips" />
             <QuickActionsButton />
           </div>
           <div className="flex items-center gap-2 mt-2">
@@ -356,13 +351,7 @@ export default function NewTripPage() {
     <div className="container py-6 max-w-3xl">
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4">
-        <Link
-          href="/trips"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад до поїздок</span>
-        </Link>
+          <PreviousPageButton fallbackHref="/trips" />
           <QuickActionsButton />
         </div>
         <div className="flex items-center gap-2 mt-2">

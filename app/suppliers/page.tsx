@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import type { Supplier } from "@/lib/types";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 function LoadingSkeleton() {
   return (
@@ -198,13 +199,7 @@ export default function SuppliersPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex-1">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <Link
-              href="/"
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Назад</span>
-            </Link>
+            <PreviousPageButton fallbackHref="/" />
             <QuickActionsButton />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">

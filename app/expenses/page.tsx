@@ -57,6 +57,7 @@ import {
 import { cn } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
@@ -931,13 +932,7 @@ export default function ExpensesPage() {
 
       <div className="flex flex-wrap items-start justify-between mb-8 gap-4">
         <div className="w-full flex items-center justify-between">
-          <Link
-            href="/"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Назад
-          </Link>
+          <PreviousPageButton fallbackHref="/" />
           <QuickActionsButton />
         </div>
         <div>

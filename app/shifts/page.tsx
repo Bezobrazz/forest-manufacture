@@ -19,6 +19,7 @@ import {
 import { NavigationButton } from "@/components/navigation-button";
 import { ShiftDatePicker } from "@/components/shift-date-picker";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 
 import {
@@ -212,13 +213,7 @@ export default async function ShiftsPage({
   return (
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад</span>
-        </Link>
+        <PreviousPageButton fallbackHref="/" />
         <QuickActionsButton />
       </div>
 

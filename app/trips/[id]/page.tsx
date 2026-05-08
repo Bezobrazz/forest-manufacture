@@ -36,6 +36,7 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/format";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -256,13 +257,7 @@ export default function TripDetailPage() {
     return (
       <div className="container py-6 max-w-3xl">
         <div className="mb-6">
-          <Link
-            href="/trips"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Назад до поїздок</span>
-          </Link>
+          <PreviousPageButton fallbackHref="/trips" />
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-6 w-6 text-muted-foreground" />
             <Skeleton className="h-8 w-56" />
@@ -339,13 +334,7 @@ export default function TripDetailPage() {
   if (!trip) {
     return (
       <div className="container py-6 space-y-4">
-        <Link
-          href="/trips"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Назад до поїздок
-        </Link>
+        <PreviousPageButton fallbackHref="/trips" />
         <p className="text-muted-foreground">Поїздку не знайдено.</p>
       </div>
     );
@@ -354,13 +343,7 @@ export default function TripDetailPage() {
   return (
     <div className="container py-6 max-w-3xl space-y-6">
       <div>
-        <Link
-          href="/trips"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад до поїздок</span>
-        </Link>
+        <PreviousPageButton fallbackHref="/trips" />
         <div className="flex items-center gap-2 mt-2">
           <MapPin className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-bold">

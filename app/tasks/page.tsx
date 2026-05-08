@@ -16,6 +16,7 @@ import { EditTaskForm } from "@/components/edit-task-form";
 import { DeleteTaskButton } from "@/components/delete-task-button";
 import { CompleteTaskButton } from "@/components/complete-task-button";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 type TaskFilter = "all" | "active" | "completed";
 
@@ -120,13 +121,7 @@ export default function TasksPage() {
   return (
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад</span>
-        </Link>
+        <PreviousPageButton fallbackHref="/" />
         <QuickActionsButton />
       </div>
 

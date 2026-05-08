@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Car } from "lucide-react";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { PreviousPageButton } from "@/components/previous-page-button";
 
 export default function NewVehiclePage() {
   const router = useRouter();
@@ -25,13 +26,7 @@ export default function NewVehiclePage() {
     <div className="container py-6 space-y-6">
       <div>
         <div className="mb-4 flex items-center justify-between gap-4">
-        <Link
-          href="/vehicles"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад до транспорту</span>
-        </Link>
+          <PreviousPageButton fallbackHref="/vehicles" />
           <QuickActionsButton />
         </div>
         <div className="flex items-center gap-2">
