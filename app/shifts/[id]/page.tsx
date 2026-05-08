@@ -156,7 +156,6 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
 
   // Підрахунок заробітної плати на одного працівника (якщо є працівники)
   const employeeCount = shift.employees.length;
-  const wagePerEmployee = employeeCount > 0 ? totalWages / employeeCount : 0;
   const hourlyWageExpensesTotal = hourlyWageExpenses.reduce(
     (sum, item) => sum + item.amount,
     0
@@ -332,22 +331,22 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
         </Card>
 
         {/* Розділ для заробітної плати за продукцію */}
-        {shift.production && shift.production.length > 0 && (
+        {(shift.production && shift.production.length > 0) ||
+        hourlyWageExpensesTotal > 0 ? (
           <Card className="mb-4">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
-                <span>Заробітна плата за продукцію</span>
+                <span>Заробітна плата за зміну</span>
               </CardTitle>
               <CardDescription>
-                Розрахунок заробітної плати на основі винагороди за продукцію
+                Розрахунок виплат за продукцію та погодинні витрати
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {wagesByProduct.length === 0 ? (
+              {wagesByProduct.length === 0 && hourlyWageExpensesTotal === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  Немає даних про винагороду за продукцію. Встановіть винагороду
-                  для продуктів у розділі "Продукція".
+                  Немає даних про нарахування за зміну.
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -416,36 +415,38 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                     </div>
                   )}
 
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium mb-2">
-                      Деталі по продукції
-                    </h4>
-                    <div className="space-y-2">
-                      {wagesByProduct.map((item) => (
-                        <div
-                          key={item.productId}
-                          className="flex items-center justify-between py-2 border-b last:border-0"
-                        >
-                          <div>
+                  {wagesByProduct.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">
+                        Деталі по продукції
+                      </h4>
+                      <div className="space-y-2">
+                        {wagesByProduct.map((item) => (
+                          <div
+                            key={item.productId}
+                            className="flex items-center justify-between py-2 border-b last:border-0"
+                          >
+                            <div>
+                              <div className="font-medium">
+                                {item.productName}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {item.quantity} шт × {item.reward.toFixed(2)} грн
+                              </div>
+                            </div>
                             <div className="font-medium">
-                              {item.productName}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.quantity} шт × {item.reward.toFixed(2)} грн
+                              {item.total.toFixed(2)} грн
                             </div>
                           </div>
-                          <div className="font-medium">
-                            {item.total.toFixed(2)} грн
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
         {shift.status === "completed" && shift.production.length > 0 && (
           <Card className="mb-4">
