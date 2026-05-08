@@ -652,6 +652,14 @@ export default function StatisticsPage() {
       return Number(a.id) - Number(b.id);
     });
 
+    const getWeekKey = (date: Date) => {
+      const startOfWeek = new Date(date);
+      const daysFromSaturday = (date.getDay() + 1) % 7;
+      startOfWeek.setDate(date.getDate() - daysFromSaturday);
+      startOfWeek.setHours(0, 0, 0, 0);
+      return dateToYYYYMMDD(startOfWeek);
+    };
+
     return sortedShifts.map((shift, index) => {
       const row: Record<string, number | string> = {};
       const shiftDate = new Date(shift.shift_date);
@@ -659,6 +667,7 @@ export default function StatisticsPage() {
         shiftDate.getMonth() + 1
       ).padStart(2, "0")}`;
       row.label = `${dateLabel} • зміна ${index + 1}`;
+      row.weekKey = getWeekKey(shiftDate);
 
       barkFractionNames.forEach((fractionName) => {
         row[fractionName] = 0;
@@ -674,6 +683,38 @@ export default function StatisticsPage() {
       return row;
     });
   }, [barkFractionNames, barkProductsById, shiftsInPeriod]);
+
+  const barkProductionWithWeeklyAverages = useMemo(() => {
+    const weeklySums: Record<string, Record<string, number>> = {};
+    const weeklyCounts: Record<string, number> = {};
+
+    barkProductionByFractionData.forEach((row) => {
+      const weekKey = String(row.weekKey ?? "");
+      if (!weekKey) return;
+      if (!weeklySums[weekKey]) {
+        weeklySums[weekKey] = {};
+        barkFractionNames.forEach((fractionName) => {
+          weeklySums[weekKey][fractionName] = 0;
+        });
+        weeklyCounts[weekKey] = 0;
+      }
+      weeklyCounts[weekKey] += 1;
+      barkFractionNames.forEach((fractionName) => {
+        weeklySums[weekKey][fractionName] += Number(row[fractionName] ?? 0);
+      });
+    });
+
+    return barkProductionByFractionData.map((row) => {
+      const weekKey = String(row.weekKey ?? "");
+      const count = weeklyCounts[weekKey] || 0;
+      const nextRow: Record<string, number | string> = { ...row };
+      barkFractionNames.forEach((fractionName) => {
+        const avg = count > 0 ? weeklySums[weekKey][fractionName] / count : 0;
+        nextRow[`${fractionName}__weeklyAvg`] = avg;
+      });
+      return nextRow;
+    });
+  }, [barkFractionNames, barkProductionByFractionData]);
 
   const monthlyProductionData = useMemo(() => {
     if (statsDateRange) {
@@ -1968,7 +2009,7 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Динаміка кори по фракціях</CardTitle>
           <CardDescription>
-            Лінійний графік виробництва кори по кожній завершеній зміні
+            Лінійний графік по змінах та середнє значення по тижнях
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1978,6 +2019,25 @@ export default function StatisticsPage() {
             </div>
           ) : (
             <>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedBarkFractions.length === barkFractionNames.length) {
+                      setSelectedBarkFractions([]);
+                      return;
+                    }
+                    setSelectedBarkFractions(barkFractionNames);
+                  }}
+                >
+                  {selectedBarkFractions.length === barkFractionNames.length
+                    ? "Прибрати всі"
+                    : "Вибрати всі"}
+                </Button>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {barkFractionNames.map((fractionName) => {
                   const checked = selectedBarkFractions.includes(fractionName);
@@ -1995,8 +2055,7 @@ export default function StatisticsPage() {
                               if (current.includes(fractionName)) return current;
                               return [...current, fractionName];
                             }
-                            const next = current.filter((name) => name !== fractionName);
-                            return next.length > 0 ? next : current;
+                            return current.filter((name) => name !== fractionName);
                           });
                         }}
                       />
@@ -2015,13 +2074,17 @@ export default function StatisticsPage() {
                 })}
               </div>
 
-              {barkProductionByFractionData.length === 0 ? (
+              {barkProductionWithWeeklyAverages.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   Немає даних по фракціях кори у вибраному періоді
                 </div>
+              ) : selectedBarkFractions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Оберіть хоча б одну фракцію для відображення графіка
+                </div>
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={barkProductionByFractionData}>
+                  <LineChart data={barkProductionWithWeeklyAverages}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
                       dataKey="label"
@@ -2048,6 +2111,20 @@ export default function StatisticsPage() {
                         borderRadius: "6px",
                       }}
                     />
+                    {selectedBarkFractions.map((fractionName) => (
+                      <Line
+                        key={`${fractionName}-weekly-average`}
+                        type="monotone"
+                        dataKey={`${fractionName}__weeklyAvg`}
+                        name={`${fractionName} (сер. за тиждень)`}
+                        stroke={barkFractionColors[fractionName] || "hsl(var(--primary))"}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 4"
+                        strokeOpacity={0.7}
+                        dot={false}
+                        activeDot={false}
+                      />
+                    ))}
                     {selectedBarkFractions.map((fractionName) => (
                       <Line
                         key={fractionName}
