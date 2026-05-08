@@ -10,6 +10,10 @@ import { Clock } from "lucide-react";
 
 const DEFAULT_RATE = 75;
 const DEFAULT_DESCRIPTION = (shiftId: number) => `Зміна #${shiftId}, погодинна`;
+const DEFAULT_MANUAL_COMMENT = "Вантажні роботи";
+
+const buildShiftExpenseDescription = (shiftId: number, comment: string) =>
+  `Зміна #${shiftId}, ${comment}`;
 
 interface HourlyWageFormProps {
   shiftId: number;
@@ -49,7 +53,10 @@ export function HourlyWageForm({ shiftId, shiftOpenedAt, employeeCount }: Hourly
     const result = await createHourlyWageExpense(
       Math.round(amount * 100) / 100,
       expenseDate,
-      description.trim() || DEFAULT_DESCRIPTION(shiftId)
+      buildShiftExpenseDescription(
+        shiftId,
+        description.trim() || "погодинна"
+      )
     );
     setIsSubmitting(false);
     if (result.ok) {
@@ -74,7 +81,10 @@ export function HourlyWageForm({ shiftId, shiftOpenedAt, employeeCount }: Hourly
     const result = await createHourlyWageExpense(
       Math.round(amountValue * 100) / 100,
       expenseDate,
-      manualComment.trim() || "Вантажні роботи"
+      buildShiftExpenseDescription(
+        shiftId,
+        manualComment.trim() || DEFAULT_MANUAL_COMMENT
+      )
     );
     setIsManualSubmitting(false);
 

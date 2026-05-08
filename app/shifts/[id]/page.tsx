@@ -5,7 +5,12 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEmployees, getProducts, getShiftDetails } from "@/app/actions";
+import {
+  getEmployees,
+  getHourlyWageExpensesForShift,
+  getProducts,
+  getShiftDetails,
+} from "@/app/actions";
 import { AddEmployeeToShift } from "@/components/add-employee-to-shift";
 import { CompleteShiftButton } from "@/components/complete-shift-button";
 import { DeleteShiftButton } from "@/components/delete-shift-button";
@@ -91,6 +96,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
 
   const employees = await getEmployees();
   const products = await getProducts();
+  const hourlyWageExpenses = await getHourlyWageExpensesForShift(shift.id);
 
   // Отримуємо ID працівників, які вже додані до зміни
   const existingEmployeeIds = shift.employees.map((e) => e.employee_id);
@@ -151,6 +157,13 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   // Підрахунок заробітної плати на одного працівника (якщо є працівники)
   const employeeCount = shift.employees.length;
   const wagePerEmployee = employeeCount > 0 ? totalWages / employeeCount : 0;
+  const hourlyWageExpensesTotal = hourlyWageExpenses.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+  const totalCompensation = totalWages + hourlyWageExpensesTotal;
+  const totalCompensationPerEmployee =
+    employeeCount > 0 ? totalCompensation / employeeCount : 0;
 
   return (
     <div className="container py-6">
@@ -341,24 +354,67 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-muted p-4 rounded-lg">
                       <div className="text-sm text-muted-foreground mb-1">
-                        Загальна сума винагороди
+                        Винагорода за продукцію
                       </div>
                       <div className="text-2xl font-bold">
                         {totalWages.toFixed(2)} грн
                       </div>
                     </div>
 
+                    <div className="bg-muted p-4 rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">
+                        Додаткові витрати (З.П. Погодинна)
+                      </div>
+                      <div className="text-2xl font-bold">
+                        {hourlyWageExpensesTotal.toFixed(2)} грн
+                      </div>
+                    </div>
+
                     {employeeCount > 0 && (
                       <div className="bg-muted p-4 rounded-lg">
                         <div className="text-sm text-muted-foreground mb-1">
-                          На одного працівника ({employeeCount} осіб)
+                          Разом до виплати
                         </div>
                         <div className="text-2xl font-bold">
-                          {wagePerEmployee.toFixed(2)} грн
+                          {totalCompensation.toFixed(2)} грн
+                        </div>
+                      </div>
+                    )}
+
+                    {employeeCount > 0 && (
+                      <div className="bg-muted p-4 rounded-lg">
+                        <div className="text-sm text-muted-foreground mb-1">
+                          На одного працівника ({employeeCount} осіб), разом
+                        </div>
+                        <div className="text-2xl font-bold">
+                          {totalCompensationPerEmployee.toFixed(2)} грн
                         </div>
                       </div>
                     )}
                   </div>
+
+                  {hourlyWageExpenses.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">
+                        Додаткові витрати (З.П. Погодинна)
+                      </h4>
+                      <div className="space-y-2">
+                        {hourlyWageExpenses.map((expense) => (
+                          <div
+                            key={expense.id}
+                            className="flex items-center justify-between py-2 border-b last:border-0"
+                          >
+                            <div className="text-sm text-muted-foreground">
+                              {expense.description || "Без коментаря"}
+                            </div>
+                            <div className="font-medium">
+                              {expense.amount.toFixed(2)} грн
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4">
                     <h4 className="text-sm font-medium mb-2">

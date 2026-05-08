@@ -2562,6 +2562,45 @@ export async function createHourlyWageExpense(
   }
 }
 
+export async function getHourlyWageExpensesForShift(
+  shiftId: number
+): Promise<Array<{ id: number; amount: number; description: string; date: string }>> {
+  try {
+    const supabase = await createServerClient();
+    const categories = await getExpenseCategories();
+    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
+      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
+    );
+    const category = hourlyMatches.length > 0
+      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
+      : null;
+
+    if (!category) return [];
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("id, amount, description, date")
+      .eq("category_id", category.id)
+      .ilike("description", `%Зміна #${shiftId}%`)
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching hourly wage expenses for shift:", error);
+      return [];
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      amount: Number(row.amount ?? 0),
+      description: row.description ?? "",
+      date: row.date,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch hourly wage expenses for shift:", error);
+    return [];
+  }
+}
+
 export type RawRepaymentItem = {
   id: number;
   date: string;
