@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -147,6 +148,9 @@ export default function StatisticsPage() {
     from?: Date;
     to?: Date;
   }>({});
+  const [selectedBarkFractions, setSelectedBarkFractions] = useState<string[]>(
+    []
+  );
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
@@ -600,6 +604,139 @@ export default function StatisticsPage() {
     }
     return Array.from(years).sort((a, b) => b - a);
   }, [shifts]);
+
+  const barkProductsById = useMemo(() => {
+    const map = new Map<number, Product>();
+    products.forEach((product) => {
+      map.set(product.id, product);
+    });
+    return map;
+  }, [products]);
+
+  const barkFractionProducts = useMemo(
+    () =>
+      products.filter((product) =>
+        product.name.toLocaleLowerCase("uk-UA").includes("кора")
+      ),
+    [products]
+  );
+
+  const barkFractionNames = useMemo(
+    () => barkFractionProducts.map((product) => product.name),
+    [barkFractionProducts]
+  );
+
+  useEffect(() => {
+    setSelectedBarkFractions((current) => {
+      const next = current.filter((name) => barkFractionNames.includes(name));
+      if (next.length > 0) return next;
+      return barkFractionNames;
+    });
+  }, [barkFractionNames]);
+
+  const barkFractionColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    barkFractionNames.forEach((name, index) => {
+      colors[name] = neutralPalette[index % neutralPalette.length];
+    });
+    return colors;
+  }, [barkFractionNames, neutralPalette]);
+
+  const barkProductionByFractionData = useMemo(() => {
+    if (barkFractionNames.length === 0) return [];
+
+    const buckets: Record<string, Record<string, number | string>> = {};
+    const ensureBucket = (bucketKey: string, label: string, monthIndex: number) => {
+      if (!buckets[bucketKey]) {
+        const initial: Record<string, number | string> = {
+          label,
+          monthIndex,
+        };
+        barkFractionNames.forEach((fractionName) => {
+          initial[fractionName] = 0;
+        });
+        buckets[bucketKey] = initial;
+      }
+    };
+
+    if (productionChartUsesMonthlyBuckets) {
+      if (statsDateRange) {
+        const [startYear, startMonth] = statsDateRange.start
+          .split("-")
+          .map((x) => Number.parseInt(x, 10));
+        const [endYear, endMonth] = statsDateRange.end
+          .split("-")
+          .map((x) => Number.parseInt(x, 10));
+        let cursor = new Date(startYear, startMonth - 1, 1);
+        const endCursor = new Date(endYear, endMonth - 1, 1);
+        let idx = 0;
+        while (cursor <= endCursor) {
+          const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+          ensureBucket(
+            key,
+            `${getMonthName(cursor.getMonth())} ${cursor.getFullYear()}`,
+            idx
+          );
+          cursor.setMonth(cursor.getMonth() + 1);
+          idx += 1;
+        }
+      } else {
+        for (let month = 0; month < 12; month += 1) {
+          const key = `${selectedYear}-${String(month + 1).padStart(2, "0")}`;
+          ensureBucket(key, getMonthName(month), month);
+        }
+      }
+    } else {
+      const startDay = dateToYYYYMMDD(periodStart);
+      const endDay = dateToYYYYMMDD(periodEnd);
+      let cursor = new Date(periodStart);
+      let idx = 0;
+      while (cursor <= periodEnd) {
+        const key = dateToYYYYMMDD(cursor);
+        ensureBucket(
+          key,
+          `${String(cursor.getDate()).padStart(2, "0")}.${String(cursor.getMonth() + 1).padStart(2, "0")}`,
+          idx
+        );
+        cursor.setDate(cursor.getDate() + 1);
+        idx += 1;
+      }
+      if (!statsDateRange && period !== "year" && startDay === endDay) {
+        // no-op, залишаємо 1 точку для коротких періодів
+      }
+    }
+
+    shiftsInPeriod.forEach((shift) => {
+      if (shift.status !== "completed" || !shift.production) return;
+      const shiftDate = new Date(shift.shift_date);
+      const bucketKey = productionChartUsesMonthlyBuckets
+        ? `${shiftDate.getFullYear()}-${String(shiftDate.getMonth() + 1).padStart(2, "0")}`
+        : String(shift.shift_date).slice(0, 10);
+      const bucket = buckets[bucketKey];
+      if (!bucket) return;
+      shift.production.forEach((item) => {
+        const product = barkProductsById.get(item.product_id);
+        if (!product) return;
+        const fractionName = product.name;
+        if (!barkFractionNames.includes(fractionName)) return;
+        bucket[fractionName] = Number(bucket[fractionName] ?? 0) + Number(item.quantity ?? 0);
+      });
+    });
+
+    return Object.entries(buckets)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value);
+  }, [
+    barkFractionNames,
+    barkProductsById,
+    period,
+    periodEnd,
+    periodStart,
+    productionChartUsesMonthlyBuckets,
+    selectedYear,
+    shiftsInPeriod,
+    statsDateRange,
+  ]);
 
   const monthlyProductionData = useMemo(() => {
     if (statsDateRange) {
@@ -1886,6 +2023,110 @@ export default function StatisticsPage() {
                 })
                 .filter(Boolean)}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Динаміка кори по фракціях</CardTitle>
+          <CardDescription>
+            Лінійний графік виробництва кори з фільтрами по кожній фракції
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {barkFractionNames.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Немає фракцій кори для відображення
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {barkFractionNames.map((fractionName) => {
+                  const checked = selectedBarkFractions.includes(fractionName);
+                  return (
+                    <label
+                      key={fractionName}
+                      className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/40"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          const isChecked = value === true;
+                          setSelectedBarkFractions((current) => {
+                            if (isChecked) {
+                              if (current.includes(fractionName)) return current;
+                              return [...current, fractionName];
+                            }
+                            const next = current.filter((name) => name !== fractionName);
+                            return next.length > 0 ? next : current;
+                          });
+                        }}
+                      />
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{
+                          backgroundColor:
+                            barkFractionColors[fractionName] || "hsl(var(--primary))",
+                        }}
+                      />
+                      <span className="text-sm font-medium truncate" title={fractionName}>
+                        {fractionName}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {barkProductionByFractionData.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Немає даних по фракціях кори у вибраному періоді
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={barkProductionByFractionData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 12 }}
+                      angle={productionChartUsesMonthlyBuckets ? 0 : -35}
+                      textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
+                      height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                      interval={0}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12 }}
+                      label={{
+                        value: "Кількість (шт)",
+                        angle: -90,
+                        position: "insideLeft",
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(value: number) => formatNumberWithUnit(value, "шт")}
+                      labelStyle={{ color: "hsl(var(--foreground))" }}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--background))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "6px",
+                      }}
+                    />
+                    {selectedBarkFractions.map((fractionName) => (
+                      <Line
+                        key={fractionName}
+                        type="monotone"
+                        dataKey={fractionName}
+                        name={fractionName}
+                        stroke={barkFractionColors[fractionName] || "hsl(var(--primary))"}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        activeDot={{ r: 5 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
