@@ -436,33 +436,34 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center justify-between">
               <span>Облік продукції</span>
-              {totalProduction > 0 && (
-                <Badge variant="outline" className="ml-2 text-base font-normal">
-                  Всього: {totalProduction} шт
-                </Badge>
-              )}
+              <Badge variant="outline" className="ml-2 text-base font-normal">
+                Всього: {totalProduction} шт
+              </Badge>
             </CardTitle>
             <CardDescription>
               Кількість виробленої продукції на цій зміні
             </CardDescription>
-            {totalProduction > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {Object.entries(productionByCategory).map(
-                  ([category, total]) => (
-                    <Badge
-                      key={category}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      <Package className="h-3 w-3" />
-                      <span>
-                        {category}: {total} шт
-                      </span>
-                    </Badge>
-                  )
-                )}
-              </div>
-            )}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(productionByCategory).length === 0 ? (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  <span>Категорії відсутні</span>
+                </Badge>
+              ) : (
+                Object.entries(productionByCategory).map(([category, total]) => (
+                  <Badge
+                    key={category}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    <Package className="h-3 w-3" />
+                    <span>
+                      {category}: {total} шт
+                    </span>
+                  </Badge>
+                ))
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {shift.production.length === 0 ? (

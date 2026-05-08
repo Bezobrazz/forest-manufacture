@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import type { Product, Production, Shift } from "@/lib/types";
 import { updateProduction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
@@ -24,9 +34,8 @@ export function ProductionItemsForm({
   onProductionUpdated,
 }: ProductionItemsFormProps) {
   const [quantities, setQuantities] = useState<Record<number, string>>({});
-  const [pendingProducts, setPendingProducts] = useState<Set<number>>(
-    new Set(),
-  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [localProduction, setLocalProduction] =
     useState<Production[]>(existingProduction);
   console.log("localProduction", localProduction);
@@ -44,75 +53,114 @@ export function ProductionItemsForm({
     setLocalProduction(existingProduction);
   }, [existingProduction]);
 
-  async function handleUpdateQuantity(productId: number) {
-    if (pendingProducts.has(productId)) return;
+  async function submitEntries(entries: Array<[string, string]>) {
+    setIsSubmitting(true);
 
-    const quantity = quantities[productId];
-    if (!quantity) return;
-
-    const numericQuantity = Number.parseFloat(quantity);
-    if (isNaN(numericQuantity)) {
-      toast.error("Помилка", {
-        description: "Введіть коректне числове значення",
-      });
-      return;
-    }
-
-    setPendingProducts((prev) => new Set(prev).add(productId));
-
-    const formData = new FormData();
-    formData.append("shift_id", shift.id.toString());
-    formData.append("product_id", productId.toString());
-    formData.append("quantity", quantity);
+    let successCount = 0;
+    let errorCount = 0;
 
     try {
-      const result = await updateProduction(formData);
-      console.log("Результат оновлення кількості продукції:", result);
+      for (const [productIdString, quantity] of entries) {
+        const formData = new FormData();
+        formData.append("shift_id", shift.id.toString());
+        formData.append("product_id", productIdString);
+        formData.append("quantity", quantity);
 
-      if (result.success && result.data && result.data.length > 0) {
-        const updatedProduction = result.data[0] as Production;
+        const result = await updateProduction(formData);
 
-        setLocalProduction((prev) => {
-          const existingIndex = prev.findIndex(
-            (p) => p.product_id === productId,
-          );
+        if (result.success && result.data && result.data.length > 0) {
+          successCount += 1;
+          const productId = Number.parseInt(productIdString, 10);
+          const updatedProduction = result.data[0] as Production;
 
-          if (existingIndex >= 0) {
-            const updated = [...prev];
-            updated[existingIndex] = updatedProduction;
-            return updated;
-          } else {
+          setLocalProduction((prev) => {
+            const existingIndex = prev.findIndex(
+              (p) => p.product_id === productId,
+            );
+
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = updatedProduction;
+              return updated;
+            }
+
             return [...prev, updatedProduction];
+          });
+
+          if (onProductionUpdated) {
+            onProductionUpdated(updatedProduction);
           }
-        });
-
-        if (onProductionUpdated) {
-          onProductionUpdated(updatedProduction);
+        } else {
+          errorCount += 1;
         }
+      }
 
+      if (errorCount === 0) {
         toast.success("Дані оновлено", {
-          description: "Кількість продукції успішно оновлено",
+          description: `Кількість продукції збережено (${successCount} позицій)`,
         });
-        setTimeout(() => {
-          router.refresh();
-        }, 1000); // Затримка в 1 секунду
       } else {
-        toast.error("Помилка", {
-          description: result.error || "Не вдалося оновити кількість продукції",
+        toast.error("Частину даних не збережено", {
+          description: `Успішно: ${successCount}, з помилкою: ${errorCount}`,
         });
       }
+
+      router.refresh();
     } catch (error) {
       console.error("Error updating production:", error);
       toast.error("Помилка", {
         description: "Сталася помилка при оновленні кількості продукції",
       });
     } finally {
-      setPendingProducts((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(productId);
-        return newSet;
-      });
+      setIsSubmitting(false);
     }
+  }
+
+  async function handleSubmitAll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting || shift.status !== "active") return;
+
+    const filledEntries = Object.entries(quantities).filter(
+      ([, value]) => value.trim() !== "",
+    );
+
+    if (filledEntries.length === 0) {
+      toast.error("Помилка", {
+        description: "Вкажіть хоча б одну кількість продукції",
+      });
+      return;
+    }
+
+    const invalidEntry = filledEntries.find(([, value]) =>
+      Number.isNaN(Number.parseFloat(value)),
+    );
+    if (invalidEntry) {
+      toast.error("Помилка", {
+        description: "Введіть коректні числові значення",
+      });
+      return;
+    }
+
+    const hasEmptyFields = products.some((product) => {
+      const value = quantities[product.id];
+      return !value || value.trim() === "";
+    });
+
+    if (hasEmptyFields) {
+      setConfirmOpen(true);
+      return;
+    }
+
+    await submitEntries(filledEntries);
+  }
+
+  async function handleConfirmSubmit() {
+    const filledEntries = Object.entries(quantities).filter(
+      ([, value]) => value.trim() !== "",
+    );
+
+    setConfirmOpen(false);
+    await submitEntries(filledEntries);
   }
 
   function handleQuantityChange(productId: number, value: string) {
@@ -144,82 +192,106 @@ export function ProductionItemsForm({
   });
 
   return (
-    <div className="space-y-4">
-      {Object.entries(productsByCategory).map(
-        ([categoryName, categoryProducts]) =>
-          categoryProducts.length > 0 && (
-            <Card key={categoryName} className="mb-4">
-              <CardContent className="p-4">
-                <h3 className="font-bold text-lg mb-2">{categoryName}</h3>
-                <div className="grid gap-4">
-                  {categoryProducts
-                    .slice()
-                    .sort((a, b) => {
-                      const isBarkA = a.name.toLowerCase().includes("кора");
-                      const isBarkB = b.name.toLowerCase().includes("кора");
-                      if (isBarkA && isBarkB) {
+    <>
+      <form className="space-y-4" onSubmit={handleSubmitAll}>
+        {Object.entries(productsByCategory).map(
+          ([categoryName, categoryProducts]) =>
+            categoryProducts.length > 0 && (
+              <Card key={categoryName} className="mb-4">
+                <CardContent className="p-4">
+                  <h3 className="font-bold text-lg mb-2">{categoryName}</h3>
+                  <div className="grid gap-4">
+                    {categoryProducts
+                      .slice()
+                      .sort((a, b) => {
+                        const isBarkA = a.name.toLowerCase().includes("кора");
+                        const isBarkB = b.name.toLowerCase().includes("кора");
+                        if (isBarkA && isBarkB) {
+                          return (
+                            getFractionNumber(a.description ?? undefined) -
+                            getFractionNumber(b.description ?? undefined)
+                          );
+                        }
+                        if (isBarkA) return -1;
+                        if (isBarkB) return 1;
+                        return 0;
+                      })
+                      .map((product) => {
                         return (
-                          getFractionNumber(a.description ?? undefined) -
-                          getFractionNumber(b.description ?? undefined)
+                          <div
+                            key={product.id}
+                            className="flex items-center justify-between gap-4 py-2 border-b last:border-0"
+                          >
+                            <div className="flex-1">
+                              <div className="font-medium">{product.name}</div>
+                              {product.description && (
+                                <div className="text-sm text-muted-foreground">
+                                  {product.description}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-end w-56">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={quantities[product.id] || ""}
+                                onChange={(e) =>
+                                  handleQuantityChange(
+                                    product.id,
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Кількість"
+                                disabled={
+                                  isSubmitting || shift.status !== "active"
+                                }
+                                className="w-32"
+                              />
+                            </div>
+                          </div>
                         );
-                      }
-                      if (isBarkA) return -1;
-                      if (isBarkB) return 1;
-                      return 0;
-                    })
-                    .map((product) => {
-                      const existingItem = localProduction.find(
-                        (p) => p.product_id === product.id,
-                      );
-                      const isPending = pendingProducts.has(product.id);
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            ),
+        )}
 
-                      return (
-                        <div
-                          key={product.id}
-                          className="flex items-center justify-between gap-4 py-2 border-b last:border-0"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium">{product.name}</div>
-                            {product.description && (
-                              <div className="text-sm text-muted-foreground">
-                                {product.description}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 w-48">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={quantities[product.id] || ""}
-                              onChange={(e) =>
-                                handleQuantityChange(product.id, e.target.value)
-                              }
-                              placeholder="Кількість"
-                              disabled={isPending || shift.status !== "active"}
-                              className="w-24"
-                            />
-                            {shift.status === "active" && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleUpdateQuantity(product.id)}
-                                disabled={isPending || !quantities[product.id]}
-                              >
-                                {isPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                                ) : null}
-                                {existingItem ? "Оновити" : "Додати"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </CardContent>
-            </Card>
-          ),
-      )}
-    </div>
+        {shift.status === "active" && (
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin shrink-0 mr-2" />
+              ) : null}
+              Зберегти всю продукцію
+            </Button>
+          </div>
+        )}
+      </form>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Не всі поля заповнені</AlertDialogTitle>
+            <AlertDialogDescription>
+              Частина полів кількості залишилась порожньою. Зберегти тільки
+              заповнені позиції?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>
+              Повернутись
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSubmit}
+              disabled={isSubmitting}
+            >
+              Підтвердити сабміт
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
