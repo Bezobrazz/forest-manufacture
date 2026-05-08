@@ -32,7 +32,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/utils";
 import {
-  ArrowLeft,
   Box,
   Calendar,
   Car,
@@ -54,6 +53,7 @@ import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
 import { HourlyWageForm } from "@/components/hourly-wage-form";
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
+import { PreviousPageButton } from "@/components/previous-page-button";
 import { getUserWithRole } from "@/lib/auth/get-user-role";
 import type { ShiftWithDetails } from "@/lib/types";
 
@@ -167,13 +167,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   return (
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between gap-4">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Назад</span>
-        </Link>
+        <PreviousPageButton fallbackHref="/" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2">
