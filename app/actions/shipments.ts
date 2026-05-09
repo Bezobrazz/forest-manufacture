@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/server-auth";
 import { syncKeepinOrdersWithSupabase } from "@/lib/crm/keepincrm/reconcile";
+import {
+  getKeepinSyncJob,
+  startKeepinSyncJob,
+  type KeepinSyncJobStatus,
+} from "@/lib/crm/keepincrm/sync-job";
 import type { CrmOrderWithDetails } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
@@ -112,4 +117,34 @@ export async function reconcileCrmOrdersAction(): Promise<{
     console.error("reconcileCrmOrdersAction", e);
     return { success: false, error: msg };
   }
+}
+
+export async function startKeepinSyncJobAction(): Promise<{
+  success: boolean;
+  jobId?: string;
+  error?: string;
+}> {
+  const user = await getServerUser();
+  if (!user) {
+    return { success: false, error: "Потрібна авторизація" };
+  }
+  const job = startKeepinSyncJob();
+  return { success: true, jobId: job.id };
+}
+
+export async function getKeepinSyncJobStatusAction(
+  jobId: string
+): Promise<{ success: boolean; status?: KeepinSyncJobStatus; error?: string }> {
+  const user = await getServerUser();
+  if (!user) {
+    return { success: false, error: "Потрібна авторизація" };
+  }
+  const status = getKeepinSyncJob(jobId);
+  if (!status) {
+    return { success: false, error: "Job not found" };
+  }
+  if (status.status === "done") {
+    revalidatePath("/shipments");
+  }
+  return { success: true, status };
 }

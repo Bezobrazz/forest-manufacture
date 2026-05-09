@@ -162,5 +162,9 @@ export function isAgreementInActiveStages(parsed: ParsedKeepinAgreement): boolea
 }
 
 export function normalizeProductKey(name: string): string {
-  return name.trim().toLowerCase();
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\bвелика\b/g, "крупна");
 }

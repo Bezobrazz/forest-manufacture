@@ -12,24 +12,56 @@ import {
 
 async function loadProductLookup(
   supabase: SupabaseClient
-): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  const { data, error } = await supabase.from("products").select("id, name");
+): Promise<{ exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] }> {
+  const exact = new Map<string, number>();
+  const rows: { id: number; name: string; description: string | null }[] = [];
+  const { data, error } = await supabase.from("products").select("id, name, description");
 
   if (error) throw new Error(error.message);
 
   for (const row of data ?? []) {
     if (row?.id != null && typeof row.name === "string") {
-      map.set(normalizeProductKey(row.name), Number(row.id));
+      const parsed = {
+        id: Number(row.id),
+        name: row.name,
+        description: typeof row.description === "string" ? row.description : null,
+      };
+      rows.push(parsed);
+      exact.set(normalizeProductKey(row.name), parsed.id);
     }
   }
-  return map;
+  return { exact, rows };
+}
+
+function resolveProductId(
+  title: string,
+  sku: string | null,
+  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] }
+): number | null {
+  const key = normalizeProductKey(title);
+  const exactHit = products.exact.get(key);
+  if (exactHit != null) return exactHit;
+
+  if (sku) {
+    const skuKey = sku.trim().toLowerCase();
+    const bySku = products.rows.find((p) =>
+      `${p.name} ${p.description ?? ""}`.toLowerCase().includes(skuKey)
+    );
+    if (bySku) return bySku.id;
+  }
+
+  const byContains = products.rows.find((p) => {
+    const pn = normalizeProductKey(p.name);
+    return pn.includes(key) || key.includes(pn);
+  });
+
+  return byContains?.id ?? null;
 }
 
 async function upsertParsedAgreement(
   supabase: SupabaseClient,
   parsed: ParsedKeepinAgreement,
-  productByName: Map<string, number>
+  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] }
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -80,8 +112,7 @@ async function upsertParsedAgreement(
 
   const itemRows =
     parsed.lines?.map((line) => {
-      const pk = normalizeProductKey(line.title);
-      const product_id = productByName.get(pk) ?? null;
+      const product_id = resolveProductId(line.title, line.sku, products);
       const ref = line.sku
         ? `${line.title} (SKU ${line.sku})`
         : line.title;
@@ -107,20 +138,28 @@ export async function removeCrmOrderByCrmId(
 }
 
 export async function syncKeepinOrdersWithSupabase(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  onProgress?: (progress: { total: number; processed: number }) => void
 ): Promise<{ upserted: number; removed: number }> {
   const rows = await fetchAllKeepinAgreements();
-  const productByName = await loadProductLookup(supabase);
+  const products = await loadProductLookup(supabase);
   const seen = new Set<string>();
+  const parsedRows = rows
+    .map((row) => parseKeepinAgreement(row))
+    .filter((p): p is ParsedKeepinAgreement => Boolean(p))
+    .filter((p) => isAgreementInActiveStages(p));
+
+  const total = parsedRows.length;
+  let processed = 0;
+  onProgress?.({ total, processed });
 
   let upserted = 0;
-  for (const row of rows) {
-    const parsed = parseKeepinAgreement(row);
-    if (!parsed) continue;
-    if (!isAgreementInActiveStages(parsed)) continue;
+  for (const parsed of parsedRows) {
     seen.add(parsed.crm_id);
-    await upsertParsedAgreement(supabase, parsed, productByName);
+    await upsertParsedAgreement(supabase, parsed, products);
     upserted += 1;
+    processed += 1;
+    onProgress?.({ total, processed });
   }
 
   const { data: existing, error: exErr } = await supabase
@@ -159,7 +198,7 @@ export async function syncSingleKeepinAgreement(
     await removeCrmOrderByCrmId(supabase, crmId);
     return "removed";
   }
-  const productByName = await loadProductLookup(supabase);
-  await upsertParsedAgreement(supabase, parsed, productByName);
+  const products = await loadProductLookup(supabase);
+  await upsertParsedAgreement(supabase, parsed, products);
   return "upserted";
 }

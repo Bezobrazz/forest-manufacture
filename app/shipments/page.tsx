@@ -7,9 +7,10 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  reconcileCrmOrdersAction,
+  getKeepinSyncJobStatusAction,
   getShipmentQueue,
   getAvgDailyProductionByProduct,
+  startKeepinSyncJobAction,
 } from "@/app/actions/shipments";
 import { getInventory } from "@/app/actions";
 import { PreviousPageButton } from "@/components/previous-page-button";
@@ -54,7 +55,8 @@ export default function ShipmentsPage() {
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [isPending, startTransition] = useTransition();
   const [syncProgress, setSyncProgress] = useState<number | null>(null);
-  const [syncStartAt, setSyncStartAt] = useState<number | null>(null);
+  const [syncHint, setSyncHint] = useState<string>("");
+  const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadPage = async () => {
@@ -132,39 +134,61 @@ export default function ShipmentsPage() {
   const weekDays = [...Array(7)].map((_, i) => addDays(weekStart, i));
 
   const syncFromKeepin = () => {
-    if (syncIntervalRef.current) {
-      clearInterval(syncIntervalRef.current);
-      syncIntervalRef.current = null;
-    }
-    setSyncStartAt(Date.now());
-    setSyncProgress(4);
-    syncIntervalRef.current = setInterval(() => {
-      setSyncProgress((prev) => {
-        if (prev == null) return 8;
-        if (prev >= 94) return prev;
-        return prev + 3;
-      });
-    }, 350);
-
     startTransition(async () => {
-      const r = await reconcileCrmOrdersAction();
+      const started = await startKeepinSyncJobAction();
+      if (!started.success || !started.jobId) {
+        toast.error("Помилка", { description: started.error ?? "Не вдалося стартувати sync" });
+        return;
+      }
+      setSyncJobId(started.jobId);
+      setSyncProgress(0);
+      setSyncHint("Підготовка…");
+
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
-        syncIntervalRef.current = null;
       }
-      setSyncProgress(100);
-      if (r.success) {
-        toast.success("Синхронізація", {
-          description: `Оновлено угод: ${r.upserted ?? 0}, видалено: ${r.removed ?? 0}`,
-        });
-        await loadPage();
-      } else {
-        toast.error("Помилка", { description: r.error ?? "CRM" });
-      }
-      setTimeout(() => {
-        setSyncProgress(null);
-        setSyncStartAt(null);
-      }, 1200);
+
+      syncIntervalRef.current = setInterval(async () => {
+        const statusResp = await getKeepinSyncJobStatusAction(started.jobId!);
+        if (!statusResp.success || !statusResp.status) {
+          setSyncHint(statusResp.error ?? "Не вдалося отримати статус");
+          return;
+        }
+        const s = statusResp.status;
+        const percent =
+          s.total > 0 ? Math.min(100, Math.round((s.processed / s.total) * 100)) : 0;
+
+        setSyncProgress(percent);
+        if (s.total > 0) {
+          setSyncHint(`Оброблено ${s.processed} із ${s.total}`);
+        } else {
+          setSyncHint("Завантаження списку угод…");
+        }
+
+        if (s.status === "done" || s.status === "error") {
+          if (syncIntervalRef.current) {
+            clearInterval(syncIntervalRef.current);
+            syncIntervalRef.current = null;
+          }
+
+          if (s.status === "done") {
+            setSyncProgress(100);
+            setSyncHint(`Оновлено: ${s.upserted}, видалено: ${s.removed}`);
+            toast.success("Синхронізація завершена", {
+              description: `Оновлено угод: ${s.upserted}, видалено: ${s.removed}`,
+            });
+            await loadPage();
+          } else {
+            toast.error("Помилка sync", { description: s.error ?? "Unknown error" });
+          }
+
+          setTimeout(() => {
+            setSyncProgress(null);
+            setSyncHint("");
+            setSyncJobId(null);
+          }, 1400);
+        }
+      }, 800);
     });
   };
 
@@ -207,8 +231,12 @@ export default function ShipmentsPage() {
             створення угоди в CRM.
           </p>
         </div>
-        <Button onClick={syncFromKeepin} disabled={isPending} className="gap-2 shrink-0">
-          <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
+        <Button
+          onClick={syncFromKeepin}
+          disabled={isPending || syncJobId !== null}
+          className="gap-2 shrink-0"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncJobId ? "animate-spin" : ""}`} />
           Синхронізувати з KeepinCRM
         </Button>
       </div>
@@ -218,18 +246,7 @@ export default function ShipmentsPage() {
           <Progress value={syncProgress} className="h-2" />
           <div className="text-xs text-muted-foreground flex items-center justify-between">
             <span>Синхронізація: {Math.round(syncProgress)}%</span>
-            {syncProgress < 100 && syncStartAt ? (
-              <span>
-                Залишилось приблизно{" "}
-                {Math.max(
-                  1,
-                  Math.round(((Date.now() - syncStartAt) / Math.max(syncProgress, 1)) * (100 - syncProgress) / 1000)
-                )}{" "}
-                с
-              </span>
-            ) : (
-              <span>Завершено</span>
-            )}
+            <span>{syncProgress < 100 ? syncHint : "Завершено"}</span>
           </div>
         </div>
       ) : null}
