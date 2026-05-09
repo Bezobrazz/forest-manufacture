@@ -87,3 +87,8 @@
 - For date selection in forms, dialogs, and filters, use the existing `Calendar` date picker from `@/components/ui/calendar`.
 - Prefer the existing project pattern with `Popover` + `Calendar` instead of native date inputs or custom date pickers.
 - Do not introduce new date picker libraries or duplicate calendar components.
+
+## 12. Vercel Hobby (free tier)
+
+- Cron Jobs на безкоштовному тарифі: не пропонувати частіші за один запуск на 24 години; cron зовнішніх інтеграцій лише як резервне звірення, не основний канал даних.
+- Частота синхронізації з CRM — через webhook (push) на бекенд; добовий cron — лише reconcile на випадок пропуску подій.
