@@ -88,6 +88,11 @@
 - Prefer the existing project pattern with `Popover` + `Calendar` instead of native date inputs or custom date pickers.
 - Do not introduce new date picker libraries or duplicate calendar components.
 
+## 12. Select Usage
+
+- For dropdown/select fields in forms, filters, and settings, use the existing `Select` components from `@/components/ui/select`.
+- Do not use native `<select>` for new UI unless explicitly requested.
+
 ## 12. Vercel Hobby (free tier)
 
 - Cron Jobs на безкоштовному тарифі: не пропонувати частіші за один запуск на 24 години; cron зовнішніх інтеграцій лише як резервне звірення, не основний канал даних.

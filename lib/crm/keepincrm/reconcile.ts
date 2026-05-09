@@ -33,12 +33,38 @@ async function loadProductLookup(
   return { exact, rows };
 }
 
+async function loadCrmMappings(
+  supabase: SupabaseClient
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const { data, error } = await supabase
+    .from("crm_product_mappings")
+    .select("crm_product_ref, product_id")
+    .not("product_id", "is", null);
+
+  if (error) throw new Error(error.message);
+
+  for (const row of data ?? []) {
+    const refRaw = row?.crm_product_ref;
+    const pid = row?.product_id;
+    if (typeof refRaw === "string" && pid != null) {
+      map.set(normalizeProductKey(refRaw), Number(pid));
+    }
+  }
+
+  return map;
+}
+
 function resolveProductId(
   title: string,
   sku: string | null,
-  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] }
+  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] },
+  crmMappings: Map<string, number>
 ): number | null {
   const key = normalizeProductKey(title);
+  const mapped = crmMappings.get(key);
+  if (mapped != null) return mapped;
+
   const exactHit = products.exact.get(key);
   if (exactHit != null) return exactHit;
 
@@ -61,7 +87,8 @@ function resolveProductId(
 async function upsertParsedAgreement(
   supabase: SupabaseClient,
   parsed: ParsedKeepinAgreement,
-  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] }
+  products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] },
+  crmMappings: Map<string, number>
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -112,7 +139,7 @@ async function upsertParsedAgreement(
 
   const itemRows =
     parsed.lines?.map((line) => {
-      const product_id = resolveProductId(line.title, line.sku, products);
+      const product_id = resolveProductId(line.title, line.sku, products, crmMappings);
       const ref = line.sku
         ? `${line.title} (SKU ${line.sku})`
         : line.title;
@@ -143,6 +170,7 @@ export async function syncKeepinOrdersWithSupabase(
 ): Promise<{ upserted: number; removed: number }> {
   const rows = await fetchAllKeepinAgreements();
   const products = await loadProductLookup(supabase);
+  const crmMappings = await loadCrmMappings(supabase);
   const seen = new Set<string>();
   const parsedRows = rows
     .map((row) => parseKeepinAgreement(row))
@@ -156,7 +184,7 @@ export async function syncKeepinOrdersWithSupabase(
   let upserted = 0;
   for (const parsed of parsedRows) {
     seen.add(parsed.crm_id);
-    await upsertParsedAgreement(supabase, parsed, products);
+    await upsertParsedAgreement(supabase, parsed, products, crmMappings);
     upserted += 1;
     processed += 1;
     onProgress?.({ total, processed });
@@ -199,6 +227,7 @@ export async function syncSingleKeepinAgreement(
     return "removed";
   }
   const products = await loadProductLookup(supabase);
-  await upsertParsedAgreement(supabase, parsed, products);
+  const crmMappings = await loadCrmMappings(supabase);
+  await upsertParsedAgreement(supabase, parsed, products, crmMappings);
   return "upserted";
 }

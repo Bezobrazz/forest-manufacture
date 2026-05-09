@@ -8,8 +8,11 @@ import { toast } from "sonner";
 
 import {
   getKeepinSyncJobStatusAction,
+  getCrmUnmappedProductsAction,
+  getShipmentProductsAction,
   getShipmentQueue,
   getAvgDailyProductionByProduct,
+  saveCrmProductMappingAction,
   startKeepinSyncJobAction,
 } from "@/app/actions/shipments";
 import { getInventory } from "@/app/actions";
@@ -29,7 +32,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Inventory, CrmOrderWithDetails, ShipmentForecast } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { dateToYYYYMMDD, formatDate } from "@/lib/utils";
 
@@ -49,7 +59,15 @@ export default function ShipmentsPage() {
   const [queue, setQueue] = useState<CrmOrderWithDetails[]>([]);
   const [avgDaily, setAvgDaily] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [databaseError, setDatabaseError] = useState(false);
+  const [unmappedRefs, setUnmappedRefs] = useState<{ crm_product_ref: string; count: number }[]>(
+    []
+  );
+  const [products, setProducts] = useState<Pick<Product, "id" | "name" | "description">[]>(
+    []
+  );
+  const [mappingDraft, setMappingDraft] = useState<Record<string, string>>({});
   const [selectedMonth, setSelectedMonth] = useState<Date>(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date>(() => startOfDay(new Date()));
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
@@ -71,6 +89,12 @@ export default function ShipmentsPage() {
       setInventory(inv);
       setQueue(q);
       setAvgDaily(avg);
+      const [unmapped, productsList] = await Promise.all([
+        getCrmUnmappedProductsAction(),
+        getShipmentProductsAction(),
+      ]);
+      setUnmappedRefs(unmapped);
+      setProducts(productsList);
     } catch (err: unknown) {
       console.error("ShipmentsPage load:", err);
       if (
@@ -249,6 +273,76 @@ export default function ShipmentsPage() {
             <span>{syncProgress < 100 ? syncHint : "Завершено"}</span>
           </div>
         </div>
+      ) : null}
+
+      {unmappedRefs.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Мапінг товарів CRM</CardTitle>
+            <CardDescription>
+              Зіставте CRM-назви з вашими товарами, щоб ETA рахувався коректно.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {unmappedRefs.map((row) => (
+              <div
+                key={row.crm_product_ref}
+                className="grid gap-2 md:grid-cols-[1.2fr_1fr_auto] md:items-center"
+              >
+                <div className="text-sm">
+                  <div className="font-medium">{row.crm_product_ref}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Невизначено у {row.count} позиціях
+                  </div>
+                </div>
+
+                <Select
+                  value={mappingDraft[row.crm_product_ref] ?? ""}
+                  onValueChange={(value) =>
+                    setMappingDraft((prev) => ({
+                      ...prev,
+                      [row.crm_product_ref]: value,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Оберіть товар…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  size="sm"
+                  disabled={isSavingMapping || !mappingDraft[row.crm_product_ref]}
+                  onClick={async () => {
+                    const raw = mappingDraft[row.crm_product_ref];
+                    const pid = Number(raw);
+                    if (!Number.isFinite(pid) || pid <= 0) return;
+                    setIsSavingMapping(true);
+                    const res = await saveCrmProductMappingAction(row.crm_product_ref, pid);
+                    setIsSavingMapping(false);
+                    if (!res.success) {
+                      toast.error("Не вдалося зберегти мапінг", {
+                        description: res.error,
+                      });
+                      return;
+                    }
+                    toast.success("Мапінг збережено");
+                    await loadPage();
+                  }}
+                >
+                  Зберегти
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       <Tabs defaultValue="month" className="space-y-4">

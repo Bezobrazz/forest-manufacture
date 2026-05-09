@@ -9,7 +9,7 @@ import {
   startKeepinSyncJob,
   type KeepinSyncJobStatus,
 } from "@/lib/crm/keepincrm/sync-job";
-import type { CrmOrderWithDetails } from "@/lib/types";
+import type { CrmOrderWithDetails, Product } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
 
@@ -147,4 +147,82 @@ export async function getKeepinSyncJobStatusAction(
     revalidatePath("/shipments");
   }
   return { success: true, status };
+}
+
+export async function getCrmUnmappedProductsAction(): Promise<
+  { crm_product_ref: string; count: number }[]
+> {
+  const supabase = await createServerClient();
+
+  const { data: rows, error } = await supabase
+    .from("crm_order_items")
+    .select("crm_product_ref, product_id");
+  if (error || !rows) return [];
+
+  const { data: mappings } = await supabase
+    .from("crm_product_mappings")
+    .select("crm_product_ref, product_id");
+
+  const mappedRefs = new Set(
+    (mappings ?? [])
+      .filter((m) => m.product_id != null)
+      .map((m) => String(m.crm_product_ref).trim().toLowerCase())
+  );
+
+  const counts = new Map<string, { crm_product_ref: string; count: number }>();
+  for (const row of rows) {
+    const ref =
+      typeof row.crm_product_ref === "string" ? row.crm_product_ref.trim() : "";
+    if (!ref) continue;
+    const refKey = ref.toLowerCase();
+    if (row.product_id != null) continue;
+    if (mappedRefs.has(refKey)) continue;
+    const old = counts.get(refKey);
+    if (old) old.count += 1;
+    else counts.set(refKey, { crm_product_ref: ref, count: 1 });
+  }
+
+  return [...counts.values()].sort((a, b) => b.count - a.count);
+}
+
+export async function getShipmentProductsAction(): Promise<
+  Pick<Product, "id" | "name" | "description">[]
+> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, description")
+    .order("name");
+  if (error || !data) return [];
+  return data as Pick<Product, "id" | "name" | "description">[];
+}
+
+export async function saveCrmProductMappingAction(
+  crmProductRef: string,
+  productId: number
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  const ref = crmProductRef.trim();
+  if (!ref || !Number.isFinite(productId) || productId <= 0) {
+    return { success: false, error: "Некоректні дані мапінгу" };
+  }
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.from("crm_product_mappings").upsert(
+    {
+      crm_product_ref: ref,
+      product_id: productId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "crm_product_ref" }
+  );
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/shipments");
+  return { success: true };
 }
