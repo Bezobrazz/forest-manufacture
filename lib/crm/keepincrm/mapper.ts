@@ -3,6 +3,8 @@ export type ParsedKeepinAgreement = {
   crm_created_at_iso: string;
   keepin_stage_id: number | string | null;
   crm_status: string | null;
+  result: string | null;
+  archived: boolean;
   notes: string | null;
   customerCrmId: string;
   customerName: string;
@@ -115,11 +117,17 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
         ? raw.note
         : null;
 
+  const result =
+    typeof raw.result === "string" && raw.result.trim() ? raw.result.trim() : null;
+  const archived = Boolean(raw.archived);
+
   return {
     crm_id,
     crm_created_at_iso: created,
     keepin_stage_id: stageId as number | string | null,
     crm_status: stageName ?? (stageId != null ? String(stageId) : null),
+    result,
+    archived,
     notes,
     customerCrmId,
     customerName,
@@ -142,6 +150,9 @@ export function parseStageIdAllowlist(): Set<string> | null {
 }
 
 export function isAgreementInActiveStages(parsed: ParsedKeepinAgreement): boolean {
+  if (parsed.archived) return false;
+  if (parsed.result !== null) return false;
+
   const allow = parseStageIdAllowlist();
   if (!allow) return true;
   if (parsed.keepin_stage_id === null || parsed.keepin_stage_id === undefined)

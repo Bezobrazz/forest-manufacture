@@ -27,6 +27,41 @@ export type KeepinListResponse<T> = {
   pagination?: KeepinPagination;
 };
 
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+function getAgreementTitle(row: Record<string, unknown>): string {
+  const root = asRecord(row.agreement) ?? asRecord(row.data) ?? asRecord(row.item) ?? row;
+  const direct =
+    typeof root.title === "string"
+      ? root.title
+      : typeof root.dealtitle === "string"
+        ? root.dealtitle
+        : "";
+  return direct.trim();
+}
+
+function getAgreementCreatedAt(row: Record<string, unknown>): number {
+  const root = asRecord(row.agreement) ?? asRecord(row.data) ?? asRecord(row.item) ?? row;
+  const raw =
+    (typeof root.created_at === "string" && root.created_at) ||
+    (typeof root.created === "string" && root.created) ||
+    "";
+  const ts = raw ? Date.parse(raw) : Number.NaN;
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function getAgreementId(row: Record<string, unknown>): string | null {
+  const root = asRecord(row.agreement) ?? asRecord(row.data) ?? asRecord(row.item) ?? row;
+  const id = root.id ?? root.agreement_id;
+  if (id === undefined || id === null) return null;
+  const value = String(id).trim();
+  return value.length > 0 ? value : null;
+}
+
 export async function keepinRequest(
   pathWithLeadingSlash: string,
   init?: RequestInit & { searchParams?: Record<string, string | number | undefined> }
@@ -96,17 +131,44 @@ const MAX_PAGES = 200;
 export async function fetchAllKeepinAgreements(): Promise<Record<string, unknown>[]> {
   const merged: Record<string, unknown>[] = [];
   let page = 1;
-  let totalPages = 1;
-  while (page <= totalPages && page <= MAX_PAGES) {
+
+  while (page <= MAX_PAGES) {
     const data = await fetchKeepinAgreementListPage(page);
     const chunk = Array.isArray(data.items) ? data.items : [];
     merged.push(...chunk);
-    totalPages =
+
+    // Кінець списку
+    if (!chunk.length) break;
+
+    const totalPages =
       typeof data.pagination?.total_pages === "number" && data.pagination.total_pages >= 1
         ? data.pagination.total_pages
-        : page;
-    if (!chunk.length) break;
+        : null;
+
+    // Якщо API явно каже скільки сторінок — зупиняємось на останній.
+    if (totalPages !== null && page >= totalPages) {
+      break;
+    }
+
     page += 1;
   }
   return merged;
+}
+
+export async function findKeepinAgreementIdByDealTitle(
+  dealTitle: string
+): Promise<string | null> {
+  const needle = dealTitle.trim().toLowerCase();
+  if (!needle) return null;
+
+  const rows = await fetchAllKeepinAgreements();
+  const matches = rows.filter((row) => getAgreementTitle(row).toLowerCase() === needle);
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  // Якщо є дублікати назви, беремо найновішу за датою створення.
+  matches.sort((a, b) => getAgreementCreatedAt(b) - getAgreementCreatedAt(a));
+  return getAgreementId(matches[0]);
 }

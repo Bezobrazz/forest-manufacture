@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { syncSingleKeepinAgreement } from "@/lib/crm/keepincrm/reconcile";
+import { findKeepinAgreementIdByDealTitle } from "@/lib/crm/keepincrm/client";
 
 function webhookAuthorized(request: NextRequest, body: Record<string, unknown> | null) {
   const secret = process.env.KEEPINCRM_WEBHOOK_SECRET?.trim();
@@ -46,6 +47,17 @@ function extractAgreementIdFromWebhookBody(body: unknown): string | null {
   return null;
 }
 
+function extractDealTitleFromWebhookBody(body: unknown): string | null {
+  const root = asRecord(body);
+  if (!root) return null;
+  const direct = root.dealtitle ?? root.title;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const nested = asRecord(root.agreement) ?? asRecord(root.deal);
+  const nestedTitle = nested?.dealtitle ?? nested?.title;
+  if (typeof nestedTitle === "string" && nestedTitle.trim()) return nestedTitle.trim();
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   if (!process.env.KEEPINCRM_WEBHOOK_SECRET?.trim()) {
     return NextResponse.json(
@@ -65,10 +77,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const agreementId = extractAgreementIdFromWebhookBody(body ?? {});
+  let agreementId = extractAgreementIdFromWebhookBody(body ?? {});
+  if (!agreementId) {
+    const dealTitle = extractDealTitleFromWebhookBody(body ?? {});
+    if (dealTitle) {
+      agreementId = await findKeepinAgreementIdByDealTitle(dealTitle);
+    }
+  }
+
   if (!agreementId) {
     return NextResponse.json(
-      { ok: false, error: "Could not resolve agreement id from webhook body" },
+      {
+        ok: false,
+        error:
+          "Could not resolve agreement id from webhook body. Pass agreement_id or dealtitle.",
+      },
       { status: 400 }
     );
   }

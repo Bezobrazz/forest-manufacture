@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
 import { RefreshCw } from "lucide-react";
@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
@@ -52,6 +53,9 @@ export default function ShipmentsPage() {
   const [selectedDay, setSelectedDay] = useState<Date>(() => startOfDay(new Date()));
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [isPending, startTransition] = useTransition();
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
+  const [syncStartAt, setSyncStartAt] = useState<number | null>(null);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadPage = async () => {
     setIsLoading(true);
@@ -128,8 +132,27 @@ export default function ShipmentsPage() {
   const weekDays = [...Array(7)].map((_, i) => addDays(weekStart, i));
 
   const syncFromKeepin = () => {
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+      syncIntervalRef.current = null;
+    }
+    setSyncStartAt(Date.now());
+    setSyncProgress(4);
+    syncIntervalRef.current = setInterval(() => {
+      setSyncProgress((prev) => {
+        if (prev == null) return 8;
+        if (prev >= 94) return prev;
+        return prev + 3;
+      });
+    }, 350);
+
     startTransition(async () => {
       const r = await reconcileCrmOrdersAction();
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+      setSyncProgress(100);
       if (r.success) {
         toast.success("Синхронізація", {
           description: `Оновлено угод: ${r.upserted ?? 0}, видалено: ${r.removed ?? 0}`,
@@ -138,8 +161,20 @@ export default function ShipmentsPage() {
       } else {
         toast.error("Помилка", { description: r.error ?? "CRM" });
       }
+      setTimeout(() => {
+        setSyncProgress(null);
+        setSyncStartAt(null);
+      }, 1200);
     });
   };
+
+  useEffect(() => {
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, []);
 
   if (databaseError) {
     return (
@@ -178,6 +213,27 @@ export default function ShipmentsPage() {
         </Button>
       </div>
 
+      {syncProgress !== null ? (
+        <div className="space-y-1">
+          <Progress value={syncProgress} className="h-2" />
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>Синхронізація: {Math.round(syncProgress)}%</span>
+            {syncProgress < 100 && syncStartAt ? (
+              <span>
+                Залишилось приблизно{" "}
+                {Math.max(
+                  1,
+                  Math.round(((Date.now() - syncStartAt) / Math.max(syncProgress, 1)) * (100 - syncProgress) / 1000)
+                )}{" "}
+                с
+              </span>
+            ) : (
+              <span>Завершено</span>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <Tabs defaultValue="month" className="space-y-4">
         <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="month">Місяць</TabsTrigger>
@@ -186,7 +242,7 @@ export default function ShipmentsPage() {
         </TabsList>
 
         <TabsContent value="month" className="space-y-6">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start">
             <Card className="flex-1 max-w-fit">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Прогноз по днях</CardTitle>
@@ -333,12 +389,63 @@ function dateToKyivMidnightIso(d: Date): string {
 }
 
 function renderForecastMini(f: ShipmentForecast) {
+  const itemsPreview = f.order.items.slice(0, 3);
+  const restItemsCount = Math.max(f.order.items.length - itemsPreview.length, 0);
+  const totalQty = f.order.items.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+
   return (
-    <div key={f.order.crm_id} className="rounded-md border p-3 text-sm space-y-1">
-      <div className="font-medium">{f.order.customer.name}</div>
-      <div className="text-muted-foreground text-xs">Угода #{f.order.crm_id}</div>
+    <div key={f.order.crm_id} className="rounded-md border p-3 text-sm space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-medium">Клієнт: {f.order.customer.name}</div>
+        <Badge variant={f.isReady ? "default" : f.etaDate ? "secondary" : "destructive"}>
+          {f.isReady ? "Готово сьогодні" : f.etaDate ? "Очікує виробництва" : "Без ETA"}
+        </Badge>
+      </div>
+
+      <div className="text-muted-foreground text-xs flex flex-wrap gap-x-3 gap-y-1">
+        <span>Угода #{f.order.crm_id}</span>
+        <span>Створено: {formatDate(f.order.crm_created_at)}</span>
+        {f.order.crm_status ? <span>Етап: {f.order.crm_status}</span> : null}
+      </div>
+
+      {f.order.customer.phone ? (
+        <a
+          className="text-xs text-primary underline-offset-2 hover:underline"
+          href={`tel:${f.order.customer.phone}`}
+        >
+          {f.order.customer.phone}
+        </a>
+      ) : null}
+
+      <div className="text-xs">
+        <span className="text-muted-foreground">Кількість товару:</span>{" "}
+        <span className="font-medium">{totalQty} шт</span>
+      </div>
+
+      <div className="space-y-1">
+        {itemsPreview.map((item) => (
+          <div key={item.id} className="text-xs flex items-center justify-between gap-2">
+            <span className="text-muted-foreground truncate">
+              {item.product?.name ?? item.crm_product_ref ?? "Позиція без назви"}
+            </span>
+            <span className="shrink-0">{item.quantity} шт</span>
+          </div>
+        ))}
+        {restItemsCount > 0 ? (
+          <div className="text-xs text-muted-foreground">+ ще {restItemsCount} позицій</div>
+        ) : null}
+      </div>
+
       {f.missing.length > 0 && (
-        <div className="text-xs text-amber-600">Є позиції без мапінгу або без норми виробництва</div>
+        <div className="text-xs text-amber-600 space-y-0.5">
+          <div>Нестача / немає норми виробництва:</div>
+          {f.missing.slice(0, 2).map((m, idx) => (
+            <div key={`${m.productId}-${idx}`}>
+              • {m.productId > 0 ? `product_id ${m.productId}` : "без мапінгу"}: {m.needed} шт
+            </div>
+          ))}
+          {f.missing.length > 2 ? <div>• ще {f.missing.length - 2} позицій</div> : null}
+        </div>
       )}
     </div>
   );
