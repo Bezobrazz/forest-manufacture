@@ -126,3 +126,48 @@ export interface SupplierAdvanceTransaction {
   created_at: string;
   supplier?: Supplier;
 }
+
+export interface CrmCustomer {
+  id: number;
+  crm_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  synced_at: string;
+  created_at: string;
+}
+
+export interface CrmOrder {
+  id: number;
+  crm_id: string;
+  customer_id: number;
+  crm_status: string | null;
+  crm_created_at: string;
+  /** Менше значення = вищий пріоритет у черзі відвантажень */
+  queue_rank: number;
+  notes: string | null;
+  synced_at: string;
+  created_at: string;
+}
+
+export interface CrmOrderItem {
+  id: number;
+  order_id: number;
+  product_id: number | null;
+  crm_product_ref: string | null;
+  quantity: number;
+  created_at: string;
+  product?: Product | null;
+}
+
+export type CrmOrderWithDetails = CrmOrder & {
+  customer: CrmCustomer;
+  items: CrmOrderItem[];
+};
+
+export type ShipmentForecast = {
+  order: CrmOrderWithDetails;
+  etaDate: string | null;
+  isReady: boolean;
+  missing: { productId: number; needed: number }[];
+};

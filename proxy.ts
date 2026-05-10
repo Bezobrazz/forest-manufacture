@@ -51,6 +51,7 @@ export async function proxy(request: NextRequest) {
     "/employees": ["owner", "admin", "worker"],
     "/products": ["owner", "admin", "worker"],
     "/inventory": ["owner", "admin", "worker"],
+    "/shipments": ["owner", "admin", "worker"],
     "/tasks": ["owner", "admin", "worker"],
     "/statistics": ["owner", "admin", "worker"],
     "/expenses": ["owner", "admin", "worker"],

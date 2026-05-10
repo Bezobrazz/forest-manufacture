@@ -9,6 +9,7 @@ import {
   DollarSign,
   MapPin,
   Menu,
+  CalendarDays,
   Package,
   PieChart,
   Plus,
@@ -63,6 +64,12 @@ export const QuickActionsButton = () => {
           <DropdownMenuItem className="cursor-pointer">
             <Boxes className="h-4 w-4 mr-2" />
             <span>Управління складом</span>
+          </DropdownMenuItem>
+        </Link>
+        <Link href="/shipments" className="w-full">
+          <DropdownMenuItem className="cursor-pointer">
+            <CalendarDays className="h-4 w-4 mr-2" />
+            <span>Відвантаження</span>
           </DropdownMenuItem>
         </Link>
         <Link href="/tasks" className="w-full">
