@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/server-auth";
@@ -12,9 +13,85 @@ import {
 import type { CrmOrderWithDetails, Product } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
+import {
+  mapPlanningOrderRowToCrmShape,
+  mergeShipmentQueueByGlobalRank,
+  parseLocalShipmentOrderId,
+  type ShipmentPlanningOrderDb,
+} from "@/lib/shipments/local-shipment";
+
+async function compactGlobalShipmentQueueRanks(
+  supabase: SupabaseClient
+): Promise<{ error?: string }> {
+  const { data: plans, error: pErr } = await supabase
+    .from("shipment_planning_orders")
+    .select("id, queue_rank")
+    .order("queue_rank", { ascending: true })
+    .order("id", { ascending: true });
+  if (pErr) return { error: pErr.message };
+
+  const { data: crms, error: cErr } = await supabase
+    .from("crm_orders")
+    .select("crm_id, queue_rank")
+    .order("queue_rank", { ascending: true })
+    .order("crm_created_at", { ascending: true });
+  if (cErr) return { error: cErr.message };
+
+  type Entry = { rank: number; kind: "p" | "c"; planId: number; crmId: string | null };
+  const entries: Entry[] = [];
+  for (const p of plans ?? []) {
+    entries.push({ kind: "p", rank: Number(p.queue_rank), planId: p.id, crmId: null });
+  }
+  for (const c of crms ?? []) {
+    entries.push({ kind: "c", rank: Number(c.queue_rank), planId: 0, crmId: c.crm_id });
+  }
+  entries.sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    if (a.kind !== b.kind) return a.kind === "p" ? -1 : 1;
+    if (a.kind === "p") return a.planId - b.planId;
+    return String(a.crmId).localeCompare(String(b.crmId));
+  });
+
+  const now = new Date().toISOString();
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (e.kind === "p") {
+      const { error } = await supabase
+        .from("shipment_planning_orders")
+        .update({ queue_rank: i, updated_at: now })
+        .eq("id", e.planId);
+      if (error) return { error: error.message };
+    } else if (e.crmId) {
+      const { error } = await supabase.from("crm_orders").update({ queue_rank: i }).eq("crm_id", e.crmId);
+      if (error) return { error: error.message };
+    }
+  }
+  return {};
+}
 
 export async function getShipmentQueue(): Promise<CrmOrderWithDetails[]> {
   const supabase = await createServerClient();
+
+  const { data: planningRows, error: planningErr } = await supabase
+    .from("shipment_planning_orders")
+    .select(
+      `
+      *,
+      items:shipment_planning_order_items(
+        *,
+        product:products(
+          *,
+          category:product_categories(*)
+        )
+      )
+    `
+    )
+    .order("queue_rank", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (planningErr) {
+    console.error("getShipmentQueue planning:", planningErr);
+  }
 
   const { data, error } = await supabase
     .from("crm_orders")
@@ -39,7 +116,12 @@ export async function getShipmentQueue(): Promise<CrmOrderWithDetails[]> {
     return [];
   }
 
-  return (data ?? []) as CrmOrderWithDetails[];
+  const localOrders = (planningRows ?? []).map((row) =>
+    mapPlanningOrderRowToCrmShape(row as ShipmentPlanningOrderDb)
+  );
+  const crmOrders = (data ?? []) as CrmOrderWithDetails[];
+
+  return mergeShipmentQueueByGlobalRank(localOrders, crmOrders);
 }
 
 export async function getAvgDailyProductionByProduct(
@@ -204,25 +286,158 @@ export async function reorderShipmentQueueAction(
   const user = await getServerUser();
   if (!user) return { success: false, error: "Потрібна авторизація" };
 
+  const ordered: string[] = [];
   const seen = new Set<string>();
-  for (const id of crmIdsInOrder) {
-    const k = id.trim();
+  for (const raw of crmIdsInOrder) {
+    const k = raw.trim();
     if (!k) return { success: false, error: "Порожній ідентифікатор угоди" };
     if (seen.has(k)) return { success: false, error: "Дублікат у списку" };
     seen.add(k);
+    ordered.push(k);
   }
 
   const supabase = await createServerClient();
 
-  for (let i = 0; i < crmIdsInOrder.length; i++) {
-    const crmId = crmIdsInOrder[i].trim();
-    const { error } = await supabase
-      .from("crm_orders")
-      .update({ queue_rank: i })
-      .eq("crm_id", crmId);
-    if (error) {
-      return { success: false, error: error.message };
+  const now = new Date().toISOString();
+  for (let i = 0; i < ordered.length; i++) {
+    const id = ordered[i].trim();
+    const localNumeric = parseLocalShipmentOrderId(id);
+    if (localNumeric != null) {
+      const { error } = await supabase
+        .from("shipment_planning_orders")
+        .update({ queue_rank: i, updated_at: now })
+        .eq("id", localNumeric);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } else {
+      const { error } = await supabase
+        .from("crm_orders")
+        .update({ queue_rank: i })
+        .eq("crm_id", id);
+      if (error) {
+        return { success: false, error: error.message };
+      }
     }
+  }
+
+  revalidatePath("/shipments");
+  return { success: true };
+}
+
+export async function createLocalShipmentCardAction(
+  title: string,
+  lines: { product_id: number; quantity: number }[]
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  const name = title.trim();
+  if (!name) {
+    return { success: false, error: "Вкажіть назву картки" };
+  }
+
+  const cleanLines = lines
+    .map((l) => ({
+      product_id: l.product_id,
+      quantity: Number(l.quantity),
+    }))
+    .filter((l) => Number.isFinite(l.product_id) && l.product_id > 0 && Number.isFinite(l.quantity) && l.quantity > 0);
+
+  if (cleanLines.length === 0) {
+    return { success: false, error: "Додайте хоча б одну позицію з кількістю" };
+  }
+
+  const supabase = await createServerClient();
+
+  const nowTs = new Date().toISOString();
+
+  const { data: planBump, error: planBumpErr } = await supabase
+    .from("shipment_planning_orders")
+    .select("id, queue_rank")
+    .order("queue_rank", { ascending: false });
+
+  if (planBumpErr) {
+    return { success: false, error: planBumpErr.message };
+  }
+
+  for (const row of planBump ?? []) {
+    const { error: bumpErr } = await supabase
+      .from("shipment_planning_orders")
+      .update({ queue_rank: row.queue_rank + 1, updated_at: nowTs })
+      .eq("id", row.id);
+    if (bumpErr) {
+      return { success: false, error: bumpErr.message };
+    }
+  }
+
+  const { data: crmBump, error: crmBumpErr } = await supabase
+    .from("crm_orders")
+    .select("crm_id, queue_rank")
+    .order("queue_rank", { ascending: false });
+
+  if (crmBumpErr) {
+    return { success: false, error: crmBumpErr.message };
+  }
+
+  for (const row of crmBump ?? []) {
+    const { error: bumpErr } = await supabase
+      .from("crm_orders")
+      .update({ queue_rank: row.queue_rank + 1 })
+      .eq("crm_id", row.crm_id);
+    if (bumpErr) {
+      return { success: false, error: bumpErr.message };
+    }
+  }
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("shipment_planning_orders")
+    .insert({ title: name, queue_rank: 0, updated_at: nowTs })
+    .select("id")
+    .single();
+
+  if (insErr || !inserted?.id) {
+    return { success: false, error: insErr?.message ?? "Не вдалося створити картку" };
+  }
+
+  const orderId = Number(inserted.id);
+  const itemRows = cleanLines.map((l) => ({
+    order_id: orderId,
+    product_id: l.product_id,
+    quantity: l.quantity,
+  }));
+
+  const { error: itemsErr } = await supabase.from("shipment_planning_order_items").insert(itemRows);
+  if (itemsErr) {
+    await supabase.from("shipment_planning_orders").delete().eq("id", orderId);
+    return { success: false, error: itemsErr.message };
+  }
+
+  revalidatePath("/shipments");
+  return { success: true };
+}
+
+export async function deleteLocalShipmentCardAction(planningOrderId: number): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  if (!Number.isFinite(planningOrderId) || planningOrderId <= 0) {
+    return { success: false, error: "Некоректний ідентифікатор" };
+  }
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.from("shipment_planning_orders").delete().eq("id", planningOrderId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const compactRes = await compactGlobalShipmentQueueRanks(supabase);
+  if (compactRes.error) {
+    return { success: false, error: compactRes.error };
   }
 
   revalidatePath("/shipments");

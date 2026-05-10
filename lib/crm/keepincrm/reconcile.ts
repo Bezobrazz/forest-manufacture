@@ -85,18 +85,30 @@ function resolveProductId(
 }
 
 async function nextQueueRank(supabase: SupabaseClient): Promise<number> {
-  const { data } = await supabase
+  const { data: crmMax } = await supabase
     .from("crm_orders")
     .select("queue_rank")
     .order("queue_rank", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const max =
-    typeof data?.queue_rank === "number" && Number.isFinite(data.queue_rank)
-      ? data.queue_rank
+  const { data: planMax } = await supabase
+    .from("shipment_planning_orders")
+    .select("queue_rank")
+    .order("queue_rank", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const a =
+    typeof crmMax?.queue_rank === "number" && Number.isFinite(crmMax.queue_rank)
+      ? crmMax.queue_rank
       : -1;
-  return max + 1;
+  const b =
+    typeof planMax?.queue_rank === "number" && Number.isFinite(planMax.queue_rank)
+      ? planMax.queue_rank
+      : -1;
+
+  return Math.max(a, b) + 1;
 }
 
 async function upsertParsedAgreement(
