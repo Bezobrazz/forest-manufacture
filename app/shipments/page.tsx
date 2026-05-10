@@ -27,6 +27,8 @@ import { PreviousPageButton } from "@/components/previous-page-button";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { DatabaseError } from "@/components/database-error";
 import { Button } from "@/components/ui/button";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Card,
   CardContent,
@@ -105,15 +107,18 @@ export default function ShipmentsPage() {
   const [isSavingLocalCard, setIsSavingLocalCard] = useState(false);
   const [deletingLocalId, setDeletingLocalId] = useState<string | null>(null);
   const [shippedCards, setShippedCards] = useState<ShippedQueueCard[]>([]);
+  const [inventoryChangedExternally, setInventoryChangedExternally] = useState(false);
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [fulfillOrder, setFulfillOrder] = useState<CrmOrderWithDetails | null>(null);
   const [fulfillQtyByItemId, setFulfillQtyByItemId] = useState<Record<number, string>>({});
   const [fulfillSubmitting, setFulfillSubmitting] = useState(false);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ignoreRealtimeUntilRef = useRef<number>(0);
 
   const loadPage = async () => {
     setIsLoading(true);
     setDatabaseError(false);
+    setInventoryChangedExternally(false);
     try {
       const [inv, q, avg] = await Promise.all([
         getInventory(),
@@ -149,6 +154,33 @@ export default function ShipmentsPage() {
 
   useEffect(() => {
     loadPage();
+  }, []);
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel("shipments-inventory-watch")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory" },
+        () => {
+          if (Date.now() < ignoreRealtimeUntilRef.current) return;
+          setInventoryChangedExternally(true);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory_transactions" },
+        () => {
+          if (Date.now() < ignoreRealtimeUntilRef.current) return;
+          setInventoryChangedExternally(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, []);
 
   const inventoryMap = useMemo(() => {
@@ -347,6 +379,30 @@ export default function ShipmentsPage() {
           Синхронізувати з KeepinCRM
         </Button>
       </div>
+
+      {inventoryChangedExternally ? (
+        <Alert>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              На складі зафіксовано зміни (закриття зміни / відвантаження / коригування). Оновіть
+              дані, щоб прогноз ETA був актуальним.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                setInventoryChangedExternally(false);
+                ignoreRealtimeUntilRef.current = Date.now() + 2000;
+                await loadPage();
+              }}
+              className="shrink-0"
+            >
+              Оновити дані
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {syncProgress !== null ? (
         <div className="space-y-1">
@@ -884,6 +940,7 @@ export default function ShipmentsPage() {
                   return;
                 }
                 toast.success("Відвантаження виконано");
+                ignoreRealtimeUntilRef.current = Date.now() + 2000;
                 setFulfillOpen(false);
                 setFulfillOrder(null);
                 await loadPage();
