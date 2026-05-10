@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/server-auth";
-import { syncKeepinOrdersWithSupabase } from "@/lib/crm/keepincrm/reconcile";
+import { syncKeepinOrdersWithSupabase, syncSingleKeepinAgreement } from "@/lib/crm/keepincrm/reconcile";
+import { updateKeepinAgreementStage } from "@/lib/crm/keepincrm/client";
 import {
   getKeepinSyncJob,
   startKeepinSyncJob,
@@ -14,6 +15,7 @@ import type { CrmOrderWithDetails, Product } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
 import {
+  isLocalShipmentOrderCrmId,
   mapPlanningOrderRowToCrmShape,
   mergeShipmentQueueByGlobalRank,
   parseLocalShipmentOrderId,
@@ -67,6 +69,283 @@ async function compactGlobalShipmentQueueRanks(
     }
   }
   return {};
+}
+
+function getPostShipmentStageId(): number {
+  const raw = process.env.KEEPINCRM_POST_SHIPMENT_STAGE_ID?.trim();
+  if (!raw) return 6;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 6;
+}
+
+type AppliedShipmentStep = {
+  productId: number;
+  previousInventoryQty: number;
+  transactionId: number;
+};
+
+async function getMainWarehouseId(supabase: SupabaseClient): Promise<number | null> {
+  const { data } = await supabase
+    .from("warehouses")
+    .select("id")
+    .ilike("name", "%main%")
+    .limit(1)
+    .maybeSingle();
+  return typeof data?.id === "number" ? data.id : null;
+}
+
+async function deductInventoryForQueueShipment(
+  supabase: SupabaseClient,
+  args: {
+    productId: number;
+    quantity: number;
+    notes: string;
+    warehouseId: number | null;
+  }
+): Promise<{ ok: true; step: AppliedShipmentStep } | { ok: false; error: string }> {
+  const { productId, quantity, notes, warehouseId } = args;
+  const { data: currentRow, error: gErr } = await supabase
+    .from("inventory")
+    .select("quantity")
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (gErr) return { ok: false, error: gErr.message };
+
+  const currentQuantity = Number(currentRow?.quantity ?? 0);
+  if (currentQuantity < quantity) {
+    return {
+      ok: false,
+      error: `Недостатньо на складі. Потрібно ${quantity}, доступно ${currentQuantity}`,
+    };
+  }
+
+  const previousInventoryQty = currentQuantity;
+  const newQty = currentQuantity - quantity;
+  const { error: uErr } = await supabase
+    .from("inventory")
+    .update({
+      quantity: newQty,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("product_id", productId);
+
+  if (uErr) return { ok: false, error: uErr.message };
+
+  const txPayload: Record<string, unknown> = {
+    product_id: productId,
+    quantity: -quantity,
+    transaction_type: "shipment",
+    notes,
+  };
+  if (warehouseId != null) {
+    txPayload.warehouse_id = warehouseId;
+  }
+
+  const { data: txRow, error: txErr } = await supabase
+    .from("inventory_transactions")
+    .insert(txPayload)
+    .select("id")
+    .single();
+
+  if (txErr || txRow?.id == null) {
+    await supabase
+      .from("inventory")
+      .update({ quantity: previousInventoryQty, updated_at: new Date().toISOString() })
+      .eq("product_id", productId);
+    return { ok: false, error: txErr?.message ?? "Не вдалося записати операцію" };
+  }
+
+  return {
+    ok: true,
+    step: {
+      productId,
+      previousInventoryQty,
+      transactionId: Number(txRow.id),
+    },
+  };
+}
+
+async function rollbackAppliedShipmentSteps(
+  supabase: SupabaseClient,
+  steps: AppliedShipmentStep[]
+): Promise<void> {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    await supabase.from("inventory_transactions").delete().eq("id", s.transactionId);
+    await supabase
+      .from("inventory")
+      .update({
+        quantity: s.previousInventoryQty,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("product_id", s.productId);
+  }
+}
+
+export type QueueFulfillmentLine = { itemId: number; quantity: number };
+
+export async function fulfillQueueShipmentAction(
+  orderCrmId: string,
+  lines: QueueFulfillmentLine[]
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  const crmKey = orderCrmId.trim();
+  if (!crmKey) return { success: false, error: "Не вказано угоду" };
+
+  const supabase = await createServerClient();
+  const warehouseId = await getMainWarehouseId(supabase);
+
+  const filtered = lines
+    .map((l) => ({
+      itemId: Math.trunc(Number(l.itemId)),
+      quantity: Number(l.quantity),
+    }))
+    .filter((l) => Number.isFinite(l.itemId) && l.itemId > 0 && Number.isFinite(l.quantity) && l.quantity > 0);
+
+  if (filtered.length === 0) {
+    return { success: false, error: "Вкажіть кількість хоча б для однієї позиції" };
+  }
+
+  const applied: AppliedShipmentStep[] = [];
+
+  try {
+    if (isLocalShipmentOrderCrmId(crmKey)) {
+      const planId = parseLocalShipmentOrderId(crmKey);
+      if (planId == null) return { success: false, error: "Некоректна локальна картка" };
+
+      const { data: orderRow, error: oErr } = await supabase
+        .from("shipment_planning_orders")
+        .select("id, title")
+        .eq("id", planId)
+        .maybeSingle();
+      if (oErr || !orderRow) {
+        return { success: false, error: oErr?.message ?? "Локальну картку не знайдено" };
+      }
+
+      const customerLabel = String(orderRow.title ?? "Локальна картка");
+
+      for (const line of filtered) {
+        const { data: itemRow, error: iErr } = await supabase
+          .from("shipment_planning_order_items")
+          .select("id, order_id, product_id, quantity")
+          .eq("id", line.itemId)
+          .maybeSingle();
+        if (iErr || !itemRow) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: iErr?.message ?? "Позицію не знайдено" };
+        }
+        if (Number(itemRow.order_id) !== planId) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: "Позиція не належить цій картці" };
+        }
+        const pid = itemRow.product_id != null ? Number(itemRow.product_id) : null;
+        if (pid == null || pid <= 0) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: "Позиція без прив’язки до товару" };
+        }
+        const maxLine = Number(itemRow.quantity);
+        if (line.quantity > maxLine) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: `Кількість більша за замовлення (макс. ${maxLine})` };
+        }
+
+        const notes = `Відвантаження черги: ${customerLabel} (локальна картка #${planId})`;
+        const res = await deductInventoryForQueueShipment(supabase, {
+          productId: pid,
+          quantity: line.quantity,
+          notes,
+          warehouseId,
+        });
+        if (!res.ok) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: res.error };
+        }
+        applied.push(res.step);
+      }
+    } else {
+      const { data: ord, error: ordErr } = await supabase
+        .from("crm_orders")
+        .select("id, crm_id, customer_id")
+        .eq("crm_id", crmKey)
+        .maybeSingle();
+
+      if (ordErr || !ord) {
+        return { success: false, error: ordErr?.message ?? "Угоду не знайдено в базі" };
+      }
+
+      const orderId = Number(ord.id);
+      const { data: custRow } = await supabase
+        .from("crm_customers")
+        .select("name")
+        .eq("id", ord.customer_id)
+        .maybeSingle();
+      const customerName = typeof custRow?.name === "string" ? custRow.name : "";
+
+      for (const line of filtered) {
+        const { data: itemRow, error: iErr } = await supabase
+          .from("crm_order_items")
+          .select("id, order_id, product_id, quantity")
+          .eq("id", line.itemId)
+          .maybeSingle();
+        if (iErr || !itemRow) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: iErr?.message ?? "Позицію не знайдено" };
+        }
+        if (Number(itemRow.order_id) !== orderId) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: "Позиція не належить цій угоді" };
+        }
+        const pid = itemRow.product_id != null ? Number(itemRow.product_id) : null;
+        if (pid == null || pid <= 0) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: "Потрібен мапінг товару CRM перед відвантаженням" };
+        }
+        const maxLine = Number(itemRow.quantity);
+        if (line.quantity > maxLine) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: `Кількість більша за в угоді (макс. ${maxLine})` };
+        }
+
+        const notes = `Відвантаження черги: ${customerName || "клієнт"}, угода ${crmKey}`;
+        const res = await deductInventoryForQueueShipment(supabase, {
+          productId: pid,
+          quantity: line.quantity,
+          notes,
+          warehouseId,
+        });
+        if (!res.ok) {
+          await rollbackAppliedShipmentSteps(supabase, applied);
+          return { success: false, error: res.error };
+        }
+        applied.push(res.step);
+      }
+
+      const stageId = getPostShipmentStageId();
+      try {
+        await updateKeepinAgreementStage(crmKey, stageId);
+      } catch (e) {
+        await rollbackAppliedShipmentSteps(supabase, applied);
+        const msg = e instanceof Error ? e.message : "Помилка KeepinCRM";
+        return { success: false, error: msg };
+      }
+
+      try {
+        await syncSingleKeepinAgreement(supabase, crmKey);
+      } catch (syncErr) {
+        console.error("fulfillQueueShipmentAction syncSingleKeepinAgreement:", syncErr);
+      }
+    }
+
+    revalidatePath("/shipments");
+    revalidatePath("/inventory");
+    return { success: true };
+  } catch (e) {
+    await rollbackAppliedShipmentSteps(supabase, applied);
+    const msg = e instanceof Error ? e.message : "Помилка відвантаження";
+    return { success: false, error: msg };
+  }
 }
 
 export async function getShipmentQueue(): Promise<CrmOrderWithDetails[]> {

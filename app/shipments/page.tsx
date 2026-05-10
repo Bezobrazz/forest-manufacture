@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   createLocalShipmentCardAction,
   deleteLocalShipmentCardAction,
+  fulfillQueueShipmentAction,
   getKeepinSyncJobStatusAction,
   getCrmUnmappedProductsAction,
   getShipmentProductsAction,
@@ -99,6 +100,10 @@ export default function ShipmentsPage() {
   ]);
   const [isSavingLocalCard, setIsSavingLocalCard] = useState(false);
   const [deletingLocalId, setDeletingLocalId] = useState<string | null>(null);
+  const [fulfillOpen, setFulfillOpen] = useState(false);
+  const [fulfillOrder, setFulfillOrder] = useState<CrmOrderWithDetails | null>(null);
+  const [fulfillQtyByItemId, setFulfillQtyByItemId] = useState<Record<number, string>>({});
+  const [fulfillSubmitting, setFulfillSubmitting] = useState(false);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadPage = async () => {
@@ -146,6 +151,22 @@ export default function ShipmentsPage() {
     }
     return m;
   }, [inventory]);
+
+  const openFulfillDialog = (order: CrmOrderWithDetails) => {
+    setFulfillOrder(order);
+    const next: Record<number, string> = {};
+    for (const it of order.items) {
+      if (it.product_id == null) {
+        next[it.id] = "0";
+        continue;
+      }
+      const stock = inventoryMap[it.product_id] ?? 0;
+      const cap = Math.min(Number(it.quantity) || 0, stock);
+      next[it.id] = String(Math.max(0, cap));
+    }
+    setFulfillQtyByItemId(next);
+    setFulfillOpen(true);
+  };
 
   const forecasts = useMemo(
     () =>
@@ -585,6 +606,20 @@ export default function ShipmentsPage() {
                     {f.missing.length > 0 ? (
                       <Badge variant="outline">Мапінг / норма</Badge>
                     ) : null}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 shrink-0"
+                      disabled={!f.order.items.length}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openFulfillDialog(f.order);
+                      }}
+                    >
+                      Відвантажити
+                    </Button>
                     {isLocalShipmentOrderCrmId(crmId) ? (
                       <Button
                         type="button"
@@ -636,6 +671,143 @@ export default function ShipmentsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={fulfillOpen}
+        onOpenChange={(open) => {
+          setFulfillOpen(open);
+          if (!open) setFulfillOrder(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-md max-h-[90vh] overflow-y-auto"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle>Відвантаження з черги</DialogTitle>
+            <DialogDescription>
+              {fulfillOrder && isLocalShipmentOrderCrmId(fulfillOrder.crm_id)
+                ? "Списання вказаних кількостей зі складу та рядки в історії операцій (без змін у CRM)."
+                : "Списання зі складу та запис у історії операцій. У KeepinCRM етап угоди буде змінено на «Чекаємо оплату»."}
+            </DialogDescription>
+          </DialogHeader>
+          {fulfillOrder ? (
+            <div className="space-y-3 py-1">
+              <div className="text-sm font-medium">{fulfillOrder.customer.name}</div>
+              <div className="space-y-2">
+                {fulfillOrder.items.map((it) => {
+                  const stock =
+                    it.product_id != null ? inventoryMap[it.product_id] ?? 0 : 0;
+                  const orderMax = Number(it.quantity);
+                  const raw = fulfillQtyByItemId[it.id] ?? "0";
+                  const unmapped = it.product_id == null;
+                  return (
+                    <div
+                      key={it.id}
+                      className="grid grid-cols-1 gap-1 sm:grid-cols-[1fr_120px] sm:items-center border-b border-border/60 pb-2 last:border-0"
+                    >
+                      <div className="text-sm min-w-0">
+                        <span className="text-muted-foreground break-words">
+                          {it.product?.name ?? it.crm_product_ref ?? "Позиція"}
+                        </span>
+                        {unmapped ? (
+                          <span className="block text-xs text-destructive">
+                            Немає мапінгу товару
+                          </span>
+                        ) : (
+                          <span className="block text-xs text-muted-foreground">
+                            Склад: {stock} шт · у картці: {orderMax} шт
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Кількість</Label>
+                        <Input
+                          className="h-9"
+                          inputMode="decimal"
+                          disabled={unmapped}
+                          value={raw}
+                          onChange={(e) =>
+                            setFulfillQtyByItemId((prev) => ({
+                              ...prev,
+                              [it.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFulfillOpen(false)}
+              disabled={fulfillSubmitting}
+            >
+              Скасувати
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                fulfillSubmitting ||
+                !fulfillOrder ||
+                !fulfillOrder.items.some((it) => {
+                  if (it.product_id == null) return false;
+                  const q = Number(
+                    String(fulfillQtyByItemId[it.id] ?? "0").replace(",", ".")
+                  );
+                  return Number.isFinite(q) && q > 0;
+                })
+              }
+              onClick={async () => {
+                if (!fulfillOrder) return;
+                const lines = fulfillOrder.items
+                  .map((it) => ({
+                    itemId: it.id,
+                    quantity: Number(
+                      String(fulfillQtyByItemId[it.id] ?? "0").replace(",", ".")
+                    ),
+                  }))
+                  .filter((l) => Number.isFinite(l.quantity) && l.quantity > 0);
+                if (!lines.length) {
+                  toast.error("Вкажіть кількість");
+                  return;
+                }
+                for (const it of fulfillOrder.items) {
+                  if (it.product_id == null) continue;
+                  const line = lines.find((x) => x.itemId === it.id);
+                  if (!line) continue;
+                  const stock = inventoryMap[it.product_id] ?? 0;
+                  const maxLine = Number(it.quantity);
+                  if (line.quantity > stock || line.quantity > maxLine) {
+                    toast.error("Перевірте кількість", {
+                      description: "Не більше залишку на складі та позиції в картці.",
+                    });
+                    return;
+                  }
+                }
+                setFulfillSubmitting(true);
+                const res = await fulfillQueueShipmentAction(fulfillOrder.crm_id, lines);
+                setFulfillSubmitting(false);
+                if (!res.success) {
+                  toast.error("Не вдалося відвантажити", { description: res.error });
+                  return;
+                }
+                toast.success("Відвантаження виконано");
+                setFulfillOpen(false);
+                setFulfillOrder(null);
+                await loadPage();
+              }}
+            >
+              Підтвердити відвантаження
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={localCardDialogOpen} onOpenChange={setLocalCardDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

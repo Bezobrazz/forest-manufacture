@@ -112,6 +112,18 @@ export async function fetchKeepinAgreementListPage(
   });
 }
 
+/** Оновити етап угоди (наприклад після відвантаження — «Чекаємо оплату»). */
+export async function updateKeepinAgreementStage(
+  crmId: string,
+  stageId: number
+): Promise<void> {
+  const id = encodeURIComponent(crmId);
+  await keepinJson<unknown>(`/agreements/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ stage_id: stageId }),
+  });
+}
+
 export async function fetchKeepinAgreementRaw(
   crmId: string
 ): Promise<Record<string, unknown> | null> {
