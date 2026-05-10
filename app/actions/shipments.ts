@@ -559,6 +559,54 @@ export async function getShipmentProductsAction(): Promise<
   return data as Pick<Product, "id" | "name" | "description">[];
 }
 
+export type ShippedQueueCard = {
+  notes: string;
+  created_at: string;
+  totalQuantity: number;
+  rowsCount: number;
+};
+
+export async function getShippedQueueCardsAction(): Promise<ShippedQueueCard[]> {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("inventory_transactions")
+    .select("notes, created_at, quantity")
+    .eq("transaction_type", "shipment")
+    .ilike("notes", "Відвантаження черги:%")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    if (error) console.error("getShippedQueueCardsAction:", error);
+    return [];
+  }
+
+  const grouped = new Map<
+    string,
+    { notes: string; created_at: string; totalQuantity: number; rowsCount: number }
+  >();
+  for (const row of data) {
+    const notes =
+      typeof row.notes === "string" ? row.notes.trim() : "Відвантаження черги";
+    const createdAt =
+      typeof row.created_at === "string" ? row.created_at : new Date().toISOString();
+    const key = `${createdAt}|${notes}`;
+    const prev = grouped.get(key);
+    if (prev) {
+      prev.totalQuantity += Math.abs(Number(row.quantity) || 0);
+      prev.rowsCount += 1;
+    } else {
+      grouped.set(key, {
+        notes,
+        created_at: createdAt,
+        totalQuantity: Math.abs(Number(row.quantity) || 0),
+        rowsCount: 1,
+      });
+    }
+  }
+
+  return [...grouped.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
 export async function reorderShipmentQueueAction(
   crmIdsInOrder: string[]
 ): Promise<{ success: boolean; error?: string }> {

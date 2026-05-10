@@ -10,6 +10,7 @@ import {
   createLocalShipmentCardAction,
   deleteLocalShipmentCardAction,
   fulfillQueueShipmentAction,
+  getShippedQueueCardsAction,
   getKeepinSyncJobStatusAction,
   getCrmUnmappedProductsAction,
   getShipmentProductsAction,
@@ -18,6 +19,7 @@ import {
   reorderShipmentQueueAction,
   saveCrmProductMappingAction,
   startKeepinSyncJobAction,
+  type ShippedQueueCard,
   updateLocalShipmentCardAction,
 } from "@/app/actions/shipments";
 import { getInventory } from "@/app/actions";
@@ -102,6 +104,7 @@ export default function ShipmentsPage() {
   const [editingLocalCardId, setEditingLocalCardId] = useState<number | null>(null);
   const [isSavingLocalCard, setIsSavingLocalCard] = useState(false);
   const [deletingLocalId, setDeletingLocalId] = useState<string | null>(null);
+  const [shippedCards, setShippedCards] = useState<ShippedQueueCard[]>([]);
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [fulfillOrder, setFulfillOrder] = useState<CrmOrderWithDetails | null>(null);
   const [fulfillQtyByItemId, setFulfillQtyByItemId] = useState<Record<number, string>>({});
@@ -120,12 +123,14 @@ export default function ShipmentsPage() {
       setInventory(inv);
       setQueue(q);
       setAvgDaily(avg);
-      const [unmapped, productsList] = await Promise.all([
+      const [unmapped, productsList, shipped] = await Promise.all([
         getCrmUnmappedProductsAction(),
         getShipmentProductsAction(),
+        getShippedQueueCardsAction(),
       ]);
       setUnmappedRefs(unmapped);
       setProducts(productsList);
+      setShippedCards(shipped);
     } catch (err: unknown) {
       console.error("ShipmentsPage load:", err);
       if (
@@ -221,6 +226,14 @@ export default function ShipmentsPage() {
   const selectedDayKey = dateToYYYYMMDD(selectedDay);
 
   const selectedDayEtaList = forecastsByEta.get(selectedDayKey) ?? [];
+  const shippedCardsInMonth = useMemo(() => {
+    const y = selectedMonth.getFullYear();
+    const m = selectedMonth.getMonth();
+    return shippedCards.filter((x) => {
+      const d = new Date(x.created_at);
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
+  }, [shippedCards, selectedMonth]);
 
   const weekStart = startOfWeek(weekAnchor, { weekStartsOn: WEEK_STARTS_SAT });
   const weekDays = [...Array(7)].map((_, i) => addDays(weekStart, i));
@@ -424,30 +437,32 @@ export default function ShipmentsPage() {
 
         <TabsContent value="month" className="space-y-6">
           <div className="flex flex-col gap-6 md:flex-row md:items-start">
-            <Card className="flex-1 max-w-fit">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Прогноз по днях</CardTitle>
-                <CardDescription>Дні з хоча б одним відвантаженням підсвічені.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Calendar
-                  mode="single"
-                  month={selectedMonth}
-                  onMonthChange={setSelectedMonth}
-                  locale={uk}
-                  weekStartsOn={WEEK_STARTS_SAT}
-                  selected={selectedDay}
-                  onSelect={(d) => {
-                    if (d) setSelectedDay(startOfDay(d));
-                  }}
-                  modifiers={{ hasShipment: calendarMarkedDates }}
-                  modifiersClassNames={{
-                    hasShipment:
-                      "font-semibold text-primary relative after:pointer-events-none after:absolute after:left-1/2 after:bottom-0.5 after:h-1.5 after:w-1.5 after:-translate-x-1/2 after:rounded-full after:bg-primary",
-                  }}
-                />
-              </CardContent>
-            </Card>
+            <div className="flex-1 max-w-fit">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Прогноз по днях</CardTitle>
+                  <CardDescription>Дні з хоча б одним відвантаженням підсвічені.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Calendar
+                    mode="single"
+                    month={selectedMonth}
+                    onMonthChange={setSelectedMonth}
+                    locale={uk}
+                    weekStartsOn={WEEK_STARTS_SAT}
+                    selected={selectedDay}
+                    onSelect={(d) => {
+                      if (d) setSelectedDay(startOfDay(d));
+                    }}
+                    modifiers={{ hasShipment: calendarMarkedDates }}
+                    modifiersClassNames={{
+                      hasShipment:
+                        "font-semibold text-primary relative after:pointer-events-none after:absolute after:left-1/2 after:bottom-0.5 after:h-1.5 after:w-1.5 after:-translate-x-1/2 after:rounded-full after:bg-primary",
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="flex-1 space-y-3 min-h-[280px]">
               <Card>
@@ -465,12 +480,34 @@ export default function ShipmentsPage() {
                       Оберіть день з позначкою в календарі або перевірте таб «Черга».
                     </p>
                   ) : (
-                    selectedDayEtaList.map(renderForecastMini)
+                    selectedDayEtaList.map((f) => renderForecastMini(f, openFulfillDialog))
                   )}
                 </CardContent>
               </Card>
             </div>
           </div>
+          <Card className="w-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Відвантажені картки</CardTitle>
+              <CardDescription>
+                За {selectedMonth.toLocaleDateString("uk-UA", { month: "long", year: "numeric" })}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[320px] overflow-y-auto">
+              {shippedCardsInMonth.length === 0 ? (
+                <p className="text-sm text-muted-foreground">У цьому місяці відвантажень поки немає.</p>
+              ) : (
+                shippedCardsInMonth.map((card, idx) => (
+                  <div key={`${card.created_at}-${idx}`} className="rounded-md border p-2 text-sm">
+                    <div className="font-medium truncate">{card.notes.replace(/^Відвантаження черги:\s*/i, "")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDate(card.created_at)} · позицій: {card.rowsCount} · всього: {card.totalQuantity} шт
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="week">
@@ -1021,7 +1058,10 @@ function dateToKyivMidnightIso(d: Date): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}T12:00:00.000Z`;
 }
 
-function renderForecastMini(f: ShipmentForecast) {
+function renderForecastMini(
+  f: ShipmentForecast,
+  onFulfill: (order: CrmOrderWithDetails) => void
+) {
   const itemsPreview = f.order.items.slice(0, 3);
   const restItemsCount = Math.max(f.order.items.length - itemsPreview.length, 0);
   const totalQty = f.order.items.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
@@ -1030,9 +1070,12 @@ function renderForecastMini(f: ShipmentForecast) {
     <div key={f.order.crm_id} className="rounded-md border p-3 text-sm space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="font-medium">Клієнт: {f.order.customer.name}</div>
-        <Badge variant={f.isReady ? "default" : f.etaDate ? "secondary" : "destructive"}>
-          {f.isReady ? "Готово сьогодні" : f.etaDate ? "Очікує виробництва" : "Без ETA"}
-        </Badge>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Badge variant={f.isReady ? "default" : f.etaDate ? "secondary" : "destructive"}>
+            {f.isReady ? "Готово сьогодні" : f.etaDate ? "Очікує виробництва" : "Без ETA"}
+          </Badge>
+          <Badge variant="outline">К-сть: {totalQty} шт</Badge>
+        </div>
       </div>
 
       <div className="text-muted-foreground text-xs flex flex-wrap gap-x-3 gap-y-1">
@@ -1084,6 +1127,18 @@ function renderForecastMini(f: ShipmentForecast) {
           {f.missing.length > 2 ? <div>• ще {f.missing.length - 2} позицій</div> : null}
         </div>
       )}
+      <div className="pt-1 flex justify-end">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="h-8"
+          disabled={!f.order.items.length}
+          onClick={() => onFulfill(f.order)}
+        >
+          Відвантажити
+        </Button>
+      </div>
     </div>
   );
 }
