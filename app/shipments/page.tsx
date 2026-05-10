@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
-import { GripVertical, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { GripVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,6 +18,7 @@ import {
   reorderShipmentQueueAction,
   saveCrmProductMappingAction,
   startKeepinSyncJobAction,
+  updateLocalShipmentCardAction,
 } from "@/app/actions/shipments";
 import { getInventory } from "@/app/actions";
 import { PreviousPageButton } from "@/components/previous-page-button";
@@ -98,6 +99,7 @@ export default function ShipmentsPage() {
   const [localCardLines, setLocalCardLines] = useState<{ productId: string; quantity: string }[]>([
     { productId: "", quantity: "" },
   ]);
+  const [editingLocalCardId, setEditingLocalCardId] = useState<number | null>(null);
   const [isSavingLocalCard, setIsSavingLocalCard] = useState(false);
   const [deletingLocalId, setDeletingLocalId] = useState<string | null>(null);
   const [fulfillOpen, setFulfillOpen] = useState(false);
@@ -166,6 +168,27 @@ export default function ShipmentsPage() {
     }
     setFulfillQtyByItemId(next);
     setFulfillOpen(true);
+  };
+
+  const openCreateLocalCardDialog = () => {
+    setEditingLocalCardId(null);
+    setLocalCardTitle("");
+    setLocalCardLines([{ productId: "", quantity: "" }]);
+    setLocalCardDialogOpen(true);
+  };
+
+  const openEditLocalCardDialog = (order: CrmOrderWithDetails) => {
+    const localId = parseLocalShipmentOrderId(order.crm_id);
+    if (localId == null) return;
+    setEditingLocalCardId(localId);
+    setLocalCardTitle(order.customer.name);
+    setLocalCardLines(
+      order.items.map((it) => ({
+        productId: it.product_id != null ? String(it.product_id) : "",
+        quantity: String(Number(it.quantity) || 0),
+      }))
+    );
+    setLocalCardDialogOpen(true);
   };
 
   const forecasts = useMemo(
@@ -496,11 +519,13 @@ export default function ShipmentsPage() {
               Перетягніть картки за ручку або за всю картку. Порядок зберігається в базі і впливає на
               ETA (нова локальна картка з&apos;являється на початку; далі позицію можна змінити).
             </p>
-            <Button type="button" variant="secondary" size="sm" className="shrink-0 gap-1" onClick={() => {
-              setLocalCardTitle("");
-              setLocalCardLines([{ productId: "", quantity: "" }]);
-              setLocalCardDialogOpen(true);
-            }}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0 gap-1"
+              onClick={openCreateLocalCardDialog}
+            >
               <Plus className="h-4 w-4" />
               Локальна картка
             </Button>
@@ -509,6 +534,7 @@ export default function ShipmentsPage() {
             const crmId = f.order.crm_id;
             const isDragging = draggingQueueCrmId === crmId;
             const isDropOver = dropTargetCrmId === crmId;
+            const totalQty = f.order.items.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
             return (
               <Card
                 key={crmId}
@@ -590,7 +616,8 @@ export default function ShipmentsPage() {
                       </CardDescription>
                     </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap items-center">
+                  <div className="flex flex-col gap-2 items-end">
+                    <div className="flex gap-2 flex-wrap items-center justify-end">
                     {isLocalShipmentOrderCrmId(crmId) ? (
                       <Badge variant="outline" className="border-amber-500/60 text-amber-700 dark:text-amber-400">
                         Локальна
@@ -606,6 +633,64 @@ export default function ShipmentsPage() {
                     {f.missing.length > 0 ? (
                       <Badge variant="outline">Мапінг / норма</Badge>
                     ) : null}
+                    <Badge variant="outline">К-сть: {totalQty} шт</Badge>
+                    </div>
+                    <div className="flex gap-2 flex-wrap items-center justify-end">
+                    {isLocalShipmentOrderCrmId(crmId) ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditLocalCardDialog(f.order);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1" />
+                          Редагувати
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-muted-foreground hover:text-destructive"
+                          disabled={deletingLocalId === crmId}
+                          aria-label="Видалити локальну картку"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const pid = parseLocalShipmentOrderId(crmId);
+                            if (pid == null) return;
+                            setDeletingLocalId(crmId);
+                            const res = await deleteLocalShipmentCardAction(pid);
+                            setDeletingLocalId(null);
+                            if (!res.success) {
+                              toast.error("Не вдалося видалити", { description: res.error });
+                              return;
+                            }
+                            toast.success("Картку видалено");
+                            await loadPage();
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Видалити
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {f.order.items.map((it) => (
+                    <div key={it.id} className="flex justify-between gap-2">
+                      <span className="text-muted-foreground truncate">
+                        {it.product?.name ?? it.crm_product_ref ?? "—"}
+                      </span>
+                      <span className="shrink-0">{it.quantity} шт</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 flex justify-end">
                     <Button
                       type="button"
                       variant="secondary"
@@ -620,43 +705,7 @@ export default function ShipmentsPage() {
                     >
                       Відвантажити
                     </Button>
-                    {isLocalShipmentOrderCrmId(crmId) ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        disabled={deletingLocalId === crmId}
-                        aria-label="Видалити локальну картку"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const pid = parseLocalShipmentOrderId(crmId);
-                          if (pid == null) return;
-                          setDeletingLocalId(crmId);
-                          const res = await deleteLocalShipmentCardAction(pid);
-                          setDeletingLocalId(null);
-                          if (!res.success) {
-                            toast.error("Не вдалося видалити", { description: res.error });
-                            return;
-                          }
-                          toast.success("Картку видалено");
-                          await loadPage();
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : null}
                   </div>
-                </CardHeader>
-                <CardContent className="text-sm space-y-1">
-                  {f.order.items.map((it) => (
-                    <div key={it.id} className="flex justify-between gap-2">
-                      <span className="text-muted-foreground truncate">
-                        {it.product?.name ?? it.crm_product_ref ?? "—"}
-                      </span>
-                      <span className="shrink-0">{it.quantity} шт</span>
-                    </div>
-                  ))}
                 </CardContent>
               </Card>
             );
@@ -809,12 +858,20 @@ export default function ShipmentsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={localCardDialogOpen} onOpenChange={setLocalCardDialogOpen}>
+      <Dialog
+        open={localCardDialogOpen}
+        onOpenChange={(open) => {
+          setLocalCardDialogOpen(open);
+          if (!open) setEditingLocalCardId(null);
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Локальна картка відвантаження</DialogTitle>
+            <DialogTitle>
+              {editingLocalCardId ? "Редагування локальної картки" : "Локальна картка відвантаження"}
+            </DialogTitle>
             <DialogDescription>
-              Буде врахована в прогнозі ETA з найвищим пріоритетом. Дані не надсилаються в CRM.
+              Дані не надсилаються в CRM. Картка використовується для планування й розрахунку ETA.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -921,14 +978,20 @@ export default function ShipmentsPage() {
                       l.quantity > 0
                   );
                 setIsSavingLocalCard(true);
-                const res = await createLocalShipmentCardAction(localCardTitle, lines);
+                const res =
+                  editingLocalCardId == null
+                    ? await createLocalShipmentCardAction(localCardTitle, lines)
+                    : await updateLocalShipmentCardAction(editingLocalCardId, localCardTitle, lines);
                 setIsSavingLocalCard(false);
                 if (!res.success) {
                   toast.error("Не вдалося зберегти", { description: res.error });
                   return;
                 }
-                toast.success("Локальну картку додано");
+                toast.success(
+                  editingLocalCardId == null ? "Локальну картку додано" : "Локальну картку оновлено"
+                );
                 setLocalCardDialogOpen(false);
+                setEditingLocalCardId(null);
                 await loadPage();
               }}
             >

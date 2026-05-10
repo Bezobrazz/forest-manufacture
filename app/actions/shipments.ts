@@ -696,6 +696,75 @@ export async function createLocalShipmentCardAction(
   return { success: true };
 }
 
+export async function updateLocalShipmentCardAction(
+  planningOrderId: number,
+  title: string,
+  lines: { product_id: number; quantity: number }[]
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  if (!Number.isFinite(planningOrderId) || planningOrderId <= 0) {
+    return { success: false, error: "Некоректний ідентифікатор картки" };
+  }
+
+  const name = title.trim();
+  if (!name) {
+    return { success: false, error: "Вкажіть назву картки" };
+  }
+
+  const cleanLines = lines
+    .map((l) => ({
+      product_id: Number(l.product_id),
+      quantity: Number(l.quantity),
+    }))
+    .filter(
+      (l) =>
+        Number.isFinite(l.product_id) &&
+        l.product_id > 0 &&
+        Number.isFinite(l.quantity) &&
+        l.quantity > 0
+    );
+
+  if (cleanLines.length === 0) {
+    return { success: false, error: "Додайте хоча б одну позицію з кількістю" };
+  }
+
+  const supabase = await createServerClient();
+  const now = new Date().toISOString();
+
+  const { error: updateErr } = await supabase
+    .from("shipment_planning_orders")
+    .update({ title: name, updated_at: now })
+    .eq("id", planningOrderId);
+  if (updateErr) {
+    return { success: false, error: updateErr.message };
+  }
+
+  const { error: deleteItemsErr } = await supabase
+    .from("shipment_planning_order_items")
+    .delete()
+    .eq("order_id", planningOrderId);
+  if (deleteItemsErr) {
+    return { success: false, error: deleteItemsErr.message };
+  }
+
+  const rows = cleanLines.map((l) => ({
+    order_id: planningOrderId,
+    product_id: l.product_id,
+    quantity: l.quantity,
+  }));
+  const { error: insertItemsErr } = await supabase
+    .from("shipment_planning_order_items")
+    .insert(rows);
+  if (insertItemsErr) {
+    return { success: false, error: insertItemsErr.message };
+  }
+
+  revalidatePath("/shipments");
+  return { success: true };
+}
+
 export async function deleteLocalShipmentCardAction(planningOrderId: number): Promise<{
   success: boolean;
   error?: string;
