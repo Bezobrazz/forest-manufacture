@@ -143,6 +143,8 @@ export interface CrmOrder {
   customer_id: number;
   crm_status: string | null;
   crm_created_at: string;
+  /** Менше значення = вищий пріоритет у черзі відвантажень */
+  queue_rank: number;
   notes: string | null;
   synced_at: string;
   created_at: string;

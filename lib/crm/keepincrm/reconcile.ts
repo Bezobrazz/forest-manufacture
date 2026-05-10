@@ -84,6 +84,21 @@ function resolveProductId(
   return byContains?.id ?? null;
 }
 
+async function nextQueueRank(supabase: SupabaseClient): Promise<number> {
+  const { data } = await supabase
+    .from("crm_orders")
+    .select("queue_rank")
+    .order("queue_rank", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const max =
+    typeof data?.queue_rank === "number" && Number.isFinite(data.queue_rank)
+      ? data.queue_rank
+      : -1;
+  return max + 1;
+}
+
 async function upsertParsedAgreement(
   supabase: SupabaseClient,
   parsed: ParsedKeepinAgreement,
@@ -113,6 +128,17 @@ async function upsertParsedAgreement(
 
   const customerId = Number(custRow.id);
 
+  const { data: existingOrder } = await supabase
+    .from("crm_orders")
+    .select("queue_rank")
+    .eq("crm_id", parsed.crm_id)
+    .maybeSingle();
+
+  const queue_rank =
+    typeof existingOrder?.queue_rank === "number"
+      ? existingOrder.queue_rank
+      : await nextQueueRank(supabase);
+
   const { data: ordRow, error: ordErr } = await supabase
     .from("crm_orders")
     .upsert(
@@ -121,6 +147,7 @@ async function upsertParsedAgreement(
         customer_id: customerId,
         crm_status: parsed.crm_status,
         crm_created_at: parsed.crm_created_at_iso,
+        queue_rank,
         notes: parsed.notes,
         synced_at: now,
       },

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
-import { RefreshCw } from "lucide-react";
+import { GripVertical, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -12,6 +12,7 @@ import {
   getShipmentProductsAction,
   getShipmentQueue,
   getAvgDailyProductionByProduct,
+  reorderShipmentQueueAction,
   saveCrmProductMappingAction,
   startKeepinSyncJobAction,
 } from "@/app/actions/shipments";
@@ -75,6 +76,9 @@ export default function ShipmentsPage() {
   const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [syncHint, setSyncHint] = useState<string>("");
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const [draggingQueueCrmId, setDraggingQueueCrmId] = useState<string | null>(null);
+  const [dropTargetCrmId, setDropTargetCrmId] = useState<string | null>(null);
+  const [isSavingQueueOrder, setIsSavingQueueOrder] = useState(false);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadPage = async () => {
@@ -251,8 +255,9 @@ export default function ShipmentsPage() {
         <div>
           <h1 className="text-3xl font-bold">Календар відвантажень</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Прогноз ETA за середнім виробництво за 30 днів і поточним складом. Черга за датою
-            створення угоди в CRM.
+            Прогноз ETA за середнім виробництвом за 30 днів і поточним складом. Порядок черги на
+            вкладці «Черга» можна змінити вручну (вище — вищий пріоритет); за замовчуванням — за
+            датою створення угоди в CRM.
           </p>
         </div>
         <Button
@@ -444,40 +449,115 @@ export default function ShipmentsPage() {
         </TabsContent>
 
         <TabsContent value="list" className="space-y-3">
-          {forecasts.map((f) => (
-            <Card key={f.order.crm_id}>
-              <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2 flex-wrap space-y-0">
-                <div>
-                  <CardTitle className="text-base">{f.order.customer.name}</CardTitle>
-                  <CardDescription className="text-xs">
-                    Угода #{f.order.crm_id}, створено {formatDate(f.order.crm_created_at)}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {f.etaDate ? (
-                    <Badge variant={f.isReady ? "default" : "secondary"}>
-                      ETA {formatDate(`${f.etaDate}T12:00:00.000Z`)}
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive">Без ETA</Badge>
-                  )}
-                  {f.missing.length > 0 ? (
-                    <Badge variant="outline">Мапінг / норма</Badge>
-                  ) : null}
-                </div>
-              </CardHeader>
-              <CardContent className="text-sm space-y-1">
-                {f.order.items.map((it) => (
-                  <div key={it.id} className="flex justify-between gap-2">
-                    <span className="text-muted-foreground truncate">
-                      {it.product?.name ?? it.crm_product_ref ?? "—"}
-                    </span>
-                    <span className="shrink-0">{it.quantity} шт</span>
+          <p className="text-xs text-muted-foreground -mt-1 mb-2">
+            Перетягніть карточки за ручку або за всю картку. Після відпускання порядок зберігається в
+            базі і впливає на розрахунок ETA.
+          </p>
+          {forecasts.map((f) => {
+            const crmId = f.order.crm_id;
+            const isDragging = draggingQueueCrmId === crmId;
+            const isDropOver = dropTargetCrmId === crmId;
+            return (
+              <Card
+                key={crmId}
+                draggable={!isSavingQueueOrder}
+                onDragStart={(e) => {
+                  setDraggingQueueCrmId(crmId);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", crmId);
+                }}
+                onDragEnd={() => {
+                  setDraggingQueueCrmId(null);
+                  setDropTargetCrmId(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropTargetCrmId((prev) => (prev === crmId ? prev : crmId));
+                }}
+                onDragLeave={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                  setDropTargetCrmId((prev) => (prev === crmId ? null : prev));
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setDropTargetCrmId(null);
+                  const draggedId = e.dataTransfer.getData("text/plain").trim();
+                  if (!draggedId || draggedId === crmId) {
+                    setDraggingQueueCrmId(null);
+                    return;
+                  }
+                  const ids = forecasts.map((x) => x.order.crm_id);
+                  const nextIds = reorderCrmIds(ids, draggedId, crmId);
+                  const byId = new Map(queue.map((o) => [o.crm_id, o]));
+                  const restored = [...queue];
+                  const optimistic = nextIds.map((id, idx) => {
+                    const row = byId.get(id);
+                    return row ? { ...row, queue_rank: idx } : null;
+                  });
+                  const nextQueue = optimistic.filter(Boolean) as CrmOrderWithDetails[];
+                  if (nextQueue.length !== nextIds.length) {
+                    toast.error("Помилка", { description: "Не вдалося оновити чергу" });
+                    setDraggingQueueCrmId(null);
+                    return;
+                  }
+                  setQueue(nextQueue);
+                  setIsSavingQueueOrder(true);
+                  const res = await reorderShipmentQueueAction(nextIds);
+                  setIsSavingQueueOrder(false);
+                  setDraggingQueueCrmId(null);
+                  if (!res.success) {
+                    setQueue(restored);
+                    toast.error("Не вдалося зберегти порядок", { description: res.error });
+                    return;
+                  }
+                  toast.success("Пріоритет черги оновлено");
+                }}
+                className={`transition-shadow ${
+                  isDragging ? "opacity-60" : ""
+                } ${isDropOver && draggingQueueCrmId && draggingQueueCrmId !== crmId ? "ring-2 ring-primary/50" : ""}`}
+              >
+                <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2 flex-wrap space-y-0">
+                  <div className="flex gap-2 min-w-0 flex-1">
+                    <div
+                      className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground select-none [&:focus-visible]:outline-none [&:focus-visible]:ring-2 [&:focus-visible]:ring-ring rounded"
+                      aria-hidden
+                    >
+                      <GripVertical className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-base">{f.order.customer.name}</CardTitle>
+                      <CardDescription className="text-xs">
+                        Угода #{crmId}, створено {formatDate(f.order.crm_created_at)}
+                      </CardDescription>
+                    </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="flex gap-2 flex-wrap">
+                    {f.etaDate ? (
+                      <Badge variant={f.isReady ? "default" : "secondary"}>
+                        ETA {formatDate(`${f.etaDate}T12:00:00.000Z`)}
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">Без ETA</Badge>
+                    )}
+                    {f.missing.length > 0 ? (
+                      <Badge variant="outline">Мапінг / норма</Badge>
+                    ) : null}
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {f.order.items.map((it) => (
+                    <div key={it.id} className="flex justify-between gap-2">
+                      <span className="text-muted-foreground truncate">
+                        {it.product?.name ?? it.crm_product_ref ?? "—"}
+                      </span>
+                      <span className="shrink-0">{it.quantity} шт</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })}
           {forecasts.length === 0 && (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground text-sm">
@@ -490,6 +570,16 @@ export default function ShipmentsPage() {
       </Tabs>
     </div>
   );
+}
+
+function reorderCrmIds(ids: string[], draggedId: string, targetId: string): string[] {
+  const i = ids.indexOf(draggedId);
+  const j = ids.indexOf(targetId);
+  if (i === -1 || j === -1 || i === j) return ids;
+  const next = [...ids];
+  const [removed] = next.splice(i, 1);
+  next.splice(j, 0, removed);
+  return next;
 }
 
 function dateToKyivMidnightIso(d: Date): string {

@@ -31,6 +31,7 @@ export async function getShipmentQueue(): Promise<CrmOrderWithDetails[]> {
       )
     `
     )
+    .order("queue_rank", { ascending: true })
     .order("crm_created_at", { ascending: true });
 
   if (error) {
@@ -195,6 +196,37 @@ export async function getShipmentProductsAction(): Promise<
     .order("name");
   if (error || !data) return [];
   return data as Pick<Product, "id" | "name" | "description">[];
+}
+
+export async function reorderShipmentQueueAction(
+  crmIdsInOrder: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  const seen = new Set<string>();
+  for (const id of crmIdsInOrder) {
+    const k = id.trim();
+    if (!k) return { success: false, error: "Порожній ідентифікатор угоди" };
+    if (seen.has(k)) return { success: false, error: "Дублікат у списку" };
+    seen.add(k);
+  }
+
+  const supabase = await createServerClient();
+
+  for (let i = 0; i < crmIdsInOrder.length; i++) {
+    const crmId = crmIdsInOrder[i].trim();
+    const { error } = await supabase
+      .from("crm_orders")
+      .update({ queue_rank: i })
+      .eq("crm_id", crmId);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  revalidatePath("/shipments");
+  return { success: true };
 }
 
 export async function saveCrmProductMappingAction(

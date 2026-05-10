@@ -9,6 +9,7 @@ const baseOrder = (over: Partial<CrmOrderWithDetails>): CrmOrderWithDetails => (
   customer_id: 1,
   crm_status: "active",
   crm_created_at: "2026-01-01T00:00:00.000Z",
+  queue_rank: 0,
   notes: null,
   synced_at: "2026-01-01T00:00:00.000Z",
   created_at: "2026-01-01T00:00:00.000Z",
