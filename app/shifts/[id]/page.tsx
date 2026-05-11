@@ -10,6 +10,7 @@ import {
   getHourlyWageExpensesForShift,
   getProducts,
   getShiftDetails,
+  updateShiftProductionReward,
 } from "@/app/actions";
 import { AddEmployeeToShift } from "@/components/add-employee-to-shift";
 import { CompleteShiftButton } from "@/components/complete-shift-button";
@@ -30,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import { formatDateTime } from "@/lib/utils";
 import {
   Box,
@@ -122,6 +124,8 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
     productName: string;
     quantity: number;
     reward: number;
+    rewardOverride: number | null;
+    effectiveReward: number;
     total: number;
   }> = [];
 
@@ -129,18 +133,21 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
 
   if (shift.production && shift.production.length > 0) {
     shift.production.forEach((item) => {
-      if (item.product.reward && item.product.reward > 0) {
-        const productWage = item.quantity * item.product.reward;
-        totalWages += productWage;
+      const baseReward = Number(item.product.reward ?? 0);
+      const rewardOverride = item.reward_override;
+      const effectiveReward = Number(rewardOverride ?? baseReward);
+      const productWage = item.quantity * effectiveReward;
+      totalWages += productWage;
 
-        wagesByProduct.push({
-          productId: item.product_id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          reward: item.product.reward,
-          total: productWage,
-        });
-      }
+      wagesByProduct.push({
+        productId: item.product_id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        reward: baseReward,
+        rewardOverride,
+        effectiveReward,
+        total: productWage,
+      });
     });
   }
 
@@ -163,6 +170,10 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   const totalCompensation = totalWages + hourlyWageExpensesTotal;
   const totalCompensationPerEmployee =
     employeeCount > 0 ? totalCompensation / employeeCount : 0;
+  const handleUpdateShiftProductionReward = async (formData: FormData) => {
+    "use server";
+    await updateShiftProductionReward(formData);
+  };
 
   return (
     <div className="container py-6">
@@ -429,9 +440,47 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                               <div className="font-medium">
                                 {item.productName}
                               </div>
-                              <div className="text-sm text-muted-foreground">
-                                {item.quantity} шт × {item.reward.toFixed(2)} грн
-                              </div>
+                              {shift.status === "active" ? (
+                                <form
+                                  action={handleUpdateShiftProductionReward}
+                                  className="mt-1 flex flex-wrap items-end gap-2"
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="shift_id"
+                                    value={shift.id}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="product_id"
+                                    value={item.productId}
+                                  />
+                                  <div className="text-sm text-muted-foreground">
+                                    {item.quantity} шт x
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    name="reward_override"
+                                    defaultValue={item.effectiveReward.toFixed(2)}
+                                    className="h-8 w-28"
+                                  />
+                                  <Button size="sm" type="submit">
+                                    Зберегти
+                                  </Button>
+                                  <div className="w-full text-xs text-muted-foreground">
+                                    Базовий тариф: {item.reward.toFixed(2)} грн
+                                    {item.rewardOverride !== null
+                                      ? " (застосовано індивідуальний тариф)"
+                                      : ""}
+                                  </div>
+                                </form>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">
+                                  {item.quantity} шт × {item.effectiveReward.toFixed(2)} грн
+                                </div>
+                              )}
                             </div>
                             <div className="font-medium">
                               {item.total.toFixed(2)} грн

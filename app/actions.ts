@@ -397,6 +397,7 @@ export async function updateProduction(formData: FormData) {
               shift_id: shiftId,
               product_id: productId,
               quantity,
+              reward_override: null,
             },
           ])
           .select();
@@ -449,6 +450,70 @@ export async function getActiveShifts(): Promise<ShiftWithDetails[]> {
   } catch (error) {
     console.error("Error in getActiveShifts:", error);
     return [];
+  }
+}
+
+export async function updateShiftProductionReward(formData: FormData) {
+  try {
+    const supabase = await createServerClient();
+
+    const shiftId = Number(formData.get("shift_id"));
+    const productId = Number(formData.get("product_id"));
+    const rewardRaw = (formData.get("reward_override") as string | null)?.trim();
+
+    if (!Number.isFinite(shiftId) || !Number.isFinite(productId)) {
+      return { success: false, error: "Некоректні дані зміни або продукції" };
+    }
+
+    const rewardOverride =
+      rewardRaw === "" || rewardRaw === null ? null : Number(rewardRaw);
+
+    if (rewardOverride !== null && (!Number.isFinite(rewardOverride) || rewardOverride < 0)) {
+      return { success: false, error: "Введіть коректну ціну за мішок" };
+    }
+
+    const { data: shift, error: shiftError } = await supabase
+      .from("shifts")
+      .select("id, status")
+      .eq("id", shiftId)
+      .maybeSingle();
+
+    if (shiftError) {
+      return { success: false, error: shiftError.message };
+    }
+
+    if (!shift) {
+      return { success: false, error: "Зміну не знайдено" };
+    }
+
+    if (shift.status !== "active") {
+      return { success: false, error: "Тариф можна змінювати лише для активної зміни" };
+    }
+
+    const { error } = await supabase
+      .from("production")
+      .update({
+        reward_override: rewardOverride,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("shift_id", shiftId)
+      .eq("product_id", productId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath(`/shifts/${shiftId}`);
+    revalidatePath("/shifts");
+    revalidatePath("/expenses");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateShiftProductionReward:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні тарифу",
+    };
   }
 }
 
@@ -4541,6 +4606,7 @@ export async function getHomePageData() {
             status,
             production(
               quantity,
+              reward_override,
               product:products(reward)
             )
           `
@@ -4588,7 +4654,7 @@ export async function getHomePageData() {
               (shiftSum: number, item: any) =>
                 shiftSum +
                 (Number(item.quantity) || 0) *
-                  (Number(item.product?.reward) || 0),
+                  (Number(item.reward_override ?? item.product?.reward) || 0),
               0
             ) ?? 0;
           return sum + shiftWage;

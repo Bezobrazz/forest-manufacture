@@ -158,8 +158,11 @@ export default async function ShiftsPage({
     let shiftWages = 0;
     if (shift.production && shift.production.length > 0) {
       shift.production.forEach((item) => {
-        if (item.product.reward && item.product.reward > 0) {
-          shiftWages += item.quantity * item.product.reward;
+        const rewardPerUnit = Number(
+          item.reward_override ?? item.product.reward ?? 0,
+        );
+        if (rewardPerUnit > 0) {
+          shiftWages += item.quantity * rewardPerUnit;
         }
       });
     }
@@ -420,11 +423,11 @@ export default async function ShiftsPage({
                           shiftDetail.production.length > 0
                         ) {
                           shiftDetail.production.forEach((item) => {
-                            if (
-                              item.product.reward &&
-                              item.product.reward > 0
-                            ) {
-                              shiftWages += item.quantity * item.product.reward;
+                            const rewardPerUnit = Number(
+                              item.reward_override ?? item.product.reward ?? 0,
+                            );
+                            if (rewardPerUnit > 0) {
+                              shiftWages += item.quantity * rewardPerUnit;
                             }
                           });
                         }

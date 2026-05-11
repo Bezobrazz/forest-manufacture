@@ -386,7 +386,8 @@ export default function ExpensesPage() {
         shift.production?.reduce(
           (sum, item) =>
             sum +
-            Number(item.quantity) * Number(item.product?.reward ?? 0),
+            Number(item.quantity) *
+              Number(item.reward_override ?? item.product?.reward ?? 0),
           0
         ) ?? 0;
       return {

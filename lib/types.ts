@@ -46,6 +46,7 @@ export interface Production {
   shift_id: number;
   product_id: number;
   quantity: number;
+  reward_override: number | null;
   created_at: string;
   updated_at: string;
   product?: Product;
