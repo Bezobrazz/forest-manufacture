@@ -3,6 +3,7 @@ import {
   Package,
   Users,
   BarChart,
+  CalendarDays,
   Boxes,
   CheckSquare,
   DollarSign,
@@ -82,6 +83,15 @@ export function Footer() {
                 >
                   <Boxes className="h-4 w-4" />
                   Склад
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/shipments"
+                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  Відвантаження
                 </Link>
               </li>
               <li>

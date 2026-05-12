@@ -589,11 +589,15 @@ export async function getShippedQueueCardsAction(): Promise<ShippedQueueCard[]> 
       typeof row.notes === "string" ? row.notes.trim() : "Відвантаження черги";
     const createdAt =
       typeof row.created_at === "string" ? row.created_at : new Date().toISOString();
-    const key = `${createdAt}|${notes}`;
+    const dayKey = createdAt.slice(0, 10);
+    const key = `${dayKey}|${notes}`;
     const prev = grouped.get(key);
     if (prev) {
       prev.totalQuantity += Math.abs(Number(row.quantity) || 0);
       prev.rowsCount += 1;
+      if (Date.parse(createdAt) > Date.parse(prev.created_at)) {
+        prev.created_at = createdAt;
+      }
     } else {
       grouped.set(key, {
         notes,
