@@ -2570,7 +2570,8 @@ const RAW_REPAYMENT_CATEGORY_NAME = "Погашення доставки (сир
 
 export async function createRawCostRepayment(
   date: string,
-  amount: number
+  amount: number,
+  comment?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!date || amount <= 0) {
@@ -2589,7 +2590,7 @@ export async function createRawCostRepayment(
       category = { id: created.id, name: created.name };
     }
 
-    await createExpense(category.id, amount, "Погашення доставки сировина", date);
+    await createExpense(category.id, amount, comment?.trim() ?? "", date);
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Помилка при збереженні";
@@ -2670,6 +2671,7 @@ export type RawRepaymentItem = {
   id: number;
   date: string;
   amount: number;
+  description: string;
 };
 
 export async function getRawRepayments(
@@ -2689,7 +2691,7 @@ export async function getRawRepayments(
 
     let query = supabase
       .from("expenses")
-      .select("id, date, amount")
+      .select("id, date, amount, description")
       .eq("category_id", category.id)
       .order("date", { ascending: false });
 
@@ -2705,6 +2707,7 @@ export async function getRawRepayments(
       id: row.id,
       date: row.date,
       amount: Number(row.amount ?? 0),
+      description: row.description ?? "",
     }));
   } catch {
     return [];
@@ -2722,7 +2725,8 @@ export async function getRawRepaymentsSum(
 export async function updateRawRepayment(
   id: number,
   date: string,
-  amount: number
+  amount: number,
+  comment?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!date || amount <= 0) {
@@ -2732,7 +2736,11 @@ export async function updateRawRepayment(
     const dateValue = new Date(date).toISOString();
     const { error } = await supabase
       .from("expenses")
-      .update({ date: dateValue, amount })
+      .update({
+        date: dateValue,
+        amount,
+        description: comment?.trim() ?? "",
+      })
       .eq("id", id);
     if (error) {
       console.error("Error updating raw repayment:", error);

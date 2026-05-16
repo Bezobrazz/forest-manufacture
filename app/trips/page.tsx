@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -125,6 +126,7 @@ export default function TripsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [repaymentDate, setRepaymentDate] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("");
+  const [repaymentComment, setRepaymentComment] = useState("");
   const [repaymentPeriodFilter, setRepaymentPeriodFilter] =
     useState<RepaymentPeriodFilter>("all");
   const [repaymentYear, setRepaymentYear] = useState<number>(new Date().getFullYear());
@@ -133,6 +135,7 @@ export default function TripsPage() {
   const [editingRepayment, setEditingRepayment] = useState<RawRepaymentItem | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editComment, setEditComment] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
@@ -232,6 +235,13 @@ export default function TripsPage() {
       setRepaymentPage(repaymentTotalPages);
     }
   }, [repaymentPage, repaymentTotalPages]);
+
+  useEffect(() => {
+    if (!editingRepayment) return;
+    setEditDate(editingRepayment.date.slice(0, 10));
+    setEditAmount(String(editingRepayment.amount));
+    setEditComment(editingRepayment.description ?? "");
+  }, [editingRepayment]);
 
   const filteredTrips = useMemo(() => {
     return trips.filter((t) => {
@@ -913,12 +923,14 @@ export default function TripsPage() {
                             const result = await createRawCostRepayment(
                               repaymentDate,
                               amount,
+                              repaymentComment,
                             );
                             setRepaymentSubmitting(false);
                             if (result.ok) {
                               toast.success("Погашення витрат збережено");
                               setRepaymentDate("");
                               setRepaymentAmount("");
+                              setRepaymentComment("");
                               refetchRepayments();
                             } else {
                               toast.error(result.error);
@@ -956,6 +968,22 @@ export default function TripsPage() {
                               onChange={(e) =>
                                 setRepaymentAmount(e.target.value)
                               }
+                            />
+                          </div>
+                          <div className="space-y-1.5 min-w-[200px] flex-1">
+                            <Label
+                              htmlFor="repayment-comment"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Коментар
+                            </Label>
+                            <Input
+                              id="repayment-comment"
+                              value={repaymentComment}
+                              onChange={(e) =>
+                                setRepaymentComment(e.target.value)
+                              }
+                              placeholder="Необов'язково"
                             />
                           </div>
                           <Button type="submit" disabled={repaymentSubmitting}>
@@ -1009,6 +1037,7 @@ export default function TripsPage() {
                                     <TableHead className="text-right">
                                       Сума
                                     </TableHead>
+                                    <TableHead>Коментар</TableHead>
                                     <TableHead className="w-[100px] text-right">
                                       Дії
                                     </TableHead>
@@ -1027,21 +1056,18 @@ export default function TripsPage() {
                                       <TableCell className="text-right tabular-nums font-medium">
                                         {formatUah(item.amount)}
                                       </TableCell>
+                                      <TableCell className="max-w-[200px] truncate text-muted-foreground">
+                                        {item.description.trim() || "—"}
+                                      </TableCell>
                                       <TableCell className="text-right">
                                         <div className="flex justify-end gap-1">
                                           <Button
                                             variant="ghost"
                                             size="icon"
                                             className="h-8 w-8"
-                                            onClick={() => {
-                                              setEditingRepayment(item);
-                                              setEditDate(
-                                                item.date.slice(0, 10),
-                                              );
-                                              setEditAmount(
-                                                String(item.amount),
-                                              );
-                                            }}
+                                            onClick={() =>
+                                              setEditingRepayment(item)
+                                            }
                                             aria-label="Редагувати"
                                           >
                                             <Pencil className="h-4 w-4" />
@@ -1143,41 +1169,12 @@ export default function TripsPage() {
                       if (!open) setEditingRepayment(null);
                     }}
                   >
-                    <DialogContent className="sm:max-w-[400px]">
+                    <DialogContent className="sm:max-w-[440px]">
                       <DialogHeader>
                         <DialogTitle>Редагувати погашення</DialogTitle>
                       </DialogHeader>
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          if (!editingRepayment) return;
-                          const amount = Number(editAmount);
-                          if (!editDate.trim()) {
-                            toast.error("Оберіть дату");
-                            return;
-                          }
-                          if (!(amount > 0)) {
-                            toast.error("Вкажіть суму більше нуля");
-                            return;
-                          }
-                          setEditSubmitting(true);
-                          const result = await updateRawRepayment(
-                            editingRepayment.id,
-                            editDate,
-                            amount,
-                          );
-                          setEditSubmitting(false);
-                          if (result.ok) {
-                            toast.success("Погашення оновлено");
-                            setEditingRepayment(null);
-                            refetchRepayments();
-                          } else {
-                            toast.error(result.error);
-                          }
-                        }}
-                        className="space-y-4 pt-2"
-                      >
-                        <div className="space-y-1.5">
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
                           <Label htmlFor="edit-date">Дата</Label>
                           <Input
                             id="edit-date"
@@ -1186,7 +1183,7 @@ export default function TripsPage() {
                             onChange={(e) => setEditDate(e.target.value)}
                           />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                           <Label htmlFor="edit-amount">Сума (грн)</Label>
                           <Input
                             id="edit-amount"
@@ -1199,19 +1196,59 @@ export default function TripsPage() {
                             }
                           />
                         </div>
-                        <DialogFooter>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setEditingRepayment(null)}
-                          >
-                            Скасувати
-                          </Button>
-                          <Button type="submit" disabled={editSubmitting}>
-                            {editSubmitting ? "Збереження…" : "Зберегти"}
-                          </Button>
-                        </DialogFooter>
-                      </form>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-comment">Коментар</Label>
+                          <Textarea
+                            id="edit-comment"
+                            rows={3}
+                            value={editComment}
+                            onChange={(e) => setEditComment(e.target.value)}
+                            placeholder="Необов'язково"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setEditingRepayment(null)}
+                        >
+                          Скасувати
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={editSubmitting}
+                          onClick={async () => {
+                            if (!editingRepayment) return;
+                            const amount = Number(editAmount);
+                            if (!editDate.trim()) {
+                              toast.error("Оберіть дату");
+                              return;
+                            }
+                            if (!(amount > 0)) {
+                              toast.error("Вкажіть суму більше нуля");
+                              return;
+                            }
+                            setEditSubmitting(true);
+                            const result = await updateRawRepayment(
+                              editingRepayment.id,
+                              editDate,
+                              amount,
+                              editComment,
+                            );
+                            setEditSubmitting(false);
+                            if (result.ok) {
+                              toast.success("Погашення оновлено");
+                              setEditingRepayment(null);
+                              refetchRepayments();
+                            } else {
+                              toast.error(result.error);
+                            }
+                          }}
+                        >
+                          {editSubmitting ? "Збереження…" : "Зберегти"}
+                        </Button>
+                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   <AlertDialog
