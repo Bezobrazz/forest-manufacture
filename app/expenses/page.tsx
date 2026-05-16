@@ -818,60 +818,64 @@ export default function ExpensesPage() {
       ? `expense-${item.expense.id}`
       : item.id;
 
+  const renderExpenseActions = (expense: Expense) => (
+    <div className="flex items-center gap-1 shrink-0">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => handleEditExpense(expense)}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          <path d="m15 5 4 4" />
+        </svg>
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => handleDeleteExpense(expense.id, expense.amount)}
+      >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </div>
+  );
+
   const renderHistoryItemCard = (item: HistoryItem) => {
     if (item.type === "expense") {
       return (
         <Card key={getHistoryItemKey(item)}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
+          <CardHeader className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-lg">
                 {item.expense.category?.name || "Без категорії"}
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="text-lg font-bold">
-                  {formatNumberWithUnit(item.expense.amount, "₴")}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleEditExpense(item.expense)}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-4 w-4"
-                  >
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                    <path d="m15 5 4 4" />
-                  </svg>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    handleDeleteExpense(item.expense.id, item.expense.amount)
-                  }
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+              <div className="text-lg font-bold shrink-0">
+                {formatNumberWithUnit(item.expense.amount, "₴")}
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {formatDateTime(item.expense.date)}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm text-muted-foreground">
+                  {formatDateTime(item.expense.date)}
+                </p>
+                {item.expense.description ? (
+                  <p className="text-sm">{item.expense.description}</p>
+                ) : null}
+              </div>
+              {renderExpenseActions(item.expense)}
+            </div>
           </CardHeader>
-          {item.expense.description ? (
-            <CardContent>
-              <p className="text-sm">{item.expense.description}</p>
-            </CardContent>
-          ) : null}
         </Card>
       );
     }
@@ -943,58 +947,29 @@ export default function ExpensesPage() {
       return (
         <div
           key={getHistoryItemKey(item)}
-          className="rounded-lg border bg-muted/20 p-4 space-y-1"
+          className="rounded-lg border bg-muted/20 p-4 space-y-2"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-semibold">
-                {item.expense.category?.name || "Без категорії"}
-              </p>
+            <p className="font-semibold min-w-0">
+              {item.expense.category?.name || "Без категорії"}
+            </p>
+            <p className="text-lg font-bold shrink-0">
+              {formatNumberWithUnit(item.expense.amount, "₴")}
+            </p>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 space-y-1">
               <p className="text-sm text-muted-foreground">
                 {formatDateTime(item.expense.date)}
               </p>
+              {item.expense.description ? (
+                <p className="text-sm text-muted-foreground">
+                  {item.expense.description}
+                </p>
+              ) : null}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <p className="text-lg font-bold">
-                {formatNumberWithUnit(item.expense.amount, "₴")}
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleEditExpense(item.expense)}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4"
-                >
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  <path d="m15 5 4 4" />
-                </svg>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() =>
-                  handleDeleteExpense(item.expense.id, item.expense.amount)
-                }
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
+            {renderExpenseActions(item.expense)}
           </div>
-          {item.expense.description ? (
-            <p className="text-sm text-muted-foreground">
-              {item.expense.description}
-            </p>
-          ) : null}
         </div>
       );
     }
