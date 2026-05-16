@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -544,6 +545,21 @@ export default function ExpensesPage() {
       count: categoryExpenses.length,
     };
   });
+
+  const sortedCategoryFilterOptions = useMemo(
+    () =>
+      [
+        { id: FILTER_PURCHASE, label: "Закупівля сировини" },
+        { id: FILTER_WAGES, label: "З/П Лінія" },
+        ...categories.map((category) => ({
+          id: category.id,
+          label: category.name,
+        })),
+      ].sort((a, b) =>
+        a.label.localeCompare(b.label, "uk", { sensitivity: "base" })
+      ),
+    [categories]
+  );
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
@@ -1490,92 +1506,36 @@ export default function ExpensesPage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="category-purchase"
-                      checked={selectedCategories.includes(FILTER_PURCHASE)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCategories([
-                            ...selectedCategories,
-                            FILTER_PURCHASE,
-                          ]);
-                        } else {
-                          setSelectedCategories(
-                            selectedCategories.filter(
-                              (id) => id !== FILTER_PURCHASE
-                            )
-                          );
-                        }
-                      }}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <label
-                      htmlFor="category-purchase"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      Закупівля сировини
-                    </label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="category-wages"
-                      checked={selectedCategories.includes(FILTER_WAGES)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCategories([
-                            ...selectedCategories,
-                            FILTER_WAGES,
-                          ]);
-                        } else {
-                          setSelectedCategories(
-                            selectedCategories.filter(
-                              (id) => id !== FILTER_WAGES
-                            )
-                          );
-                        }
-                      }}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <label
-                      htmlFor="category-wages"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      З/П Лінія
-                    </label>
-                  </div>
-                  {categories.map((category) => (
+                  {sortedCategoryFilterOptions.map((option) => (
                     <div
-                      key={category.id}
+                      key={option.id}
                       className="flex items-center space-x-2"
                     >
-                      <input
-                        type="checkbox"
-                        id={`category-${category.id}`}
-                        checked={selectedCategories.includes(category.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
+                      <Checkbox
+                        id={`category-filter-${option.id}`}
+                        checked={selectedCategories.includes(option.id)}
+                        onCheckedChange={(value) => {
+                          const isChecked = value === true;
+                          if (isChecked) {
                             setSelectedCategories([
                               ...selectedCategories,
-                              category.id,
+                              option.id,
                             ]);
                           } else {
                             setSelectedCategories(
                               selectedCategories.filter(
-                                (id) => id !== category.id
+                                (id) => id !== option.id
                               )
                             );
                           }
                         }}
-                        className="h-4 w-4 rounded border-gray-300"
+                        className="border-black data-[state=checked]:bg-black data-[state=checked]:text-white"
                       />
                       <label
-                        htmlFor={`category-${category.id}`}
+                        htmlFor={`category-filter-${option.id}`}
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                       >
-                        {category.name}
+                        {option.label}
                       </label>
                     </div>
                   ))}
