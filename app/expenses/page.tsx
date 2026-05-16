@@ -25,7 +25,12 @@ import {
 } from "@/app/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, formatDate, formatNumberWithUnit } from "@/lib/utils";
+import {
+  formatDateTime,
+  formatDate,
+  formatNumberWithUnit,
+  dateToYYYYMMDD,
+} from "@/lib/utils";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -408,8 +413,41 @@ export default function ExpensesPage() {
     | { type: "purchase"; id: string; amount: number; date: string; delivery: SupplierDelivery }
     | { type: "wage"; id: string; amount: number; date: string; shift: ShiftWithDetails };
 
+  type DayHistoryGroup = {
+    dateKey: string;
+    dateLabel: string;
+    items: HistoryItem[];
+    total: number;
+  };
+
   const getHistoryItemDate = (item: HistoryItem) =>
     item.type === "expense" ? item.expense.date : item.date;
+
+  const getHistoryItemAmount = (item: HistoryItem) =>
+    item.type === "expense" ? item.expense.amount : item.amount;
+
+  const getHistoryItemDateKey = (item: HistoryItem) =>
+    dateToYYYYMMDD(parseDate(getHistoryItemDate(item)));
+
+  const groupHistoryByDay = (items: HistoryItem[]): DayHistoryGroup[] => {
+    const groups: DayHistoryGroup[] = [];
+    for (const item of items) {
+      const dateKey = getHistoryItemDateKey(item);
+      const last = groups[groups.length - 1];
+      if (last?.dateKey === dateKey) {
+        last.items.push(item);
+        last.total += getHistoryItemAmount(item);
+      } else {
+        groups.push({
+          dateKey,
+          dateLabel: formatDate(getHistoryItemDate(item)),
+          items: [item],
+          total: getHistoryItemAmount(item),
+        });
+      }
+    }
+    return groups;
+  };
 
   const includePurchases =
     selectedCategories.length === 0 ||
@@ -444,8 +482,9 @@ export default function ExpensesPage() {
       new Date(getHistoryItemDate(a)).getTime()
   );
 
-  const totalPages = Math.ceil(combinedHistory.length / itemsPerPage);
-  const paginatedHistory = combinedHistory.slice(
+  const dayHistoryGroups = groupHistoryByDay(combinedHistory);
+  const totalPages = Math.ceil(dayHistoryGroups.length / itemsPerPage);
+  const paginatedDayGroups = dayHistoryGroups.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -469,10 +508,9 @@ export default function ExpensesPage() {
     }
   };
 
-  // Скидання пагінації при зміні періоду
   useEffect(() => {
     setCurrentPage(1);
-  }, [period]);
+  }, [period, dateRange, selectedCategories]);
 
   const totalExpensesAmount = filteredExpenses.reduce(
     (sum, expense) => sum + expense.amount,
@@ -774,6 +812,256 @@ export default function ExpensesPage() {
       </div>
     );
   }
+
+  const getHistoryItemKey = (item: HistoryItem) =>
+    item.type === "expense"
+      ? `expense-${item.expense.id}`
+      : item.id;
+
+  const renderHistoryItemCard = (item: HistoryItem) => {
+    if (item.type === "expense") {
+      return (
+        <Card key={getHistoryItemKey(item)}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">
+                {item.expense.category?.name || "Без категорії"}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="text-lg font-bold">
+                  {formatNumberWithUnit(item.expense.amount, "₴")}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleEditExpense(item.expense)}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    <path d="m15 5 4 4" />
+                  </svg>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    handleDeleteExpense(item.expense.id, item.expense.amount)
+                  }
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {formatDateTime(item.expense.date)}
+            </p>
+          </CardHeader>
+          {item.expense.description ? (
+            <CardContent>
+              <p className="text-sm">{item.expense.description}</p>
+            </CardContent>
+          ) : null}
+        </Card>
+      );
+    }
+
+    if (item.type === "wage") {
+      return (
+        <Card key={getHistoryItemKey(item)}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">З/П Лінія</CardTitle>
+              <div className="text-lg font-bold">
+                {formatNumberWithUnit(item.amount, "₴")}
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {formatDateTime(item.date)}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">
+              <Link
+                href={`/shifts/${item.shift.id}`}
+                className="text-primary hover:underline"
+              >
+                Зміна {formatDate(item.shift.shift_date)}
+              </Link>
+              {item.shift.employees?.length > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {item.shift.employees.length} прац.
+                </span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <Card key={getHistoryItemKey(item)}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Закупівля сировини</CardTitle>
+            <div className="text-lg font-bold">
+              {formatNumberWithUnit(item.amount, "₴")}
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {formatDateTime(item.date)}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm">
+            {item.delivery.supplier?.name ?? "Постачальник"} —{" "}
+            {item.delivery.product?.name ?? item.delivery.product_id}{" "}
+            {item.delivery.quantity && (
+              <span className="text-muted-foreground">
+                ({formatNumberWithUnit(Number(item.delivery.quantity), "шт")})
+              </span>
+            )}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderGroupedHistoryItem = (item: HistoryItem) => {
+    if (item.type === "expense") {
+      return (
+        <div
+          key={getHistoryItemKey(item)}
+          className="rounded-lg border bg-muted/20 p-4 space-y-1"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold">
+                {item.expense.category?.name || "Без категорії"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {formatDateTime(item.expense.date)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className="text-lg font-bold">
+                {formatNumberWithUnit(item.expense.amount, "₴")}
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleEditExpense(item.expense)}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                >
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  handleDeleteExpense(item.expense.id, item.expense.amount)
+                }
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          </div>
+          {item.expense.description ? (
+            <p className="text-sm text-muted-foreground">
+              {item.expense.description}
+            </p>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (item.type === "wage") {
+      return (
+        <div
+          key={getHistoryItemKey(item)}
+          className="rounded-lg border bg-muted/20 p-4 space-y-1"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold">З/П Лінія</p>
+              <p className="text-sm text-muted-foreground">
+                {formatDateTime(item.date)}
+              </p>
+            </div>
+            <p className="text-lg font-bold shrink-0">
+              {formatNumberWithUnit(item.amount, "₴")}
+            </p>
+          </div>
+          <p className="text-sm">
+            <Link
+              href={`/shifts/${item.shift.id}`}
+              className="text-primary hover:underline"
+            >
+              Зміна {formatDate(item.shift.shift_date)}
+            </Link>
+            {item.shift.employees?.length > 0 && (
+              <span className="text-muted-foreground">
+                {" "}
+                · {item.shift.employees.length} прац.
+              </span>
+            )}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={getHistoryItemKey(item)}
+        className="rounded-lg border bg-muted/20 p-4 space-y-1"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold">Закупівля сировини</p>
+            <p className="text-sm text-muted-foreground">
+              {formatDateTime(item.date)}
+            </p>
+          </div>
+          <p className="text-lg font-bold shrink-0">
+            {formatNumberWithUnit(item.amount, "₴")}
+          </p>
+        </div>
+        <p className="text-sm">
+          {item.delivery.supplier?.name ?? "Постачальник"} —{" "}
+          {item.delivery.product?.name ?? item.delivery.product_id}{" "}
+          {item.delivery.quantity && (
+            <span className="text-muted-foreground">
+              ({formatNumberWithUnit(Number(item.delivery.quantity), "шт")})
+            </span>
+          )}
+        </p>
+      </div>
+    );
+  };
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -1435,118 +1723,26 @@ export default function ExpensesPage() {
           </Card>
         ) : (
           <>
-            {paginatedHistory.map((item) =>
-              item.type === "expense" ? (
-                <Card key={item.expense.id}>
+            {paginatedDayGroups.map((group) =>
+              group.items.length > 1 ? (
+                <Card key={group.dateKey}>
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
-                        {item.expense.category?.name || "Без категорії"}
-                      </CardTitle>
-                      <div className="flex items-center gap-2">
-                        <div className="text-lg font-bold">
-                          {formatNumberWithUnit(item.expense.amount, "₴")}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEditExpense(item.expense)}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                          >
-                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                            <path d="m15 5 4 4" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            handleDeleteExpense(
-                              item.expense.id,
-                              item.expense.amount
-                            )
-                          }
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDateTime(item.expense.date)}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">{item.expense.description}</p>
-                  </CardContent>
-                </Card>
-              ) : item.type === "wage" ? (
-                <Card key={item.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">З/П Лінія</CardTitle>
+                      <CardTitle className="text-lg">{group.dateLabel}</CardTitle>
                       <div className="text-lg font-bold">
-                        {formatNumberWithUnit(item.amount, "₴")}
+                        {formatNumberWithUnit(group.total, "₴")}
                       </div>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {formatDateTime(item.date)}
+                      {group.items.length} записів за день
                     </p>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">
-                      <Link
-                        href={`/shifts/${item.shift.id}`}
-                        className="text-primary hover:underline"
-                      >
-                        Зміна {formatDate(item.shift.shift_date)}
-                      </Link>
-                      {item.shift.employees?.length > 0 && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {item.shift.employees.length} прац.
-                        </span>
-                      )}
-                    </p>
+                  <CardContent className="space-y-3">
+                    {group.items.map((item) => renderGroupedHistoryItem(item))}
                   </CardContent>
                 </Card>
               ) : (
-                <Card key={item.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
-                        Закупівля сировини
-                      </CardTitle>
-                      <div className="text-lg font-bold">
-                        {formatNumberWithUnit(item.amount, "₴")}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDateTime(item.date)}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm">
-                      {item.delivery.supplier?.name ?? "Постачальник"} —{" "}
-                      {item.delivery.product?.name ?? item.delivery.product_id}{" "}
-                      {item.delivery.quantity && (
-                        <span className="text-muted-foreground">
-                          ({formatNumberWithUnit(Number(item.delivery.quantity), "шт")})
-                        </span>
-                      )}
-                    </p>
-                  </CardContent>
-                </Card>
+                renderHistoryItemCard(group.items[0])
               )
             )}
 
@@ -1554,8 +1750,12 @@ export default function ExpensesPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <div className="text-sm text-muted-foreground">
-                  Показано {paginatedHistory.length} з{" "}
-                  {combinedHistory.length} записів
+                  Показано{" "}
+                  {paginatedDayGroups.reduce(
+                    (sum, group) => sum + group.items.length,
+                    0
+                  )}{" "}
+                  з {combinedHistory.length} записів
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
