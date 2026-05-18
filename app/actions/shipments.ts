@@ -490,8 +490,14 @@ export async function startKeepinSyncJobAction(): Promise<{
   if (!user) {
     return { success: false, error: "Потрібна авторизація" };
   }
-  const job = startKeepinSyncJob();
-  return { success: true, jobId: job.id };
+  try {
+    const job = await startKeepinSyncJob();
+    return { success: true, jobId: job.id };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Не вдалося стартувати sync";
+    console.error("startKeepinSyncJobAction", e);
+    return { success: false, error: msg };
+  }
 }
 
 export async function getKeepinSyncJobStatusAction(
@@ -501,7 +507,7 @@ export async function getKeepinSyncJobStatusAction(
   if (!user) {
     return { success: false, error: "Потрібна авторизація" };
   }
-  const status = getKeepinSyncJob(jobId);
+  const status = await getKeepinSyncJob(jobId);
   if (!status) {
     return { success: false, error: "Job not found" };
   }
