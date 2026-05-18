@@ -2,36 +2,49 @@
 
 import { useEffect } from "react";
 
+const EXTENSION_NOISE_PATTERNS = [
+  "runtime.lastError",
+  "message port closed",
+  "message channel closed",
+  "Extension context invalidated",
+  "asynchronous response by returning true",
+] as const;
+
+const isExtensionNoise = (message: string) =>
+  EXTENSION_NOISE_PATTERNS.some((pattern) => message.includes(pattern));
+
 /**
- * Компонент для обробки та приховання неважливих помилок runtime.lastError
- * від розширень браузера, які не впливають на функціональність додатку
+ * Приховує неважливі помилки від розширень браузера (Chrome messaging),
+ * які не впливають на функціональність додатку.
  */
 export function RuntimeErrorHandler() {
   useEffect(() => {
-    // Зберігаємо оригінальний console.error
     const originalError = console.error;
 
-    // Перевизначаємо console.error для фільтрації неважливих помилок
-    console.error = (...args: any[]) => {
-      const message = args[0]?.toString() || "";
-      
-      // Фільтруємо неважливі помилки від розширень браузера
-      if (
-        message.includes("runtime.lastError") ||
-        message.includes("message port closed") ||
-        message.includes("Extension context invalidated")
-      ) {
-        // Ігноруємо ці помилки, оскільки вони не впливають на функціональність
-        return;
-      }
-      
-      // Викликаємо оригінальний console.error для всіх інших помилок
+    console.error = (...args: unknown[]) => {
+      const message = String(args[0] ?? "");
+      if (isExtensionNoise(message)) return;
       originalError.apply(console, args);
     };
 
-    // Відновлюємо оригінальний console.error при розмонтуванні
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+            ? reason
+            : String(reason ?? "");
+      if (isExtensionNoise(message)) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+
     return () => {
       console.error = originalError;
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, []);
 
