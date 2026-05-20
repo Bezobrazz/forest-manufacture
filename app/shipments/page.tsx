@@ -609,8 +609,8 @@ export default function ShipmentsPage() {
         <TabsContent value="list" className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between -mt-1 mb-2">
             <p className="text-xs text-muted-foreground">
-              Перетягніть картки за ручку або за всю картку. Порядок зберігається в базі і впливає на
-              ETA (нова локальна картка з&apos;являється на початку; далі позицію можна змінити).
+              Черга за замовчуванням: локальні картки зверху, CRM-угоди — за датою створення (старіші
+              вище). Перетягніть картку, щоб змінити пріоритет відвантаження та ETA.
             </p>
             <Button
               type="button"

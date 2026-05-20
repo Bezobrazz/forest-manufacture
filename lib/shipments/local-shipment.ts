@@ -39,6 +39,25 @@ export function dedupeShipmentQueueOrderIds(ids: string[]): string[] {
   return out;
 }
 
+export function parseQueueCreatedAtMs(iso: string | null | undefined): number {
+  const t = Date.parse(iso ?? "");
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Порядок за замовчуванням: локальні зверху, далі CRM за датою створення (старіші вище). */
+export function compareShipmentQueueDefault(
+  a: { crm_id: string; crm_created_at: string },
+  b: { crm_id: string; crm_created_at: string }
+): number {
+  const aLocal = isLocalShipmentOrderCrmId(a.crm_id);
+  const bLocal = isLocalShipmentOrderCrmId(b.crm_id);
+  if (aLocal !== bLocal) return aLocal ? -1 : 1;
+  const aMs = parseQueueCreatedAtMs(a.crm_created_at);
+  const bMs = parseQueueCreatedAtMs(b.crm_created_at);
+  if (aMs !== bMs) return aMs - bMs;
+  return a.crm_id.localeCompare(b.crm_id);
+}
+
 /** Об’єднує дві черги за єдиним глобальним queue_rank (менше = вище пріоритет). */
 export function mergeShipmentQueueByGlobalRank(
   localOrders: CrmOrderWithDetails[],
@@ -50,8 +69,7 @@ export function mergeShipmentQueueByGlobalRank(
   ];
   combined.sort((a, b) => {
     if (a.rank !== b.rank) return a.rank - b.rank;
-    if (a.order.id !== b.order.id) return a.order.id - b.order.id;
-    return a.order.crm_id.localeCompare(b.order.crm_id);
+    return compareShipmentQueueDefault(a.order, b.order);
   });
   return combined.map((x) => x.order);
 }

@@ -15,43 +15,66 @@ import type { CrmOrderWithDetails, Product } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
 import {
+  compareShipmentQueueDefault,
   isLocalShipmentOrderCrmId,
+  LOCAL_SHIPMENT_CRM_PREFIX,
   mapPlanningOrderRowToCrmShape,
   mergeShipmentQueueByGlobalRank,
   parseLocalShipmentOrderId,
   type ShipmentPlanningOrderDb,
 } from "@/lib/shipments/local-shipment";
+import { allocateQueueRankForNewLocalCard } from "@/lib/shipments/queue-priority";
 
 async function compactGlobalShipmentQueueRanks(
   supabase: SupabaseClient
 ): Promise<{ error?: string }> {
   const { data: plans, error: pErr } = await supabase
     .from("shipment_planning_orders")
-    .select("id, queue_rank")
+    .select("id, queue_rank, created_at")
     .order("queue_rank", { ascending: true })
     .order("id", { ascending: true });
   if (pErr) return { error: pErr.message };
 
   const { data: crms, error: cErr } = await supabase
     .from("crm_orders")
-    .select("crm_id, queue_rank")
+    .select("crm_id, queue_rank, crm_created_at")
     .order("queue_rank", { ascending: true })
     .order("crm_created_at", { ascending: true });
   if (cErr) return { error: cErr.message };
 
-  type Entry = { rank: number; kind: "p" | "c"; planId: number; crmId: string | null };
+  type Entry = {
+    rank: number;
+    kind: "p" | "c";
+    planId: number;
+    crmId: string | null;
+    crm_created_at: string;
+  };
   const entries: Entry[] = [];
   for (const p of plans ?? []) {
-    entries.push({ kind: "p", rank: Number(p.queue_rank), planId: p.id, crmId: null });
+    entries.push({
+      kind: "p",
+      rank: Number(p.queue_rank),
+      planId: p.id,
+      crmId: null,
+      crm_created_at: String(p.created_at),
+    });
   }
   for (const c of crms ?? []) {
-    entries.push({ kind: "c", rank: Number(c.queue_rank), planId: 0, crmId: c.crm_id });
+    entries.push({
+      kind: "c",
+      rank: Number(c.queue_rank),
+      planId: 0,
+      crmId: c.crm_id,
+      crm_created_at: String(c.crm_created_at),
+    });
   }
+  const entryToSortKey = (e: Entry) => ({
+    crm_id: e.kind === "p" ? `${LOCAL_SHIPMENT_CRM_PREFIX}${e.planId}` : String(e.crmId),
+    crm_created_at: e.crm_created_at,
+  });
   entries.sort((a, b) => {
     if (a.rank !== b.rank) return a.rank - b.rank;
-    if (a.kind !== b.kind) return a.kind === "p" ? -1 : 1;
-    if (a.kind === "p") return a.planId - b.planId;
-    return String(a.crmId).localeCompare(String(b.crmId));
+    return compareShipmentQueueDefault(entryToSortKey(a), entryToSortKey(b));
   });
 
   const now = new Date().toISOString();
@@ -689,42 +712,9 @@ export async function createLocalShipmentCardAction(
 
   const nowTs = new Date().toISOString();
 
-  const { data: planBump, error: planBumpErr } = await supabase
-    .from("shipment_planning_orders")
-    .select("id, queue_rank")
-    .order("queue_rank", { ascending: false });
-
-  if (planBumpErr) {
-    return { success: false, error: planBumpErr.message };
-  }
-
-  for (const row of planBump ?? []) {
-    const { error: bumpErr } = await supabase
-      .from("shipment_planning_orders")
-      .update({ queue_rank: row.queue_rank + 1, updated_at: nowTs })
-      .eq("id", row.id);
-    if (bumpErr) {
-      return { success: false, error: bumpErr.message };
-    }
-  }
-
-  const { data: crmBump, error: crmBumpErr } = await supabase
-    .from("crm_orders")
-    .select("crm_id, queue_rank")
-    .order("queue_rank", { ascending: false });
-
-  if (crmBumpErr) {
-    return { success: false, error: crmBumpErr.message };
-  }
-
-  for (const row of crmBump ?? []) {
-    const { error: bumpErr } = await supabase
-      .from("crm_orders")
-      .update({ queue_rank: row.queue_rank + 1 })
-      .eq("crm_id", row.crm_id);
-    if (bumpErr) {
-      return { success: false, error: bumpErr.message };
-    }
+  const bumpRes = await allocateQueueRankForNewLocalCard(supabase);
+  if (bumpRes.error) {
+    return { success: false, error: bumpRes.error };
   }
 
   const { data: inserted, error: insErr } = await supabase

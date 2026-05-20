@@ -9,6 +9,7 @@ import {
   isAgreementInActiveStages,
   type ParsedKeepinAgreement,
 } from "@/lib/crm/keepincrm/mapper";
+import { allocateQueueRankForNewCrmOrder } from "@/lib/shipments/queue-priority";
 
 async function loadProductLookup(
   supabase: SupabaseClient
@@ -84,33 +85,6 @@ function resolveProductId(
   return byContains?.id ?? null;
 }
 
-async function nextQueueRank(supabase: SupabaseClient): Promise<number> {
-  const { data: crmMax } = await supabase
-    .from("crm_orders")
-    .select("queue_rank")
-    .order("queue_rank", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data: planMax } = await supabase
-    .from("shipment_planning_orders")
-    .select("queue_rank")
-    .order("queue_rank", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const a =
-    typeof crmMax?.queue_rank === "number" && Number.isFinite(crmMax.queue_rank)
-      ? crmMax.queue_rank
-      : -1;
-  const b =
-    typeof planMax?.queue_rank === "number" && Number.isFinite(planMax.queue_rank)
-      ? planMax.queue_rank
-      : -1;
-
-  return Math.max(a, b) + 1;
-}
-
 async function upsertParsedAgreement(
   supabase: SupabaseClient,
   parsed: ParsedKeepinAgreement,
@@ -146,10 +120,14 @@ async function upsertParsedAgreement(
     .eq("crm_id", parsed.crm_id)
     .maybeSingle();
 
-  const queue_rank =
-    typeof existingOrder?.queue_rank === "number"
-      ? existingOrder.queue_rank
-      : await nextQueueRank(supabase);
+  let queue_rank = existingOrder?.queue_rank;
+  if (typeof queue_rank !== "number" || !Number.isFinite(queue_rank)) {
+    const allocated = await allocateQueueRankForNewCrmOrder(supabase, parsed.crm_created_at_iso);
+    if (allocated.error) {
+      throw new Error(allocated.error);
+    }
+    queue_rank = allocated.rank;
+  }
 
   const { data: ordRow, error: ordErr } = await supabase
     .from("crm_orders")
