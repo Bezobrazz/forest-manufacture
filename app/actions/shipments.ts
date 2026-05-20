@@ -117,6 +117,18 @@ async function getMainWarehouseId(supabase: SupabaseClient): Promise<number | nu
   return typeof data?.id === "number" ? data.id : null;
 }
 
+function shipmentDateToCreatedAtIso(dateYmd: string): { iso: string } | { error: string } {
+  const trimmed = dateYmd.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return { error: "Некоректна дата відвантаження" };
+  }
+  const parsed = new Date(`${trimmed}T12:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime())) {
+    return { error: "Некоректна дата відвантаження" };
+  }
+  return { iso: parsed.toISOString() };
+}
+
 async function deductInventoryForQueueShipment(
   supabase: SupabaseClient,
   args: {
@@ -124,9 +136,10 @@ async function deductInventoryForQueueShipment(
     quantity: number;
     notes: string;
     warehouseId: number | null;
+    createdAt: string;
   }
 ): Promise<{ ok: true; step: AppliedShipmentStep } | { ok: false; error: string }> {
-  const { productId, quantity, notes, warehouseId } = args;
+  const { productId, quantity, notes, warehouseId, createdAt } = args;
   const { data: currentRow, error: gErr } = await supabase
     .from("inventory")
     .select("quantity")
@@ -159,6 +172,7 @@ async function deductInventoryForQueueShipment(
     quantity: -quantity,
     transaction_type: "shipment",
     notes,
+    created_at: createdAt,
   };
   if (warehouseId != null) {
     txPayload.warehouse_id = warehouseId;
@@ -209,13 +223,20 @@ export type QueueFulfillmentLine = { itemId: number; quantity: number };
 
 export async function fulfillQueueShipmentAction(
   orderCrmId: string,
-  lines: QueueFulfillmentLine[]
+  lines: QueueFulfillmentLine[],
+  shipmentDate: string
 ): Promise<{ success: boolean; error?: string }> {
   const user = await getServerUser();
   if (!user) return { success: false, error: "Потрібна авторизація" };
 
   const crmKey = orderCrmId.trim();
   if (!crmKey) return { success: false, error: "Не вказано угоду" };
+
+  const createdAtParsed = shipmentDateToCreatedAtIso(shipmentDate);
+  if ("error" in createdAtParsed) {
+    return { success: false, error: createdAtParsed.error };
+  }
+  const transactionCreatedAt = createdAtParsed.iso;
 
   const supabase = await createServerClient();
   const warehouseId = await getMainWarehouseId(supabase);
@@ -280,6 +301,7 @@ export async function fulfillQueueShipmentAction(
           quantity: line.quantity,
           notes,
           warehouseId,
+          createdAt: transactionCreatedAt,
         });
         if (!res.ok) {
           await rollbackAppliedShipmentSteps(supabase, applied);
@@ -337,6 +359,7 @@ export async function fulfillQueueShipmentAction(
           quantity: line.quantity,
           notes,
           warehouseId,
+          createdAt: transactionCreatedAt,
         });
         if (!res.ok) {
           await rollbackAppliedShipmentSteps(supabase, applied);

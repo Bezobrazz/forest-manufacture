@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
-import { GripVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, GripVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
@@ -111,6 +112,8 @@ export default function ShipmentsPage() {
   const [fulfillOpen, setFulfillOpen] = useState(false);
   const [fulfillOrder, setFulfillOrder] = useState<CrmOrderWithDetails | null>(null);
   const [fulfillQtyByItemId, setFulfillQtyByItemId] = useState<Record<number, string>>({});
+  const [fulfillDate, setFulfillDate] = useState<Date>(() => startOfDay(new Date()));
+  const [fulfillDatePopoverOpen, setFulfillDatePopoverOpen] = useState(false);
   const [fulfillSubmitting, setFulfillSubmitting] = useState(false);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ignoreRealtimeUntilRef = useRef<number>(0);
@@ -193,6 +196,8 @@ export default function ShipmentsPage() {
 
   const openFulfillDialog = (order: CrmOrderWithDetails) => {
     setFulfillOrder(order);
+    setFulfillDate(startOfDay(new Date()));
+    setFulfillDatePopoverOpen(false);
     const next: Record<number, string> = {};
     for (const it of order.items) {
       if (it.product_id == null) {
@@ -837,6 +842,36 @@ export default function ShipmentsPage() {
             <div className="space-y-3 py-1">
               <div className="text-sm font-medium">{fulfillOrder.customer.name}</div>
               <div className="space-y-2">
+                <Label htmlFor="fulfill-shipment-date">Дата відвантаження</Label>
+                <Popover open={fulfillDatePopoverOpen} onOpenChange={setFulfillDatePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="fulfill-shipment-date"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                      {formatDate(fulfillDate.toISOString())}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={fulfillDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setFulfillDate(startOfDay(date));
+                          setFulfillDatePopoverOpen(false);
+                        }
+                      }}
+                      locale={uk}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
                 {fulfillOrder.items.map((it) => {
                   const stock =
                     it.product_id != null ? inventoryMap[it.product_id] ?? 0 : 0;
@@ -933,7 +968,11 @@ export default function ShipmentsPage() {
                   }
                 }
                 setFulfillSubmitting(true);
-                const res = await fulfillQueueShipmentAction(fulfillOrder.crm_id, lines);
+                const res = await fulfillQueueShipmentAction(
+                  fulfillOrder.crm_id,
+                  lines,
+                  dateToYYYYMMDD(fulfillDate)
+                );
                 setFulfillSubmitting(false);
                 if (!res.success) {
                   toast.error("Не вдалося відвантажити", { description: res.error });
