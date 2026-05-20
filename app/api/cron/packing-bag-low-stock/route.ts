@@ -18,6 +18,6 @@ export async function GET(request: Request) {
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await checkPackingBagLowStockAndNotify({ trigger: "morning" });
+  const result = await checkPackingBagLowStockAndNotify();
   return Response.json(result);
 }

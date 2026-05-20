@@ -16,11 +16,9 @@ import type {
   SupplierAdvanceTransaction,
   Warehouse,
 } from "@/lib/types";
-import { sendTelegramMessage } from "@/lib/telegram";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
-import { checkPackingBagLowStockAndNotify } from "@/lib/packing-bags/stock-alert";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
 
@@ -1181,33 +1179,6 @@ export async function completeShift(shiftId: number) {
         return { success: false, error: "Зміна вже завершена" };
       }
 
-      // Дані для Telegram (до атомарного закриття — той самий зріз production)
-      console.log("Fetching production data...");
-      const { data: productionData, error: productionError } = await supabase
-        .from("production")
-        .select(
-          `
-          quantity,
-          product:products (
-            id,
-            name,
-            category:product_categories (
-              name
-            )
-          )
-        `
-        )
-        .eq("shift_id", shiftId);
-
-      console.log("Production data:", { productionData, productionError });
-
-      if (productionError) {
-        console.error("Error fetching production data:", productionError);
-        return { success: false, error: productionError.message };
-      }
-
-      shiftData.production = productionData || [];
-
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
         "complete_shift_apply_production",
         { p_shift_id: shiftId }
@@ -1231,81 +1202,6 @@ export async function completeShift(shiftId: number) {
       }
 
       const data = [{ id: shiftId, status: "completed" as const }];
-
-      // 4. Формуємо та відправляємо сповіщення в Telegram
-      const productionSummary = shiftData.production?.reduce(
-        (
-          acc: Record<string, number>,
-          item: {
-            quantity: number;
-            product: {
-              name: string;
-              category?: {
-                name: string;
-              };
-            };
-          }
-        ) => {
-          const category = item.product.category?.name || "Без категорії";
-          acc[category] = (acc[category] || 0) + item.quantity;
-          return acc;
-        },
-        {} as Record<string, number>
-      );
-
-      // Підраховуємо загальну кількість виробленої продукції
-      let totalProduction = 0;
-      if (productionSummary) {
-        for (const quantity of Object.values(productionSummary)) {
-          totalProduction += quantity as number;
-        }
-      }
-
-      // Групуємо продукцію за категоріями для детального звіту
-      const productsByCategory: Record<
-        string,
-        Array<{ name: string; quantity: number }>
-      > = {};
-
-      if (shiftData.production) {
-        for (const item of shiftData.production) {
-          const category = item.product.category?.name || "Без категорії";
-          if (!productsByCategory[category]) {
-            productsByCategory[category] = [];
-          }
-          productsByCategory[category].push({
-            name: item.product.name,
-            quantity: item.quantity,
-          });
-        }
-      }
-
-      const message = `
-<b>Зміну #${shiftId} завершено</b>
-
-📅 Дата: ${new Date().toLocaleDateString("uk-UA")}
-⏰ Час закриття: ${new Date().toLocaleTimeString("uk-UA")}
-
-📦 Вироблено всього: <b>${totalProduction} шт</b>
-
-📊 Вироблено по категоріях:
-${Object.entries(productionSummary || {})
-  .map(([category, quantity]) => `• ${category}: ${quantity} шт`)
-  .join("\n")}
-
-📋 Детальний звіт по продукції:
-${Object.entries(productsByCategory)
-  .map(
-    ([category, products]) =>
-      `<b>${category}:</b>\n${products
-        .map((product) => `  • ${product.name}: ${product.quantity} шт`)
-        .join("\n")}`
-  )
-  .join("\n\n")}
-`;
-
-      await sendTelegramMessage(message);
-      await checkPackingBagLowStockAndNotify({ trigger: "immediate" });
 
       // Оновлюємо кеш для сторінки інвентаря та головної сторінки
       revalidatePath("/inventory");

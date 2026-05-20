@@ -2,17 +2,15 @@ import { createClient } from "@supabase/supabase-js";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
 
-const PACKING_BAG_LOW_STOCK_THRESHOLD = 2000;
+const PACKING_BAG_LOW_STOCK_THRESHOLD = 3000;
 const KYIV_TZ = "Europe/Kyiv";
 
 type CheckOptions = {
-  trigger: "immediate" | "morning";
   supabase?: ReturnType<typeof createClient>;
 };
 
 type AlertState = {
   id: string;
-  packing_bag_low_alert_active: boolean | null;
   packing_bag_last_morning_alert_date: string | null;
 };
 
@@ -76,7 +74,7 @@ async function getOrCreateAlertState(
 ): Promise<AlertState | null> {
   const { data: state, error } = await supabase
     .from("settings")
-    .select("id, packing_bag_low_alert_active, packing_bag_last_morning_alert_date")
+    .select("id, packing_bag_last_morning_alert_date")
     .limit(1)
     .maybeSingle();
 
@@ -89,14 +87,14 @@ async function getOrCreateAlertState(
       packing_bag_low_alert_active: false,
       packing_bag_last_morning_alert_date: null,
     })
-    .select("id, packing_bag_low_alert_active, packing_bag_last_morning_alert_date")
+    .select("id, packing_bag_last_morning_alert_date")
     .single();
 
   if (insertError || !created?.id) return null;
   return created as AlertState;
 }
 
-export async function checkPackingBagLowStockAndNotify(options: CheckOptions) {
+export async function checkPackingBagLowStockAndNotify(options: CheckOptions = {}) {
   const supabase = options.supabase ?? createSupabaseAdminClient();
   if (!supabase) return { ok: false as const, reason: "supabase_admin_missing" };
 
@@ -110,7 +108,7 @@ export async function checkPackingBagLowStockAndNotify(options: CheckOptions) {
   const todayKyiv = getTodayInKyiv();
 
   if (!isLow) {
-    if (state.packing_bag_low_alert_active || state.packing_bag_last_morning_alert_date) {
+    if (state.packing_bag_last_morning_alert_date) {
       await supabase
         .from("settings")
         .update({
@@ -123,32 +121,12 @@ export async function checkPackingBagLowStockAndNotify(options: CheckOptions) {
     return { ok: true as const, notified: false, quantity };
   }
 
-  if (options.trigger === "morning") {
-    if (getKyivHour() !== 9) return { ok: true as const, notified: false, quantity };
-    if (state.packing_bag_last_morning_alert_date === todayKyiv) {
-      return { ok: true as const, notified: false, quantity };
-    }
-
-    const message = `⚠️ <b>Низький залишок мішків</b>\n\n«${PACKING_BAG_PRODUCT_NAME}»: <b>${quantity} шт</b>\nПоріг: ≤ ${PACKING_BAG_LOW_STOCK_THRESHOLD} шт\n\nНагадування на 09:00 (Київ).`;
-    const sent = await sendTelegramMessage(message);
-    if (!sent) return { ok: false as const, reason: "telegram_send_failed" };
-
-    await supabase
-      .from("settings")
-      .update({
-        packing_bag_low_alert_active: true,
-        packing_bag_last_morning_alert_date: todayKyiv,
-      })
-      .eq("id", state.id);
-
-    return { ok: true as const, notified: true, quantity };
-  }
-
-  if (state.packing_bag_low_alert_active) {
+  if (getKyivHour() !== 9) return { ok: true as const, notified: false, quantity };
+  if (state.packing_bag_last_morning_alert_date === todayKyiv) {
     return { ok: true as const, notified: false, quantity };
   }
 
-  const message = `⚠️ <b>Низький залишок мішків</b>\n\n«${PACKING_BAG_PRODUCT_NAME}»: <b>${quantity} шт</b>\nПоріг: ≤ ${PACKING_BAG_LOW_STOCK_THRESHOLD} шт\n\nСповіщення надіслано одразу після досягнення порогу.`;
+  const message = `⚠️ <b>Низький залишок мішків</b>\n\n«${PACKING_BAG_PRODUCT_NAME}»: <b>${quantity} шт</b>\nПоріг: ≤ ${PACKING_BAG_LOW_STOCK_THRESHOLD} шт\n\nНагадування на 09:00 (Київ).`;
   const sent = await sendTelegramMessage(message);
   if (!sent) return { ok: false as const, reason: "telegram_send_failed" };
 
@@ -156,7 +134,7 @@ export async function checkPackingBagLowStockAndNotify(options: CheckOptions) {
     .from("settings")
     .update({
       packing_bag_low_alert_active: true,
-      packing_bag_last_morning_alert_date: null,
+      packing_bag_last_morning_alert_date: todayKyiv,
     })
     .eq("id", state.id);
 
