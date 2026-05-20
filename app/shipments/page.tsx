@@ -62,15 +62,41 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
-import { dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import type { CalendarProps } from "@/components/ui/calendar";
 
 const WEEK_STARTS_SAT = 6;
+
+const shipmentMonthCalendarClassNames: NonNullable<CalendarProps["classNames"]> = {
+  months: "w-full",
+  month: "w-full space-y-4",
+  caption: "flex justify-center pt-1 relative items-center px-8",
+  table: "w-full border-collapse space-y-1",
+  head_row: "flex w-full",
+  head_cell:
+    "flex-1 text-center text-muted-foreground rounded-md font-normal text-[0.8rem]",
+  row: "flex w-full mt-2",
+  cell: cn(
+    "flex-1 min-w-0 text-center text-sm p-0 relative",
+    "[&:has([aria-selected].day-range-end)]:rounded-r-md",
+    "[&:has([aria-selected].day-outside)]:bg-accent/50",
+    "[&:has([aria-selected])]:bg-accent",
+    "first:[&:has([aria-selected])]:rounded-l-md",
+    "last:[&:has([aria-selected])]:rounded-r-md",
+    "focus-within:relative focus-within:z-20"
+  ),
+  day: cn(
+    "mx-auto flex h-10 w-full max-w-[2.75rem] items-center justify-center rounded-md p-0 font-normal",
+    "aria-selected:opacity-100 hover:bg-accent hover:text-accent-foreground"
+  ),
+};
 
 function LoadingSkeleton() {
   return (
     <div className="container py-6 space-y-6">
-      <Skeleton className="h-10 w-64" />
-      <Skeleton className="h-96 w-full max-w-xl" />
+      <Skeleton className="h-10 w-full max-w-xs" />
+      <Skeleton className="h-[22rem] w-full" />
+      <Skeleton className="h-48 w-full" />
     </div>
   );
 }
@@ -367,7 +393,7 @@ export default function ShipmentsPage() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Календар відвантажень</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Календар відвантажень</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Прогноз ETA за середнім виробництвом за 30 днів і поточним складом. Порядок черги на
             вкладці «Черга» можна змінити вручну (вище — вищий пріоритет). Локальні картки не
@@ -490,43 +516,43 @@ export default function ShipmentsPage() {
       ) : null}
 
       <Tabs defaultValue="month" className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid h-auto w-full grid-cols-3 sm:max-w-md">
           <TabsTrigger value="month">Місяць</TabsTrigger>
           <TabsTrigger value="week">Тиждень</TabsTrigger>
           <TabsTrigger value="list">Черга</TabsTrigger>
         </TabsList>
 
         <TabsContent value="month" className="space-y-6">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start">
-            <div className="flex-1 max-w-fit">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Прогноз по днях</CardTitle>
-                  <CardDescription>Дні з хоча б одним відвантаженням підсвічені.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Calendar
-                    mode="single"
-                    month={selectedMonth}
-                    onMonthChange={setSelectedMonth}
-                    locale={uk}
-                    weekStartsOn={WEEK_STARTS_SAT}
-                    selected={selectedDay}
-                    onSelect={(d) => {
-                      if (d) setSelectedDay(startOfDay(d));
-                    }}
-                    modifiers={{ hasShipment: calendarMarkedDates }}
-                    modifiersClassNames={{
-                      hasShipment:
-                        "font-semibold text-primary relative after:pointer-events-none after:absolute after:left-1/2 after:bottom-0.5 after:h-1.5 after:w-1.5 after:-translate-x-1/2 after:rounded-full after:bg-primary",
-                    }}
-                  />
-                </CardContent>
-              </Card>
-            </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+            <Card className="w-full min-w-0">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Прогноз по днях</CardTitle>
+                <CardDescription>Дні з хоча б одним відвантаженням підсвічені.</CardDescription>
+              </CardHeader>
+              <CardContent className="px-3 pb-4 pt-0 sm:px-6 sm:pb-6">
+                <Calendar
+                  className="w-full p-0 sm:p-1"
+                  classNames={shipmentMonthCalendarClassNames}
+                  mode="single"
+                  month={selectedMonth}
+                  onMonthChange={setSelectedMonth}
+                  locale={uk}
+                  weekStartsOn={WEEK_STARTS_SAT}
+                  selected={selectedDay}
+                  onSelect={(d) => {
+                    if (d) setSelectedDay(startOfDay(d));
+                  }}
+                  modifiers={{ hasShipment: calendarMarkedDates }}
+                  modifiersClassNames={{
+                    hasShipment:
+                      "font-semibold text-primary relative after:pointer-events-none after:absolute after:left-1/2 after:bottom-0.5 after:h-1.5 after:w-1.5 after:-translate-x-1/2 after:rounded-full after:bg-primary",
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-            <div className="flex-1 space-y-3 min-h-[280px]">
-              <Card>
+            <div className="w-full min-w-0 space-y-3 lg:min-h-[280px]">
+              <Card className="w-full min-w-0">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">{formatDate(selectedDay.toISOString())}</CardTitle>
                   <CardDescription>
@@ -547,7 +573,7 @@ export default function ShipmentsPage() {
               </Card>
             </div>
           </div>
-          <Card className="w-full">
+          <Card className="w-full min-w-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Відвантажені картки</CardTitle>
               <CardDescription>
@@ -583,7 +609,7 @@ export default function ShipmentsPage() {
               Тиждень з {formatDate(dateToKyivMidnightIso(weekStart))}
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
             {weekDays.map((d) => {
               const key = dateToYYYYMMDD(d);
               const list = forecastsByEta.get(key) ?? [];
@@ -1164,9 +1190,9 @@ function renderForecastMini(
 
   return (
     <div key={f.order.crm_id} className="rounded-md border p-3 text-sm space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-medium">Клієнт: {f.order.customer.name}</div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="font-medium break-words min-w-0">Клієнт: {f.order.customer.name}</div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
           <Badge variant={f.isReady ? "default" : f.etaDate ? "secondary" : "destructive"}>
             {f.isReady ? "Готово сьогодні" : f.etaDate ? "Очікує виробництва" : "Без ETA"}
           </Badge>
