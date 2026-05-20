@@ -1,0 +1,1 @@
+export const PACKING_BAG_LOW_STOCK_THRESHOLD = 3000;

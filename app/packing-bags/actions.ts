@@ -2,6 +2,7 @@
 
 import { createServerSupabaseClient, getServerUser } from "@/lib/supabase/server-auth";
 import { packingBagPurchaseSchema } from "@/lib/packing-bags/schemas";
+import { getPackingBagQuantity } from "@/lib/packing-bags/get-packing-bag-quantity";
 import { revalidatePath } from "next/cache";
 
 export type PackingBagPurchase = {
@@ -23,6 +24,13 @@ type SavePayload = {
 
 const PACKING_BAG_PRODUCT_NAME = "Мішок Пакувальний (кора)";
 const PACKING_BAG_NOTES_PREFIX = "Packing bag purchase #";
+
+export async function getPackingBagStockQuantity(): Promise<number | null> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return null;
+  return getPackingBagQuantity(supabase);
+}
 
 export async function getPackingBagPurchases(): Promise<PackingBagPurchase[]> {
   const supabase = await createServerSupabaseClient();

@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { PACKING_BAG_LOW_STOCK_THRESHOLD } from "@/lib/packing-bags/constants";
+import { getPackingBagQuantity } from "@/lib/packing-bags/get-packing-bag-quantity";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
-
-const PACKING_BAG_LOW_STOCK_THRESHOLD = 3000;
 const KYIV_TZ = "Europe/Kyiv";
 
 type CheckOptions = {
@@ -46,29 +46,6 @@ function createSupabaseAdminClient() {
   return createClient(url, key);
 }
 
-async function getCurrentPackingBagQuantity(
-  supabase: ReturnType<typeof createClient>
-): Promise<number | null> {
-  const { data: product } = await supabase
-    .from("products")
-    .select("id")
-    .eq("name", PACKING_BAG_PRODUCT_NAME)
-    .eq("product_type", "material")
-    .limit(1)
-    .maybeSingle();
-
-  if (!product?.id) return null;
-
-  const { data: rows, error } = await supabase
-    .from("warehouse_inventory")
-    .select("quantity")
-    .eq("product_id", product.id);
-
-  if (error) return null;
-
-  return (rows ?? []).reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
-}
-
 async function getOrCreateAlertState(
   supabase: ReturnType<typeof createClient>
 ): Promise<AlertState | null> {
@@ -101,7 +78,7 @@ export async function checkPackingBagLowStockAndNotify(options: CheckOptions = {
   const state = await getOrCreateAlertState(supabase);
   if (!state) return { ok: false as const, reason: "alert_state_unavailable" };
 
-  const quantity = await getCurrentPackingBagQuantity(supabase);
+  const quantity = await getPackingBagQuantity(supabase);
   if (quantity === null) return { ok: false as const, reason: "quantity_unavailable" };
 
   const isLow = quantity <= PACKING_BAG_LOW_STOCK_THRESHOLD;
