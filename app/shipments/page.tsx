@@ -688,17 +688,17 @@ export default function ShipmentsPage() {
                   isDragging ? "opacity-60" : ""
                 } ${isDropOver && draggingQueueCrmId && draggingQueueCrmId !== crmId ? "ring-2 ring-primary/50" : ""}`}
               >
-                <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2 flex-wrap space-y-0">
-                  <div className="flex gap-2 min-w-0 flex-1">
+                <CardHeader className="pb-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2 space-y-0">
+                  <div className="flex gap-2 min-w-0 w-full sm:flex-1">
                     <div
                       className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground select-none [&:focus-visible]:outline-none [&:focus-visible]:ring-2 [&:focus-visible]:ring-ring rounded"
                       aria-hidden
                     >
                       <GripVertical className="h-5 w-5" />
                     </div>
-                    <div className="min-w-0">
-                      <CardTitle className="text-base">{f.order.customer.name}</CardTitle>
-                      <CardDescription className="text-xs">
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-base break-words">{f.order.customer.name}</CardTitle>
+                      <CardDescription className="text-xs break-words">
                         {isLocalShipmentOrderCrmId(crmId) ? (
                           <>Локальна картка для планування · не в CRM</>
                         ) : (
@@ -709,8 +709,8 @@ export default function ShipmentsPage() {
                       </CardDescription>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2 items-end">
-                    <div className="flex gap-2 flex-wrap items-center justify-end">
+                  <div className="flex flex-col gap-2 w-full sm:w-auto sm:items-end">
+                    <div className="flex gap-2 flex-wrap items-center justify-start sm:justify-end">
                     {isLocalShipmentOrderCrmId(crmId) ? (
                       <Badge variant="outline" className="border-amber-500/60 text-amber-700 dark:text-amber-400">
                         Локальна
@@ -728,14 +728,26 @@ export default function ShipmentsPage() {
                     ) : null}
                     <Badge variant="outline">К-сть: {totalQty} шт</Badge>
                     </div>
-                    <div className="flex gap-2 flex-wrap items-center justify-end">
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  {f.order.items.map((it) => (
+                    <div key={it.id} className="flex justify-between gap-2">
+                      <span className="text-muted-foreground truncate">
+                        {it.product?.name ?? it.crm_product_ref ?? "—"}
+                      </span>
+                      <span className="shrink-0">{it.quantity} шт</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 flex flex-wrap gap-2 items-center justify-end">
                     {isLocalShipmentOrderCrmId(crmId) ? (
                       <>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-8"
+                          className="h-8 shrink-0"
+                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             openEditLocalCardDialog(f.order);
@@ -748,9 +760,10 @@ export default function ShipmentsPage() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-muted-foreground hover:text-destructive"
+                          className="h-8 shrink-0 text-muted-foreground hover:text-destructive"
                           disabled={deletingLocalId === crmId}
                           aria-label="Видалити локальну картку"
+                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={async (e) => {
                             e.stopPropagation();
                             const pid = parseLocalShipmentOrderId(crmId);
@@ -771,19 +784,6 @@ export default function ShipmentsPage() {
                         </Button>
                       </>
                     ) : null}
-                  </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-sm space-y-1">
-                  {f.order.items.map((it) => (
-                    <div key={it.id} className="flex justify-between gap-2">
-                      <span className="text-muted-foreground truncate">
-                        {it.product?.name ?? it.crm_product_ref ?? "—"}
-                      </span>
-                      <span className="shrink-0">{it.quantity} шт</span>
-                    </div>
-                  ))}
-                  <div className="pt-2 flex justify-end">
                     <Button
                       type="button"
                       variant="secondary"
