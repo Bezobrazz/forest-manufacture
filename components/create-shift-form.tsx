@@ -5,11 +5,19 @@ import { useRouter } from "next/navigation"
 import { createShift, createShiftWithEmployees } from "@/app/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils"
+import { uk } from "date-fns/locale"
 import type { Employee } from "@/lib/types"
 
 interface CreateShiftFormProps {
@@ -20,6 +28,10 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   const router = useRouter()
   const [isPending, setIsPending] = useState(false)
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
+  const [shiftDate, setShiftDate] = useState<Date>(new Date())
+  const [openedAt, setOpenedAt] = useState<Date | undefined>()
+  const [shiftDatePopoverOpen, setShiftDatePopoverOpen] = useState(false)
+  const [openedAtPopoverOpen, setOpenedAtPopoverOpen] = useState(false)
 
   function handleEmployeeToggle(employeeId: number) {
     setSelectedEmployees((prev) => {
@@ -48,7 +60,6 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
           description: "Нову зміну успішно створено",
         })
 
-        // Перенаправляємо на сторінку зміни
         if (result.data && result.data[0]) {
           router.push(`/shifts/${result.data[0].id}`)
         } else {
@@ -69,30 +80,89 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   }
 
   return (
-    <form action={handleSubmit}>
+    <form action={handleSubmit} className="min-w-0">
+      <input type="hidden" name="shift_date" value={dateToYYYYMMDD(shiftDate)} />
+      {openedAt && (
+        <input type="hidden" name="opened_at" value={dateToYYYYMMDD(openedAt)} />
+      )}
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Інформація про зміну</CardTitle>
           <CardDescription>Введіть основну інформацію про нову зміну</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
+        <CardContent className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="shift_date">Дата зміни</Label>
-            <Input
-              id="shift_date"
-              name="shift_date"
-              type="date"
-              defaultValue={new Date().toISOString().split("T")[0]}
-              required
-            />
+            <Popover open={shiftDatePopoverOpen} onOpenChange={setShiftDatePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="shift_date"
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "w-full min-w-0 justify-start text-left font-normal",
+                    !shiftDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {shiftDate ? (
+                    formatDate(shiftDate.toISOString())
+                  ) : (
+                    <span>Оберіть дату</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={shiftDate}
+                  onSelect={(nextDate) => {
+                    if (nextDate) {
+                      setShiftDate(nextDate)
+                      setShiftDatePopoverOpen(false)
+                    }
+                  }}
+                  locale={uk}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="opened_at">Дата відкриття зміни (опціонально)</Label>
-            <Input
-              id="opened_at"
-              name="opened_at"
-              type="date"
-            />
+            <Popover open={openedAtPopoverOpen} onOpenChange={setOpenedAtPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="opened_at"
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "w-full min-w-0 justify-start text-left font-normal",
+                    !openedAt && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                  {openedAt ? (
+                    formatDate(openedAt.toISOString())
+                  ) : (
+                    <span>Оберіть дату</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={openedAt}
+                  onSelect={(nextDate) => {
+                    setOpenedAt(nextDate)
+                    if (nextDate) setOpenedAtPopoverOpen(false)
+                  }}
+                  locale={uk}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
             <p className="text-xs text-muted-foreground">
               Якщо не вказано, буде використано поточну дату
             </p>
@@ -109,19 +179,19 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
           <CardTitle>Працівники на зміні</CardTitle>
           <CardDescription>Виберіть працівників, які будуть працювати на цій зміні</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {employees.length === 0 ? (
             <div className="text-sm text-muted-foreground">Немає доступних працівників</div>
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
               {employees.map((employee) => (
-                <div key={employee.id} className="flex items-center space-x-2">
+                <div key={employee.id} className="flex min-w-0 items-center space-x-2">
                   <Checkbox
                     id={`employee-${employee.id}`}
                     checked={selectedEmployees.includes(employee.id)}
                     onCheckedChange={() => handleEmployeeToggle(employee.id)}
                   />
-                  <Label htmlFor={`employee-${employee.id}`} className="cursor-pointer">
+                  <Label htmlFor={`employee-${employee.id}`} className="min-w-0 cursor-pointer">
                     {employee.name}
                     {employee.position && <span className="text-muted-foreground ml-1">({employee.position})</span>}
                   </Label>
@@ -132,7 +202,7 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-4">
+      <div className="flex flex-col-reverse gap-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={() => router.push("/")}>
           Скасувати
         </Button>
@@ -143,4 +213,3 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
     </form>
   )
 }
-
