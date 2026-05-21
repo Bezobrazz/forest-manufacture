@@ -67,7 +67,7 @@
 ## 8. API & Data
 
 - Assume API responses may be undefined or partially missing.
-- Always handle loading and error states.
+- Always handle loading and error states (див. також §13 для кнопок submit).
 - Do not hardcode API URLs unless instructed.
 
 ## 9. Comments & Explanations
@@ -93,7 +93,43 @@
 - For dropdown/select fields in forms, filters, and settings, use the existing `Select` components from `@/components/ui/select`.
 - Do not use native `<select>` for new UI unless explicitly requested.
 
-## 12. Vercel Hobby (free tier)
+## 13. Form Submit & Pending State
+
+Усі кнопки submit у формах (створення, оновлення, видалення) під час асинхронної дії **обов’язково** показують pending-стан.
+
+### UI під час pending
+
+- `disabled={pending}` на submit і на кнопках скасування/вторинних діях, що не повинні переривати запит.
+- `aria-busy={pending}` на submit.
+- Іконка `Loader2` з `animate-spin` (`lucide-react`) + змінений текст (напр. «Створення…», «Збереження…»).
+- Патерн як у `production-items-form`, `supplier-form`, `create-shift-form`.
+
+### Як отримувати `pending`
+
+- Форма з `action={asyncFn}` (React 19 / Next.js): винести submit у **дочірній** компонент усередині `<form>` і використовувати `useFormStatus()` з `react-dom`. **Не** покладатися лише на `useState` у батьківському компоненті — pending не оновиться коректно.
+- Форма з `onSubmit` + `e.preventDefault()`: `useState` (`isPending` / `isSubmitting`) з `setPending(true)` на початку і скиданням у `finally`.
+
+### Приклад (form action)
+
+```tsx
+function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending} aria-busy={pending}>
+      {pending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          {pendingLabel}
+        </>
+      ) : (
+        label
+      )}
+    </Button>
+  );
+}
+```
+
+## 14. Vercel Hobby (free tier)
 
 - Cron Jobs на безкоштовному тарифі: не пропонувати частіші за один запуск на 24 години; cron зовнішніх інтеграцій лише як резервне звірення, не основний канал даних.
 - Частота синхронізації з CRM — через webhook (push) на бекенд; добовий cron — лише reconcile на випадок пропуску подій.

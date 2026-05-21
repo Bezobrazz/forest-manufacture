@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
@@ -219,8 +219,19 @@ export function ShiftForm() {
               >
                 Скасувати
               </Button>
-              <Button type="submit" disabled={isPending || !shiftDate}>
-                {isPending ? "Створення..." : "Створити зміну"}
+              <Button
+                type="submit"
+                disabled={isPending || !shiftDate}
+                aria-busy={isPending}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Створення...
+                  </>
+                ) : (
+                  "Створити зміну"
+                )}
               </Button>
             </div>
           </form>

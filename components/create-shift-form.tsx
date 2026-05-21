@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useFormStatus } from "react-dom"
 import { useRouter } from "next/navigation"
 import { createShift, createShiftWithEmployees } from "@/app/actions"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import {
   Popover,
@@ -24,9 +25,30 @@ interface CreateShiftFormProps {
   employees: Employee[]
 }
 
+function CreateShiftFormActions({ onCancel }: { onCancel: () => void }) {
+  const { pending } = useFormStatus()
+
+  return (
+    <div className="flex flex-col-reverse gap-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end">
+      <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+        Скасувати
+      </Button>
+      <Button type="submit" disabled={pending} aria-busy={pending}>
+        {pending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Створення...
+          </>
+        ) : (
+          "Створити зміну"
+        )}
+      </Button>
+    </div>
+  )
+}
+
 export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   const router = useRouter()
-  const [isPending, setIsPending] = useState(false)
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
   const [shiftDate, setShiftDate] = useState<Date>(new Date())
   const [openedAt, setOpenedAt] = useState<Date | undefined>()
@@ -44,8 +66,6 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   }
 
   async function handleSubmit(formData: FormData) {
-    setIsPending(true)
-
     try {
       let result
 
@@ -74,8 +94,6 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
       toast.error("Помилка", {
         description: "Сталася помилка при створенні зміни",
       })
-    } finally {
-      setIsPending(false)
     }
   }
 
@@ -219,14 +237,7 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col-reverse gap-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={() => router.push("/")}>
-          Скасувати
-        </Button>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Створення..." : "Створити зміну"}
-        </Button>
-      </div>
+      <CreateShiftFormActions onCancel={() => router.push("/")} />
     </form>
   )
 }
