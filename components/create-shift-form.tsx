@@ -183,20 +183,37 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
           {employees.length === 0 ? (
             <div className="text-sm text-muted-foreground">Немає доступних працівників</div>
           ) : (
-            <div className="grid gap-2 md:grid-cols-2">
-              {employees.map((employee) => (
-                <div key={employee.id} className="flex min-w-0 items-center space-x-2">
-                  <Checkbox
-                    id={`employee-${employee.id}`}
-                    checked={selectedEmployees.includes(employee.id)}
-                    onCheckedChange={() => handleEmployeeToggle(employee.id)}
-                  />
-                  <Label htmlFor={`employee-${employee.id}`} className="min-w-0 cursor-pointer">
-                    {employee.name}
-                    {employee.position && <span className="text-muted-foreground ml-1">({employee.position})</span>}
-                  </Label>
-                </div>
-              ))}
+            <div className="flex flex-col gap-2 md:grid md:grid-cols-2">
+              {employees.map((employee) => {
+                const isSelected = selectedEmployees.includes(employee.id)
+                return (
+                  <label
+                    key={employee.id}
+                    htmlFor={`employee-${employee.id}`}
+                    className={cn(
+                      "flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors active:bg-accent md:min-h-12",
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-input hover:bg-muted/50"
+                    )}
+                  >
+                    <Checkbox
+                      id={`employee-${employee.id}`}
+                      checked={isSelected}
+                      onCheckedChange={() => handleEmployeeToggle(employee.id)}
+                      className="h-5 w-5 shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 text-base leading-snug">
+                      {employee.name}
+                      {employee.position && (
+                        <span className="mt-0.5 block text-sm text-muted-foreground md:inline md:mt-0 md:ml-1">
+                          {employee.position}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                )
+              })}
             </div>
           )}
         </CardContent>
