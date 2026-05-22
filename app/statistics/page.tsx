@@ -84,6 +84,7 @@ import {
 } from "recharts";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -387,6 +388,15 @@ export default function StatisticsPage() {
       return sum + Number(expense.amount ?? 0);
     }, 0);
 
+  const sumElectricityCostsInRange = (startDay: string, endDay: string) =>
+    expenses.reduce((sum, expense) => {
+      const day = toDayKey(expense.date);
+      if (!isDayInRange(day, startDay, endDay)) return sum;
+      const categoryName = String(expense.category?.name ?? "").trim();
+      if (categoryName !== ELECTRICITY_EXPENSE_CATEGORY_NAME) return sum;
+      return sum + Number(expense.amount ?? 0);
+    }, 0);
+
   const sumProducedQuantityInRange = (startDay: string, endDay: string) =>
     shifts.reduce((sum, shift) => {
       if (shift.status !== "completed") return sum;
@@ -414,11 +424,14 @@ export default function StatisticsPage() {
     const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
     const tripBags = sumBagsInRange(startDay, endDay);
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
+    const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const electricityPerBag =
+      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
     const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
@@ -426,6 +439,7 @@ export default function StatisticsPage() {
           tripCostPerBag +
           fixedRewardPerBag +
           hourlyWagePerBag +
+          electricityPerBag +
           packingBagFromLatestTx
         : null;
 
@@ -436,10 +450,12 @@ export default function StatisticsPage() {
       tripBags,
       producedQuantity,
       hourlyWageCosts,
+      electricityCosts,
       purchaseCostPerBag,
       tripCostPerBag,
       fixedRewardPerBag,
       hourlyWagePerBag,
+      electricityPerBag,
       packingBagFromLatestTx,
       totalCostPerBag,
     };
@@ -463,11 +479,14 @@ export default function StatisticsPage() {
     const rawTripCosts = sumRawTripsCostsInRange(prevStartDay, prevEndDay);
     const tripBags = sumBagsInRange(prevStartDay, prevEndDay);
     const hourlyWageCosts = sumHourlyWageCostsInRange(prevStartDay, prevEndDay);
+    const electricityCosts = sumElectricityCostsInRange(prevStartDay, prevEndDay);
     const producedQuantity = sumProducedQuantityInRange(prevStartDay, prevEndDay);
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const electricityPerBag =
+      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
     const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
@@ -475,6 +494,7 @@ export default function StatisticsPage() {
           tripCostPerBag +
           fixedRewardPerBag +
           hourlyWagePerBag +
+          electricityPerBag +
           packingBagFromLatestTx
         : null;
 
@@ -506,6 +526,7 @@ export default function StatisticsPage() {
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
     (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
     (currentPeriodCostMetrics.hourlyWagePerBag ?? 0) +
+    (currentPeriodCostMetrics.electricityPerBag ?? 0) +
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
   const structureRows = [
     {
@@ -523,6 +544,10 @@ export default function StatisticsPage() {
     {
       label: "Погодинна З.П. на мішок",
       value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
+    },
+    {
+      label: "Електроенергія на мішок",
+      value: currentPeriodCostMetrics.electricityPerBag ?? 0,
     },
     {
       label: `«${PACKING_BAG_PRODUCT_NAME}» (остання закупівля)`,
@@ -1628,10 +1653,10 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
-            Тимчасова формула: середня вартість мішка із закупок + середня вартість
-            мішка з поїздок + фіксована винагорода за мішок + погодинна З.П. на мішок
-            (відносно готової продукції) + ціна за шт «{PACKING_BAG_PRODUCT_NAME}» з
-            останньої закупівлі.
+            Середня вартість мішка із закупок + з поїздок + фіксована винагорода +
+            погодинна З.П. на мішок + електроенергія на мішок (категорія «
+            {ELECTRICITY_EXPENSE_CATEGORY_NAME}», сума за період ÷ вироблені мішки) +
+            ціна «{PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1711,7 +1736,7 @@ export default function StatisticsPage() {
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">
-                К-ть готової продукції (база для погодинної З.П.)
+                К-ть готової продукції (база для З.П. та електроенергії)
               </span>
               <span className="tabular-nums">
                 {formatNumber(currentPeriodCostMetrics.producedQuantity)}
@@ -1721,6 +1746,20 @@ export default function StatisticsPage() {
               <span className="text-muted-foreground">Погодинна З.П. на мішок</span>
               <span className="tabular-nums">
                 {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWagePerBag, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">
+                Електроенергія (сума, {ELECTRICITY_EXPENSE_CATEGORY_NAME})
+              </span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.electricityCosts, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Електроенергія на мішок</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.electricityPerBag, "₴")}
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b font-medium">
