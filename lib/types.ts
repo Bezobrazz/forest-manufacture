@@ -113,6 +113,7 @@ export interface SupplierDelivery {
   material_product_id?: number | null;
   material_quantity?: number | null;
   advance_used?: number;
+  keepin_payment_id?: number | null;
   created_at: string;
   supplier?: Supplier;
   product?: Product;

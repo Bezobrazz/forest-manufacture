@@ -16,6 +16,7 @@ import type {
   SupplierAdvanceTransaction,
   Warehouse,
 } from "@/lib/types";
+import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
@@ -3340,6 +3341,43 @@ export async function createSupplierDelivery(formData: FormData) {
       await syncSupplierAdvanceFromLedger(supabase, supplierId);
     }
 
+    if (data?.id && purchaseAmount > 0) {
+      const deliveryYmd = supplierDeliveryYmdFromFormOrRow(
+        deliveryDate,
+        (data as { created_at?: string }).created_at,
+      );
+      try {
+        const paymentId = await syncSupplierDeliveryExpenseToKeepin({
+          deliveryId: data.id as number,
+          amount: purchaseAmount,
+          atYmd: deliveryYmd,
+          supplierName:
+            (data as { supplier?: { name?: string } }).supplier?.name ?? "",
+          productName:
+            (data as { product?: { name?: string } }).product?.name ?? "",
+          quantity: Number(quantity),
+        });
+        if (paymentId != null) {
+          const { error: crmLinkError } = await supabase
+            .from("supplier_deliveries")
+            .update({ keepin_payment_id: paymentId })
+            .eq("id", data.id);
+          if (crmLinkError) {
+            console.error("keepin_payment_id update:", crmLinkError);
+          }
+        }
+      } catch (crmError) {
+        console.error("KeepinCRM supplier delivery expense:", crmError);
+        return {
+          success: false,
+          error:
+            crmError instanceof Error
+              ? `Транзакцію збережено (#${data.id}), але витрату в KeepinCRM не проведено: ${crmError.message}`
+              : `Транзакцію збережено (#${data.id}), але витрату в KeepinCRM не проведено`,
+        };
+      }
+    }
+
     revalidatePath("/transactions/suppliers");
     revalidatePath("/suppliers");
 
@@ -3694,7 +3732,7 @@ export async function updateSupplierDelivery(formData: FormData) {
     const { data: currentDelivery, error: getError } = await supabase
       .from("supplier_deliveries")
       .select(
-        "supplier_id, quantity, product_id, warehouse_id, material_product_id, material_quantity, price_per_unit, advance_used, created_at",
+        "supplier_id, quantity, product_id, warehouse_id, material_product_id, material_quantity, price_per_unit, advance_used, created_at, keepin_payment_id",
       )
       .eq("id", deliveryId)
       .single();
@@ -3705,6 +3743,9 @@ export async function updateSupplierDelivery(formData: FormData) {
         error: "Транзакцію не знайдено",
       };
     }
+
+    const existingKeepinPaymentId = (currentDelivery as { keepin_payment_id?: number | null })
+      .keepin_payment_id;
 
     const rowPrice = (currentDelivery as { price_per_unit?: unknown }).price_per_unit;
     const resolvedPricePerUnit =
@@ -3985,6 +4026,51 @@ export async function updateSupplierDelivery(formData: FormData) {
       await syncSupplierAdvanceFromLedger(supabase, supplierId);
       if (oldSupplierIdFromRow !== supplierId) {
         await syncSupplierAdvanceFromLedger(supabase, oldSupplierIdFromRow);
+      }
+    }
+
+    const newAmountForCrm =
+      resolvedPricePerUnit != null
+        ? Math.round(Number(quantity) * resolvedPricePerUnit * 100) / 100
+        : 0;
+
+    if (
+      data?.id &&
+      newAmountForCrm > 0 &&
+      (existingKeepinPaymentId == null || existingKeepinPaymentId === 0)
+    ) {
+      const deliveryYmdForCrm =
+        deliveryDate ??
+        utcCalendarDayFromIso((data as { created_at: string }).created_at);
+      try {
+        const paymentId = await syncSupplierDeliveryExpenseToKeepin({
+          deliveryId: data.id as number,
+          amount: newAmountForCrm,
+          atYmd: deliveryYmdForCrm,
+          supplierName:
+            (data as { supplier?: { name?: string } }).supplier?.name ?? "",
+          productName:
+            (data as { product?: { name?: string } }).product?.name ?? "",
+          quantity: Number(quantity),
+        });
+        if (paymentId != null) {
+          const { error: crmLinkError } = await supabase
+            .from("supplier_deliveries")
+            .update({ keepin_payment_id: paymentId })
+            .eq("id", data.id);
+          if (crmLinkError) {
+            console.error("keepin_payment_id update:", crmLinkError);
+          }
+        }
+      } catch (crmError) {
+        console.error("KeepinCRM supplier delivery expense:", crmError);
+        return {
+          success: false,
+          error:
+            crmError instanceof Error
+              ? `Транзакцію оновлено (#${data.id}), але витрату в KeepinCRM не проведено: ${crmError.message}`
+              : `Транзакцію оновлено (#${data.id}), але витрату в KeepinCRM не проведено`,
+        };
       }
     }
 
