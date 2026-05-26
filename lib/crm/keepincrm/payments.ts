@@ -25,6 +25,8 @@ const MAX_PAGES = 50;
 
 const DEFAULT_PURSE_NAME = "Петрович";
 const DEFAULT_CATEGORY_NAME = "Закупівля Кора Сировина";
+/** У KeepinCRM категорії витрат (закупівлі) мають kind=credit, доходи — debit. */
+const KEEPIN_EXPENSE_KIND = "credit";
 
 let cachedPurseId: number | null | undefined;
 let cachedCategoryId: number | null | undefined;
@@ -135,7 +137,7 @@ async function resolveExpenseCategoryId(): Promise<number> {
   const match = categories.find(
     (c) =>
       normalizeLookupName(c.name) === targetName &&
-      normalizeLookupName(c.kind) === "debit"
+      normalizeLookupName(c.kind) === KEEPIN_EXPENSE_KIND
   );
 
   if (!match) {
@@ -164,7 +166,7 @@ export async function createKeepinExpensePayment(
 
   const body: Record<string, unknown> = {
     amount,
-    kind: "debit",
+    kind: KEEPIN_EXPENSE_KIND,
     purse_id: purseId,
     category_id: categoryId,
     at: input.atYmd,

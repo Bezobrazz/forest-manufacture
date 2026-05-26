@@ -103,8 +103,8 @@ async function main(): Promise<void> {
     if (p.id != null && p.name) console.log(`  ${p.id}\t${p.name}`);
   }
 
-  console.log("\n=== Категорії витрат (kind=debit) ===");
-  const debitCategories = categories.filter((c) => normalizeName(c.kind ?? "") === "debit");
+  console.log("\n=== Категорії витрат (kind=credit у KeepinCRM) ===");
+  const debitCategories = categories.filter((c) => normalizeName(c.kind ?? "") === "credit");
   for (const c of debitCategories) {
     if (c.id != null && c.name) console.log(`  ${c.id}\t${c.name}`);
   }
