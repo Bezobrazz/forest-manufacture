@@ -253,11 +253,13 @@ export async function fulfillQueueShipmentAction(
   }
 
   const applied: AppliedShipmentStep[] = [];
+  let fulfilledLocalPlanningId: number | null = null;
 
   try {
     if (isLocalShipmentOrderCrmId(crmKey)) {
       const planId = parseLocalShipmentOrderId(crmKey);
       if (planId == null) return { success: false, error: "Некоректна локальна картка" };
+      fulfilledLocalPlanningId = planId;
 
       const { data: orderRow, error: oErr } = await supabase
         .from("shipment_planning_orders")
@@ -381,6 +383,23 @@ export async function fulfillQueueShipmentAction(
         await syncSingleKeepinAgreement(supabase, crmKey);
       } catch (syncErr) {
         console.error("fulfillQueueShipmentAction syncSingleKeepinAgreement:", syncErr);
+      }
+    }
+
+    if (fulfilledLocalPlanningId != null) {
+      const { error: deletePlanningErr } = await supabase
+        .from("shipment_planning_orders")
+        .delete()
+        .eq("id", fulfilledLocalPlanningId);
+      if (deletePlanningErr) {
+        await rollbackAppliedShipmentSteps(supabase, applied);
+        return { success: false, error: deletePlanningErr.message };
+      }
+
+      const compactRes = await compactGlobalShipmentQueueRanks(supabase);
+      if (compactRes.error) {
+        await rollbackAppliedShipmentSteps(supabase, applied);
+        return { success: false, error: compactRes.error };
       }
     }
 
