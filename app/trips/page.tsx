@@ -121,7 +121,9 @@ export default function TripsPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodFilter>("year");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear(),
+  );
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [repaymentDate, setRepaymentDate] = useState("");
@@ -129,15 +131,20 @@ export default function TripsPage() {
   const [repaymentComment, setRepaymentComment] = useState("");
   const [repaymentPeriodFilter, setRepaymentPeriodFilter] =
     useState<RepaymentPeriodFilter>("all");
-  const [repaymentYear, setRepaymentYear] = useState<number>(new Date().getFullYear());
+  const [repaymentYear, setRepaymentYear] = useState<number>(
+    new Date().getFullYear(),
+  );
   const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
   const [repaymentsList, setRepaymentsList] = useState<RawRepaymentItem[]>([]);
-  const [editingRepayment, setEditingRepayment] = useState<RawRepaymentItem | null>(null);
+  const [editingRepayment, setEditingRepayment] =
+    useState<RawRepaymentItem | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editComment, setEditComment] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(null);
+  const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(
+    null,
+  );
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [repaymentPageSize, setRepaymentPageSize] = useState(5);
   const [repaymentPage, setRepaymentPage] = useState(1);
@@ -224,7 +231,9 @@ export default function TripsPage() {
   }, []);
 
   const refetchRepayments = () =>
-    getRawRepayments(repaymentDateFrom, repaymentDateTo).then(setRepaymentsList);
+    getRawRepayments(repaymentDateFrom, repaymentDateTo).then(
+      setRepaymentsList,
+    );
 
   useEffect(() => {
     refetchRepayments();
@@ -467,7 +476,9 @@ export default function TripsPage() {
                   <Label className="text-xs text-muted-foreground">Рік</Label>
                   <Select
                     value={selectedYear.toString()}
-                    onValueChange={(value) => setSelectedYear(parseInt(value, 10))}
+                    onValueChange={(value) =>
+                      setSelectedYear(parseInt(value, 10))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Рік" />
@@ -482,7 +493,9 @@ export default function TripsPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Період</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Період
+                  </Label>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -780,7 +793,7 @@ export default function TripsPage() {
                       <div className="grid gap-4 sm:grid-cols-3">
                         <div className="rounded-lg border bg-muted/40 p-4">
                           <p className="text-xs text-muted-foreground mb-1">
-                            Середня вартість мішка
+                            Середня вартість доставки мішка
                           </p>
                           <p className="text-xl font-semibold tabular-nums">
                             {rawTotals.avgCostPerBagUah != null
@@ -798,7 +811,7 @@ export default function TripsPage() {
                         </div>
                         <div className="rounded-lg border bg-muted/40 p-4">
                           <p className="text-xs text-muted-foreground mb-1">
-                            Всього витрат
+                            Всього витрат на доставку
                           </p>
                           <p className="text-xl font-semibold tabular-nums">
                             {formatUah(rawTotals.sumTotalCostsUah)}
@@ -895,7 +908,8 @@ export default function TripsPage() {
                               {formatUah(
                                 Math.max(
                                   0,
-                                  rawRepaymentTotals.sumTotalCostsUah - repaymentsSum,
+                                  rawRepaymentTotals.sumTotalCostsUah -
+                                    repaymentsSum,
                                 ),
                               )}
                             </span>
@@ -994,8 +1008,15 @@ export default function TripsPage() {
                     </div>
                   )}
                   {rawRepaymentTotals && (
-                    <Accordion type="single" collapsible className="mt-4 w-full">
-                      <AccordionItem value="repayments" className="rounded-lg border px-4">
+                    <Accordion
+                      type="single"
+                      collapsible
+                      className="mt-4 w-full"
+                    >
+                      <AccordionItem
+                        value="repayments"
+                        className="rounded-lg border px-4"
+                      >
                         <AccordionTrigger className="hover:no-underline">
                           Погашення
                           {repaymentsList.length > 0 &&
@@ -1102,9 +1123,7 @@ export default function TripsPage() {
                                               Math.max(1, p - 1),
                                             );
                                           }}
-                                          aria-disabled={
-                                            repaymentPage <= 1
-                                          }
+                                          aria-disabled={repaymentPage <= 1}
                                           className={
                                             repaymentPage <= 1
                                               ? "pointer-events-none opacity-50"
@@ -1142,12 +1161,10 @@ export default function TripsPage() {
                                             );
                                           }}
                                           aria-disabled={
-                                            repaymentPage >=
-                                            repaymentTotalPages
+                                            repaymentPage >= repaymentTotalPages
                                           }
                                           className={
-                                            repaymentPage >=
-                                            repaymentTotalPages
+                                            repaymentPage >= repaymentTotalPages
                                               ? "pointer-events-none opacity-50"
                                               : ""
                                           }
@@ -1191,9 +1208,7 @@ export default function TripsPage() {
                             min={0}
                             step={0.01}
                             value={editAmount}
-                            onChange={(e) =>
-                              setEditAmount(e.target.value)
-                            }
+                            onChange={(e) => setEditAmount(e.target.value)}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1259,9 +1274,7 @@ export default function TripsPage() {
                   >
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Видалити погашення?
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>Видалити погашення?</AlertDialogTitle>
                         <AlertDialogDescription>
                           Цю дію не можна скасувати. Запис про погашення буде
                           видалено.
