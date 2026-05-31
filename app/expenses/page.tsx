@@ -531,20 +531,26 @@ export default function ExpensesPage() {
     0
   );
 
-  const expensesByCategory = categories.map((category) => {
-    const categoryExpenses = filteredExpenses.filter(
-      (e) => e.category_id === category.id
-    );
-    const total = categoryExpenses.reduce(
-      (sum, expense) => sum + expense.amount,
-      0
-    );
-    return {
-      ...category,
-      total,
-      count: categoryExpenses.length,
-    };
-  });
+  const expensesByCategory = categories
+    .filter(
+      (category) =>
+        selectedCategories.length === 0 ||
+        selectedCategories.includes(category.id)
+    )
+    .map((category) => {
+      const categoryExpenses = filteredExpenses.filter(
+        (e) => e.category_id === category.id
+      );
+      const total = categoryExpenses.reduce(
+        (sum, expense) => sum + expense.amount,
+        0
+      );
+      return {
+        ...category,
+        total,
+        count: categoryExpenses.length,
+      };
+    });
 
   const sortedCategoryFilterOptions = useMemo(
     () =>
@@ -1550,6 +1556,7 @@ export default function ExpensesPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+        {includePurchases && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Закупівля сировини</CardTitle>
@@ -1568,6 +1575,8 @@ export default function ExpensesPage() {
             </div>
           </CardContent>
         </Card>
+        )}
+        {includeWages && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">З/П Лінія</CardTitle>
@@ -1586,6 +1595,7 @@ export default function ExpensesPage() {
             </div>
           </CardContent>
         </Card>
+        )}
         {expensesByCategory.map((category) => (
           <Card key={category.id}>
             <CardHeader className="pb-2">
