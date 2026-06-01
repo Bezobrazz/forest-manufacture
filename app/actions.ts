@@ -1559,177 +1559,31 @@ export async function deleteShift(shiftId: number) {
       return { success: false, error: "Необхідно вказати ID зміни" };
     }
 
-    try {
-      // 1. Отримуємо інформацію про зміну
-      const { data: shiftData, error: shiftError } = await supabase
-        .from("shifts")
-        .select(
-          `
-          *,
-          employees:shift_employees(
-            employee:employees(*)
-          )
-        `
-        )
-        .eq("id", shiftId)
-        .single();
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      "delete_shift_atomic",
+      { p_shift_id: shiftId }
+    );
 
-      if (shiftError) {
-        console.error("Error fetching shift data:", shiftError);
-        return { success: false, error: shiftError.message };
-      }
-
-      // 2. Отримуємо інформацію про вироблену продукцію
-      const { data: productionData, error: productionError } = await supabase
-        .from("production")
-        .select(
-          `
-          quantity,
-          product:products (
-            id,
-            name
-          )
-        `
-        )
-        .eq("shift_id", shiftId);
-
-      if (productionError) {
-        console.error("Error fetching production data:", productionError);
-        return { success: false, error: productionError.message };
-      }
-
-      // 3. Отримуємо ID Main warehouse для транзакцій
-      const { data: mainWarehouse, error: warehouseError } = await supabase
-        .from("warehouses")
-        .select("id")
-        .ilike("name", "%main%")
-        .limit(1)
-        .single();
-
-      if (warehouseError) {
-        console.error("Error fetching main warehouse:", warehouseError);
-        // Продовжуємо без warehouse_id, але це може призвести до проблем
-      }
-
-      // 4. Оновлюємо кількість на складі для кожного продукту
-      for (const item of productionData || []) {
-        if (!item.product || !(item.product as any).id) {
-          console.error("Invalid product data:", item);
-          continue;
-        }
-
-        const productId = (item.product as any).id;
-
-        // 4.1 Отримуємо поточну кількість на складі
-        const { data: inventoryData, error: inventoryError } = await supabase
-          .from("inventory")
-          .select("id, quantity")
-          .eq("product_id", productId)
-          .single();
-
-        if (inventoryError) {
-          console.error("Error fetching inventory:", inventoryError);
-          continue;
-        }
-
-        if (!inventoryData) {
-          console.error("No inventory record found for product:", productId);
-          continue;
-        }
-
-        const currentQuantity = inventoryData.quantity;
-        const newQuantity = currentQuantity - item.quantity;
-
-        // 4.2 Оновлюємо кількість на складі
-        const { error: updateError } = await supabase
-          .from("inventory")
-          .update({
-            quantity: newQuantity,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", inventoryData.id);
-
-        if (updateError) {
-          console.error("Error updating inventory:", updateError);
-          continue;
-        }
-
-        // 4.3 Додаємо запис про транзакцію
-        const transactionData: any = {
-          product_id: productId,
-          quantity: -item.quantity,
-          transaction_type: "adjustment",
-          reference_id: shiftId,
-          notes: `Видалення зміни #${shiftId} (автоматичне віднімання при видаленні зміни)`,
-          created_at: new Date().toISOString(),
-        };
-
-        // Додаємо warehouse_id, якщо він є
-        if (mainWarehouse?.id) {
-          transactionData.warehouse_id = mainWarehouse.id;
-        }
-
-        const { error: transactionError } = await supabase
-          .from("inventory_transactions")
-          .insert(transactionData);
-
-        if (transactionError) {
-          console.error(
-            "Error creating inventory transaction:",
-            transactionError
-          );
-        }
-      }
-
-      // 5. Видаляємо всі записи про виробництво для цієї зміни
-      const { error: deleteProductionError } = await supabase
-        .from("production")
-        .delete()
-        .eq("shift_id", shiftId);
-
-      if (deleteProductionError) {
-        console.error(
-          "Error deleting production records:",
-          deleteProductionError
-        );
-        return { success: false, error: deleteProductionError.message };
-      }
-
-      // 6. Видаляємо всі записи про працівників на зміні
-      const { error: deleteEmployeesError } = await supabase
-        .from("shift_employees")
-        .delete()
-        .eq("shift_id", shiftId);
-
-      if (deleteEmployeesError) {
-        console.error("Error deleting shift employees:", deleteEmployeesError);
-        return { success: false, error: deleteEmployeesError.message };
-      }
-
-      // 7. Видаляємо саму зміну
-      const { error: deleteShiftError } = await supabase
-        .from("shifts")
-        .delete()
-        .eq("id", shiftId);
-
-      if (deleteShiftError) {
-        console.error("Error deleting shift:", deleteShiftError);
-        return { success: false, error: deleteShiftError.message };
-      }
-
-      // Оновлюємо кеш для сторінки інвентаря та головної сторінки
-      revalidatePath("/inventory");
-      revalidateTag("shifts");
-      revalidatePath("/");
-
-      return { success: true };
-    } catch (error) {
-      console.error("Unexpected error in deleteShift:", error);
-      return {
-        success: false,
-        error: "Сталася непередбачена помилка при видаленні зміни",
-      };
+    if (rpcError) {
+      console.error("delete_shift_atomic RPC error:", rpcError);
+      return { success: false, error: rpcError.message };
     }
+
+    const result = rpcResult as { success?: boolean; error?: string } | null;
+
+    if (!result?.success) {
+      const msg =
+        result?.error ||
+        "Не вдалося видалити зміну (атомарна операція в БД)";
+      console.error("delete_shift_atomic failed:", result);
+      return { success: false, error: msg };
+    }
+
+    revalidatePath("/inventory");
+    revalidateTag("shifts");
+    revalidatePath("/");
+
+    return { success: true };
   } catch (error) {
     console.error("Error in deleteShift:", error);
     return {
