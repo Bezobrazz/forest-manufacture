@@ -48,6 +48,23 @@ export async function getTrips(): Promise<TripListItem[]> {
   return (data ?? []) as TripListItem[];
 }
 
+/** Повний список рейсів для експорту в CSV (усі поля поїздки). */
+export async function getTripsForExport(): Promise<TripDetail[]> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("trips")
+    .select("*, vehicle:vehicles(name)")
+    .eq("user_id", user.id)
+    .order("trip_start_date", { ascending: false });
+  if (error) {
+    console.error("Error fetching trips for export:", error);
+    return [];
+  }
+  return (data ?? []) as TripDetail[];
+}
+
 export type TripDetail = {
   id: string;
   user_id: string;

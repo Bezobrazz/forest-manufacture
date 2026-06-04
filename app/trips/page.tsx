@@ -10,7 +10,11 @@ import {
   type RawRepaymentItem,
   updateRawRepayment,
 } from "@/app/actions";
-import { getTrips, type TripListItem } from "@/app/trips/actions";
+import {
+  getTrips,
+  getTripsForExport,
+  type TripListItem,
+} from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
   Card,
@@ -69,7 +73,22 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import type { TripType } from "@/lib/trips/calc";
+import {
+  buildTripsCsv,
+  buildTripsExportFilename,
+  downloadCsvFile,
+  filterTripsForExport,
+} from "@/lib/trips/export";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
@@ -107,6 +126,15 @@ const tripTypeLabels: Record<string, string> = {
   raw: "Сировина",
   commerce: "Комерція",
 };
+
+function formatTripsCountLabel(shown: number, total: number): string {
+  const word =
+    shown === 1 ? "рейс" : shown > 1 && shown < 5 ? "рейси" : "рейсів";
+  if (shown === total) {
+    return `Показано ${total} ${word}.`;
+  }
+  return `Показано ${shown} з ${total} рейсів.`;
+}
 
 function tripStatus(profit: number | null): { icon: string; label: string } {
   if (profit == null) return { icon: "—", label: "—" };
@@ -148,6 +176,8 @@ export default function TripsPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [repaymentPageSize, setRepaymentPageSize] = useState(5);
   const [repaymentPage, setRepaymentPage] = useState(1);
+  const [exportingType, setExportingType] = useState<TripType | null>(null);
+  const [tripsTab, setTripsTab] = useState<"commerce" | "raw">("commerce");
 
   const repaymentsSum = useMemo(
     () => repaymentsList.reduce((s, r) => s + r.amount, 0),
@@ -275,10 +305,30 @@ export default function TripsPage() {
     () => filteredTrips.filter((t) => t.trip_type === "raw"),
     [filteredTrips],
   );
+  const commerceTripsAll = useMemo(
+    () => trips.filter((t) => t.trip_type === "commerce"),
+    [trips],
+  );
   const rawTripsAll = useMemo(
     () => trips.filter((t) => t.trip_type === "raw"),
     [trips],
   );
+
+  const tripsListDescription = useMemo(() => {
+    if (tripsTab === "commerce") {
+      return formatTripsCountLabel(
+        commerceTrips.length,
+        commerceTripsAll.length,
+      );
+    }
+    return formatTripsCountLabel(rawTrips.length, rawTripsAll.length);
+  }, [
+    tripsTab,
+    commerceTrips.length,
+    commerceTripsAll.length,
+    rawTrips.length,
+    rawTripsAll.length,
+  ]);
 
   const commerceTotals = useMemo(() => {
     if (commerceTrips.length === 0) return null;
@@ -350,6 +400,47 @@ export default function TripsPage() {
     const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
     return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
   }, [rawTripsForRepaymentBlock]);
+
+  const handleExportTrips = async (tripType: TripType) => {
+    const count =
+      tripType === "commerce" ? commerceTrips.length : rawTrips.length;
+    if (count === 0) {
+      toast.error(
+        tripType === "commerce"
+          ? "Немає комерційних рейсів за обраними фільтрами"
+          : "Немає рейсів сировини за обраними фільтрами",
+      );
+      return;
+    }
+
+    setExportingType(tripType);
+    try {
+      const allTrips = await getTripsForExport();
+      const filtered = filterTripsForExport(allTrips, {
+        dateFrom,
+        dateTo,
+        vehicleId: vehicleFilter || undefined,
+        statusFilter,
+        tripType,
+      });
+      if (filtered.length === 0) {
+        toast.error("Немає рейсів для експорту");
+        return;
+      }
+      const csv = buildTripsCsv(filtered);
+      downloadCsvFile(
+        buildTripsExportFilename(tripType, period, selectedYear),
+        csv,
+      );
+      toast.success(
+        `Експортовано ${filtered.length} ${filtered.length === 1 ? "рейс" : filtered.length < 5 ? "рейси" : "рейсів"}`,
+      );
+    } catch {
+      toast.error("Не вдалося експортувати рейси");
+    } finally {
+      setExportingType(null);
+    }
+  };
 
   return (
     <div className="container py-6 space-y-6">
@@ -587,17 +678,49 @@ export default function TripsPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Рейси</CardTitle>
-              <CardDescription>
-                {filteredTrips.length === trips.length
-                  ? `Показано ${trips.length} ${trips.length === 1 ? "рейс" : trips.length < 5 ? "рейси" : "рейсів"}.`
-                  : `Показано ${filteredTrips.length} з ${trips.length} рейсів.`}{" "}
-                Клік по рядку — деталі та редагування.
-              </CardDescription>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1.5">
+                <CardTitle>Рейси</CardTitle>
+                <CardDescription>
+                  {tripsListDescription} Клік по рядку — деталі та
+                  редагування.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  exportingType !== null ||
+                  (tripsTab === "commerce"
+                    ? commerceTrips.length === 0
+                    : rawTrips.length === 0)
+                }
+                aria-busy={exportingType === tripsTab}
+                onClick={() => handleExportTrips(tripsTab)}
+                className="gap-2 shrink-0"
+              >
+                {exportingType === tripsTab ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Експорт…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Експорт
+                  </>
+                )}
+              </Button>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="commerce" className="w-full">
+              <Tabs
+                value={tripsTab}
+                onValueChange={(v) =>
+                  v && setTripsTab(v as "commerce" | "raw")
+                }
+                className="w-full"
+              >
                 <TabsList className="grid w-full max-w-[280px] grid-cols-2">
                   <TabsTrigger value="commerce">
                     {tripTypeLabels.commerce} ({commerceTrips.length})
