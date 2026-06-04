@@ -176,6 +176,7 @@ export function buildTripsCsv(trips: TripExportRow[]): string {
 }
 
 const periodSlug: Record<string, string> = {
+  all: "uves",
   year: "rik",
   month: "misyats",
   week: "tyzhden",
@@ -188,6 +189,9 @@ export function buildTripsExportFilename(
 ): string {
   const typePart = tripType === "commerce" ? "komeriya" : "syrovyna";
   const periodPart = periodSlug[period] ?? period;
+  if (period === "all") {
+    return `reyisy-${typePart}-${periodPart}.csv`;
+  }
   return `reyisy-${typePart}-${year}-${periodPart}.csv`;
 }
 

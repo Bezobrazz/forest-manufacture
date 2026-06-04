@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildTripsCsv,
+  buildTripsExportFilename,
   escapeCsvCell,
   filterTripsForExport,
   type TripExportRow,
@@ -71,4 +72,11 @@ test("filterTripsForExport filters by trip type and profit status", () => {
 test("buildTripsCsv includes header row", () => {
   const csv = buildTripsCsv([]);
   assert.ok(csv.startsWith("ID,"));
+});
+
+test("buildTripsExportFilename for all period omits year", () => {
+  assert.equal(
+    buildTripsExportFilename("commerce", "all", 2026),
+    "reyisy-komeriya-uves.csv",
+  );
 });

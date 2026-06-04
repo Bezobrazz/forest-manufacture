@@ -97,7 +97,7 @@ import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
-type PeriodFilter = "year" | "month" | "week";
+type PeriodFilter = "all" | "year" | "month" | "week";
 type RepaymentPeriodFilter = "all" | "year";
 
 function formatDate(s: string) {
@@ -224,12 +224,22 @@ export default function TripsPage() {
     return Array.from(years).sort((a, b) => b - a);
   }, [trips]);
 
-  const { startDate: periodStart, endDate: periodEnd } = useMemo(
-    () => getDateRangeForPeriod(period, selectedYear),
+  const dateFrom = useMemo(
+    () =>
+      period === "all"
+        ? undefined
+        : dateToYYYYMMDD(
+            getDateRangeForPeriod(period, selectedYear).startDate,
+          ),
     [period, selectedYear],
   );
-  const dateFrom = dateToYYYYMMDD(periodStart);
-  const dateTo = dateToYYYYMMDD(periodEnd);
+  const dateTo = useMemo(
+    () =>
+      period === "all"
+        ? undefined
+        : dateToYYYYMMDD(getDateRangeForPeriod(period, selectedYear).endDate),
+    [period, selectedYear],
+  );
 
   const repaymentYearRange = useMemo(
     () => getDateRangeForPeriod("year", repaymentYear),
@@ -567,6 +577,7 @@ export default function TripsPage() {
                   <Label className="text-xs text-muted-foreground">Рік</Label>
                   <Select
                     value={selectedYear.toString()}
+                    disabled={period === "all"}
                     onValueChange={(value) =>
                       setSelectedYear(parseInt(value, 10))
                     }
@@ -588,6 +599,14 @@ export default function TripsPage() {
                     Період
                   </Label>
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant={period === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPeriod("all")}
+                    >
+                      Увесь
+                    </Button>
                     <Button
                       type="button"
                       variant={period === "year" ? "default" : "outline"}
