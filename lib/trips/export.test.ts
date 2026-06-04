@@ -3,15 +3,24 @@ import assert from "node:assert/strict";
 import {
   buildTripsCsv,
   buildTripsExportFilename,
+  CSV_DELIMITER,
   escapeCsvCell,
+  formatExportNumber,
   filterTripsForExport,
   type TripExportRow,
 } from "./export";
 
-test("escapeCsvCell escapes commas and quotes", () => {
-    assert.equal(escapeCsvCell('a,b'), '"a,b"');
-    assert.equal(escapeCsvCell('say "hi"'), '"say ""hi"""');
-    assert.equal(escapeCsvCell("line\nbreak"), '"line\nbreak"');
+test("formatExportNumber uses comma decimal for Excel uk-UA", () => {
+  assert.equal(formatExportNumber(1500), "1500");
+  assert.equal(formatExportNumber(17.65), "17,65");
+  assert.equal(formatExportNumber(1.5), "1,5");
+});
+
+test("escapeCsvCell escapes delimiter semicolons and quotes", () => {
+  assert.equal(escapeCsvCell("a;b"), '"a;b"');
+  assert.equal(escapeCsvCell("a,b"), "a,b");
+  assert.equal(escapeCsvCell('say "hi"'), '"say ""hi"""');
+  assert.equal(escapeCsvCell("line\nbreak"), '"line\nbreak"');
 });
 
 test("escapeCsvCell leaves plain text unchanged", () => {
@@ -69,9 +78,9 @@ test("filterTripsForExport filters by trip type and profit status", () => {
   assert.equal(none.length, 0);
 });
 
-test("buildTripsCsv includes header row", () => {
+test("buildTripsCsv uses semicolon delimiter", () => {
   const csv = buildTripsCsv([]);
-  assert.ok(csv.startsWith("ID,"));
+  assert.ok(csv.startsWith(`ID${CSV_DELIMITER}`));
 });
 
 test("buildTripsExportFilename for all period omits year", () => {

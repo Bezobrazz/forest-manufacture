@@ -41,13 +41,23 @@ function tripStatusLabel(profit: number | null): string {
   return "Збиток";
 }
 
-function num(value: number | null | undefined): string {
+/** Роздільник колонок для Excel (uk-UA): кома — десятковий знак, крапка в числі = текст. */
+export const CSV_DELIMITER = ";";
+
+/** Число для підсумків у таблиці: цілі без дробу, дробові з комою. */
+export function formatExportNumber(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "";
-  return String(value);
+  const rounded = Math.round(value * 100) / 100;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return String(rounded).replace(".", ",");
 }
 
-export function escapeCsvCell(value: string): string {
-  if (/[",\n\r]/.test(value)) {
+export function escapeCsvCell(
+  value: string,
+  delimiter: string = CSV_DELIMITER,
+): string {
+  const needsQuotes = new RegExp(`[${delimiter}"\\n\\r]`).test(value);
+  if (needsQuotes) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -56,7 +66,7 @@ export function escapeCsvCell(value: string): string {
 function row(values: (string | number | null | undefined)[]): string {
   return values
     .map((v) => escapeCsvCell(v == null ? "" : String(v)))
-    .join(",");
+    .join(CSV_DELIMITER);
 }
 
 export function filterTripsForExport(
@@ -97,34 +107,34 @@ function tripToValues(trip: TripExportRow): string[] {
     formatDisplayDate(trip.trip_end_date ?? trip.trip_date),
     trip.trip_start_date ?? trip.trip_date ?? "",
     trip.trip_end_date ?? trip.trip_date ?? "",
-    num(trip.days_count),
+    formatExportNumber(trip.days_count),
     tripStatusLabel(trip.profit_uah),
-    num(trip.start_odometer_km),
-    num(trip.end_odometer_km),
-    num(trip.distance_km),
-    num(trip.fuel_consumption_l_per_100km),
-    num(trip.fuel_price_uah_per_l),
-    num(trip.fuel_used_l),
-    num(trip.fuel_cost_uah),
-    num(trip.depreciation_uah_per_km),
-    num(trip.depreciation_cost_uah),
-    num(trip.daily_taxes_uah),
-    num(trip.taxes_cost_uah),
-    num(trip.freight_uah),
+    formatExportNumber(trip.start_odometer_km),
+    formatExportNumber(trip.end_odometer_km),
+    formatExportNumber(trip.distance_km),
+    formatExportNumber(trip.fuel_consumption_l_per_100km),
+    formatExportNumber(trip.fuel_price_uah_per_l),
+    formatExportNumber(trip.fuel_used_l),
+    formatExportNumber(trip.fuel_cost_uah),
+    formatExportNumber(trip.depreciation_uah_per_km),
+    formatExportNumber(trip.depreciation_cost_uah),
+    formatExportNumber(trip.daily_taxes_uah),
+    formatExportNumber(trip.taxes_cost_uah),
+    formatExportNumber(trip.freight_uah),
     driverPayModeLabels[driverMode] ?? trip.driver_pay_mode ?? "",
-    num(trip.driver_pay_uah),
-    num(trip.driver_pay_uah_per_day),
-    num(trip.driver_pay_percent_of_freight),
-    num(trip.driver_cost_uah),
-    num(trip.extra_costs_uah),
-    trip.trip_type === "raw" ? num(trip.bags_count) : "",
+    formatExportNumber(trip.driver_pay_uah),
+    formatExportNumber(trip.driver_pay_uah_per_day),
+    formatExportNumber(trip.driver_pay_percent_of_freight),
+    formatExportNumber(trip.driver_cost_uah),
+    formatExportNumber(trip.extra_costs_uah),
+    trip.trip_type === "raw" ? formatExportNumber(trip.bags_count) : "",
     trip.trip_type === "raw" && typeof costPerBag === "number"
-      ? num(costPerBag)
+      ? formatExportNumber(costPerBag)
       : "",
-    num(trip.total_costs_uah),
-    num(trip.profit_uah),
-    num(trip.profit_per_km_uah),
-    num(trip.roi_percent),
+    formatExportNumber(trip.total_costs_uah),
+    formatExportNumber(trip.profit_uah),
+    formatExportNumber(trip.profit_per_km_uah),
+    formatExportNumber(trip.roi_percent),
     trip.notes?.trim() ?? "",
   ];
 }
