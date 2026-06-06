@@ -65,6 +65,7 @@ import { uk } from "date-fns/locale";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
@@ -171,7 +172,10 @@ function LoadingSkeleton() {
   );
 }
 
+type ExpensesPageTab = "expenses" | "transfers";
+
 export default function ExpensesPage() {
+  const [activeTab, setActiveTab] = useState<ExpensesPageTab>("expenses");
   const [period, setPeriod] = useState<PeriodFilter>("week");
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -1382,7 +1386,17 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as ExpensesPageTab)}
+        className="space-y-6"
+      >
+        <TabsList>
+          <TabsTrigger value="expenses">Витрати</TabsTrigger>
+          <TabsTrigger value="transfers">Переміщення коштів</TabsTrigger>
+        </TabsList>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={period === "day" ? "default" : "outline"}
@@ -1471,6 +1485,7 @@ export default function ExpensesPage() {
             </PopoverContent>
           </Popover>
 
+          {activeTab === "expenses" && (
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -1550,13 +1565,17 @@ export default function ExpensesPage() {
               </div>
             </PopoverContent>
           </Popover>
+          )}
         </div>
-        <div className="text-2xl font-bold">
-          {formatNumberWithUnit(totalExpenses, "₴")}
-        </div>
+        {activeTab === "expenses" && (
+          <div className="text-2xl font-bold">
+            {formatNumberWithUnit(totalExpenses, "₴")}
+          </div>
+        )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+      <TabsContent value="expenses" className="space-y-8 mt-0">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {includePurchases && (
         <Card>
           <CardHeader className="pb-2">
@@ -1655,8 +1674,6 @@ export default function ExpensesPage() {
         ))}
       </div>
 
-      <FundTransfersSection isDateInRange={isDateInRange} />
-
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Історія витрат</h2>
         {combinedHistory.length === 0 ? (
@@ -1743,6 +1760,14 @@ export default function ExpensesPage() {
           </>
         )}
       </div>
+      </TabsContent>
+
+      <TabsContent value="transfers" className="mt-0">
+        {activeTab === "transfers" && (
+          <FundTransfersSection isDateInRange={isDateInRange} />
+        )}
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }

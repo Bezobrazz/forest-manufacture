@@ -79,14 +79,11 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
   }, [filteredTransfers.length]);
 
   return (
-    <div className="space-y-4 mb-8">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold">Переміщення коштів</h2>
-          <p className="text-sm text-muted-foreground">
-            {routeLabel} · дані з KeepinCRM
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {routeLabel} · дані з KeepinCRM
+        </p>
         <Button
           variant="outline"
           onClick={() => void loadTransfers()}
@@ -106,7 +103,7 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Переміщення коштів</CardTitle>
+          <CardTitle className="text-lg">Разом за період</CardTitle>
           <p className="text-sm text-muted-foreground">{routeLabel}</p>
         </CardHeader>
         <CardContent>
