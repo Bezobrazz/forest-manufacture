@@ -135,7 +135,10 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
         <>
           <div className="space-y-3">
             {paginatedTransfers.map((transfer) => {
-              const displayComment = getFundTransferDisplayComment(transfer.comment);
+              const displayComment =
+                getFundTransferDisplayComment(transfer.comment) ??
+                transfer.comment?.trim() ??
+                null;
               return (
                 <Card key={transfer.id}>
                   <CardContent className="py-4">
@@ -149,9 +152,12 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
                       <div className="text-lg font-bold">
                         {formatNumberWithUnit(Number(transfer.amount), "₴")}
                       </div>
-                      {displayComment && (
-                        <p className="text-sm text-muted-foreground">{displayComment}</p>
-                      )}
+                      {displayComment ? (
+                        <p className="text-sm text-muted-foreground pt-1">
+                          <span className="font-medium text-foreground">Коментар: </span>
+                          {displayComment}
+                        </p>
+                      ) : null}
                     </div>
                   </CardContent>
                 </Card>
