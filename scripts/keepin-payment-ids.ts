@@ -11,6 +11,8 @@ import { join } from "node:path";
 
 const DEFAULT_PURSE_NAME = "Петрович";
 const DEFAULT_CATEGORY_NAME = "Закупівля Кора Сировина";
+const DEFAULT_FUND_TRANSFER_FROM_NAME = "Безготівка";
+const DEFAULT_FUND_TRANSFER_TO_NAME = "Петрович";
 
 function loadEnvLocal(): void {
   for (const file of [".env.local", ".env"]) {
@@ -87,6 +89,12 @@ async function main(): Promise<void> {
     process.env.KEEPINCRM_SUPPLIER_EXPENSE_PURSE_NAME?.trim() || DEFAULT_PURSE_NAME;
   const categoryName =
     process.env.KEEPINCRM_SUPPLIER_EXPENSE_CATEGORY_NAME?.trim() || DEFAULT_CATEGORY_NAME;
+  const fundTransferFromName =
+    process.env.KEEPINCRM_FUND_TRANSFER_FROM_PURSE_LABEL?.trim() ||
+    DEFAULT_FUND_TRANSFER_FROM_NAME;
+  const fundTransferToName =
+    process.env.KEEPINCRM_FUND_TRANSFER_TO_PURSE_LABEL?.trim() ||
+    DEFAULT_FUND_TRANSFER_TO_NAME;
 
   if (!apiKey) {
     console.error("❌ Додайте KEEPINCRM_API_KEY у .env.local або в середовище");
@@ -114,6 +122,12 @@ async function main(): Promise<void> {
 
   const purse = purses.find((p) => normalizeName(p.name ?? "") === purseNeedle);
   const category = debitCategories.find((c) => normalizeName(c.name ?? "") === categoryNeedle);
+  const fundFromPurse = purses.find(
+    (p) => normalizeName(p.name ?? "") === normalizeName(fundTransferFromName)
+  );
+  const fundToPurse = purses.find(
+    (p) => normalizeName(p.name ?? "") === normalizeName(fundTransferToName)
+  );
 
   console.log("\n=== Для секретів (.env / Vercel) ===\n");
 
@@ -131,11 +145,51 @@ async function main(): Promise<void> {
     console.log(`# Категорію «${categoryName}» не знайдено — перевірте назву в списку вище`);
   }
 
+  console.log("");
+  if (fundFromPurse?.id) {
+    console.log(`KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID=${fundFromPurse.id}`);
+    console.log(`# ${fundFromPurse.name}`);
+  } else {
+    console.log(
+      `# Гаманець «${fundTransferFromName}» для переміщення не знайдено — перевірте список purses`
+    );
+  }
+
+  if (fundToPurse?.id) {
+    console.log(`KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID=${fundToPurse.id}`);
+    console.log(`# ${fundToPurse.name}`);
+  } else {
+    console.log(
+      `# Гаманець «${fundTransferToName}» для переміщення не знайдено — перевірте список purses`
+    );
+  }
+
+  console.log(
+    "\n# Webhook KeepinCRM (Фінанси → тригер → Webhook POST):"
+  );
+  console.log(
+    "# URL: https://<your-domain>/api/webhooks/keepincrm/finances?token=<KEEPINCRM_WEBHOOK_SECRET>"
+  );
+  console.log(`# Body (приклад):
+# {
+#   "id": "{{id}}",
+#   "kind": "{{kind}}",
+#   "amount": "{{amount}}",
+#   "at": "{{at}}",
+#   "comment": "{{comment}}",
+#   "source_purse_id": "{{source_purse.id}}",
+#   "target_purse_id": "{{target_purse.id}}",
+#   "event": "created"
+# }`);
+  console.log(
+    "# Для update/delete додайте окремі тригери з event=updated/deleted (якщо доступно в CRM)."
+  );
+
   console.log(
     "\n# Опційно (якщо не вказати ID, додаток сам шукає за назвами Петрович / Закупівля Кора Сировина)"
   );
 
-  if (!purse?.id || !category?.id) {
+  if (!purse?.id || !category?.id || !fundFromPurse?.id || !fundToPurse?.id) {
     process.exit(1);
   }
 }

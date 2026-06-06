@@ -64,6 +64,7 @@ import { cn } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
@@ -1653,6 +1654,8 @@ export default function ExpensesPage() {
           </Card>
         ))}
       </div>
+
+      <FundTransfersSection isDateInRange={isDateInRange} />
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Історія витрат</h2>

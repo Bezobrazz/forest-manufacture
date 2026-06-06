@@ -1,8 +1,21 @@
-import { keepinJson, type KeepinListResponse } from "@/lib/crm/keepincrm/client";
+import { keepinJson, keepinRequest, type KeepinListResponse } from "@/lib/crm/keepincrm/client";
 
 export type KeepinPurse = {
   id: number;
   name: string;
+  currency?: string;
+};
+
+export type KeepinPaymentListItem = {
+  id: number;
+  kind: string;
+  amount: number;
+  at: string;
+  comment: string | null;
+  currency?: string;
+  planned?: boolean;
+  created_at?: string;
+  purse?: KeepinPurse | null;
 };
 
 export type KeepinPaymentCategory = {
@@ -21,7 +34,27 @@ export type CreateKeepinPaymentInput = {
   currency?: string;
 };
 
+export type CreateKeepinFundTransferInput = {
+  amount: number;
+  atYmd: string;
+  comment: string;
+  fromPurseId: number;
+  toPurseId: number;
+  currency?: string;
+};
+
+export type UpdateKeepinFundTransferInput = {
+  amount: number;
+  atYmd: string;
+  comment: string;
+  fromPurseId: number;
+  toPurseId: number;
+  currency?: string;
+};
+
 const MAX_PAGES = 50;
+const MAX_RECONCILE_PAGES = 120;
+const KEEPIN_TRANSFER_KIND = "transfer";
 
 const DEFAULT_PURSE_NAME = "Петрович";
 const DEFAULT_CATEGORY_NAME = "Закупівля Кора Сировина";
@@ -190,4 +223,204 @@ export async function createKeepinExpensePayment(
   }
 
   return paymentId;
+}
+
+function normalizePaymentAmount(value: number): number {
+  const amount = Math.round(value * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("KeepinCRM: сума має бути більше нуля");
+  }
+  return amount;
+}
+
+function buildFundTransferPostBodies(
+  input: CreateKeepinFundTransferInput
+): Record<string, unknown>[] {
+  const amount = normalizePaymentAmount(input.amount);
+  const currency =
+    input.currency?.trim() ||
+    process.env.KEEPINCRM_SUPPLIER_EXPENSE_CURRENCY?.trim() ||
+    "UAH";
+  const base = {
+    amount,
+    kind: KEEPIN_TRANSFER_KIND,
+    at: input.atYmd,
+    comment: input.comment.trim().slice(0, 500),
+    planned: false,
+    currency,
+  };
+
+  return [
+    {
+      ...base,
+      purse_id: input.toPurseId,
+      source_purse_id: input.fromPurseId,
+    },
+    {
+      ...base,
+      purse_id: input.toPurseId,
+      source_purse_attributes: { id: input.fromPurseId, currency },
+    },
+    {
+      ...base,
+      purse_id: input.toPurseId,
+      source_purse: { id: input.fromPurseId, currency },
+    },
+  ];
+}
+
+/** Створює переміщення між гаманцями (POST /payments, kind=transfer). */
+export async function createKeepinFundTransfer(
+  input: CreateKeepinFundTransferInput
+): Promise<number> {
+  const bodies = buildFundTransferPostBodies(input);
+  let lastError = "KeepinCRM: не вдалося створити переміщення";
+
+  for (const body of bodies) {
+    const res = await keepinRequest("/payments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    const text = await res.text().catch(() => "");
+
+    if (res.ok) {
+      let created: { id?: number } | null = null;
+      try {
+        created = text ? (JSON.parse(text) as { id?: number }) : null;
+      } catch {
+        created = null;
+      }
+      const paymentId = Number(created?.id);
+      if (Number.isFinite(paymentId) && paymentId > 0) {
+        return paymentId;
+      }
+      lastError = "KeepinCRM: не отримано ID створеного переміщення";
+      continue;
+    }
+
+    lastError = text
+      ? `KeepinCRM: ${text.slice(0, 300)}`
+      : `KeepinCRM: HTTP ${res.status}`;
+  }
+
+  throw new Error(lastError);
+}
+
+export async function updateKeepinFundTransfer(
+  keepinPaymentId: number,
+  input: UpdateKeepinFundTransferInput
+): Promise<void> {
+  const amount = normalizePaymentAmount(input.amount);
+  const currency =
+    input.currency?.trim() ||
+    process.env.KEEPINCRM_SUPPLIER_EXPENSE_CURRENCY?.trim() ||
+    "UAH";
+
+  const body = {
+    amount,
+    kind: KEEPIN_TRANSFER_KIND,
+    at: input.atYmd,
+    comment: input.comment.trim().slice(0, 500),
+    planned: false,
+    currency,
+    purse_id: input.toPurseId,
+    source_purse_id: input.fromPurseId,
+  };
+
+  const res = await keepinRequest(`/payments/${keepinPaymentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `KeepinCRM PATCH /payments/${keepinPaymentId} HTTP ${res.status}${
+        text ? `: ${text.slice(0, 200)}` : ""
+      }`
+    );
+  }
+}
+
+export async function deleteKeepinFundTransfer(keepinPaymentId: number): Promise<void> {
+  const res = await keepinRequest(`/payments/${keepinPaymentId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `KeepinCRM DELETE /payments/${keepinPaymentId} HTTP ${res.status}${
+        text ? `: ${text.slice(0, 200)}` : ""
+      }`
+    );
+  }
+}
+
+export async function fetchKeepinPaymentsPage(
+  page: number
+): Promise<KeepinListResponse<KeepinPaymentListItem>> {
+  return keepinJson<KeepinListResponse<KeepinPaymentListItem>>("/payments", {
+    searchParams: { page },
+  });
+}
+
+export async function fetchKeepinPaymentsSince(
+  sinceYmd: string,
+  maxPages = MAX_RECONCILE_PAGES
+): Promise<KeepinPaymentListItem[]> {
+  const merged: KeepinPaymentListItem[] = [];
+  let page = 1;
+
+  while (page <= maxPages) {
+    const data = await fetchKeepinPaymentsPage(page);
+    const chunk = Array.isArray(data.items) ? data.items : [];
+    if (!chunk.length) break;
+
+    merged.push(...chunk);
+
+    const oldestOnPage = chunk.reduce((min, item) => {
+      const at = item.at?.slice(0, 10) ?? "";
+      return !min || (at && at < min) ? at : min;
+    }, "");
+
+    if (oldestOnPage && oldestOnPage < sinceYmd) {
+      break;
+    }
+
+    const totalPages =
+      typeof data.pagination?.total_pages === "number" && data.pagination.total_pages >= 1
+        ? data.pagination.total_pages
+        : null;
+
+    if (totalPages !== null && page >= totalPages) break;
+    page += 1;
+  }
+
+  return merged.filter((item) => (item.at?.slice(0, 10) ?? "") >= sinceYmd);
+}
+
+export function isKeepinTransferListItem(
+  payment: KeepinPaymentListItem,
+  toPurseId: number
+): boolean {
+  return (
+    payment.kind === KEEPIN_TRANSFER_KIND &&
+    typeof payment.purse?.id === "number" &&
+    payment.purse.id === toPurseId
+  );
+}
+
+export function mapKeepinTransferToLocalFields(payment: KeepinPaymentListItem): {
+  amount: number;
+  transferredAt: string;
+  comment: string | null;
+  keepinPaymentId: number;
+} {
+  return {
+    amount: normalizePaymentAmount(Number(payment.amount)),
+    transferredAt: payment.at?.length === 10 ? `${payment.at}T12:00:00.000Z` : payment.at,
+    comment: payment.comment?.trim() || null,
+    keepinPaymentId: payment.id,
+  };
 }

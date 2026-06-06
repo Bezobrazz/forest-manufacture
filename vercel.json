@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-keepincrm",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-fund-transfers",
+      "schedule": "0 4 * * *"
     }
   ]
 }

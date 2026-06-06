@@ -173,3 +173,5 @@ export type ShipmentForecast = {
   isReady: boolean;
   missing: { productId: number; needed: number }[];
 };
+
+export type { FundTransfer, FundTransferSource } from "@/lib/crm/keepincrm/fund-transfer-types";
