@@ -97,7 +97,9 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
     })
   );
 
-  const employees = await getEmployees();
+  const employees = (await getEmployees()).filter(
+    (employee) => !employee.is_manager,
+  );
   const products = await getProducts();
   const hourlyWageExpenses = await getHourlyWageExpensesForShift(shift.id);
 

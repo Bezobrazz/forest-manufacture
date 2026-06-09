@@ -2,6 +2,8 @@ export interface Employee {
   id: number;
   name: string;
   position: string | null;
+  is_manager: boolean;
+  salary: number | null;
   created_at: string;
 }
 

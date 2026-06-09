@@ -14,12 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-
-type Employee = {
-  id: number;
-  name: string;
-  position: string | null;
-};
+import type { Employee } from "@/lib/types";
 
 type EmployeeEditFormProps = {
   employee: Employee;
@@ -42,9 +37,14 @@ export function EmployeeEditForm({
       const result = await updateEmployee(formData);
 
       if (result.success) {
-        toast.success("Працівника оновлено", {
-          description: "Дані працівника успішно оновлено",
-        });
+        toast.success(
+          employee.is_manager ? "Керівника оновлено" : "Працівника оновлено",
+          {
+            description: employee.is_manager
+              ? "Дані керівника успішно оновлено"
+              : "Дані працівника успішно оновлено",
+          },
+        );
 
         // Закриваємо модальне вікно
         onClose();
@@ -69,12 +69,23 @@ export function EmployeeEditForm({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Редагувати працівника</DialogTitle>
+          <DialogTitle>
+            {employee.is_manager
+              ? "Редагувати керівника"
+              : "Редагувати працівника"}
+          </DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="space-y-4">
           <input type="hidden" name="id" value={employee.id} />
+          <input
+            type="hidden"
+            name="is_manager"
+            value={String(employee.is_manager)}
+          />
           <div className="space-y-2">
-            <Label htmlFor="name">Ім'я працівника</Label>
+            <Label htmlFor="name">
+              {employee.is_manager ? "Ім'я керівника" : "Ім'я працівника"}
+            </Label>
             <Input
               id="name"
               name="name"
@@ -90,6 +101,20 @@ export function EmployeeEditForm({
               defaultValue={employee.position || ""}
             />
           </div>
+          {employee.is_manager && (
+            <div className="space-y-2">
+              <Label htmlFor="salary">Оклад</Label>
+              <Input
+                id="salary"
+                name="salary"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={employee.salary ?? ""}
+                required
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Скасувати

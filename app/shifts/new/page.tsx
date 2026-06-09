@@ -8,7 +8,9 @@ import { PreviousPageButton } from "@/components/previous-page-button"
 export const dynamic = "force-dynamic"
 
 export default async function NewShiftPage() {
-  const employees = await getEmployees()
+  const employees = (await getEmployees()).filter(
+    (employee) => !employee.is_manager,
+  )
 
   return (
     <div className="container min-w-0 py-6">

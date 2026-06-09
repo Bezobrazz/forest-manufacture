@@ -18,7 +18,9 @@ export function AddEmployeeToShift({ shift, employees, existingEmployeeIds }: Ad
   const [isPending, setIsPending] = useState(false)
 
   // Фільтруємо працівників, які ще не додані до зміни
-  const availableEmployees = employees.filter((employee) => !existingEmployeeIds.includes(employee.id))
+  const availableEmployees = employees
+    .filter((employee) => !employee.is_manager)
+    .filter((employee) => !existingEmployeeIds.includes(employee.id))
 
   async function handleAddEmployee() {
     if (!selectedEmployeeId) {

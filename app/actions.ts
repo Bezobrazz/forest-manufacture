@@ -1676,6 +1676,10 @@ export async function createEmployee(formData: FormData) {
 
     const name = formData.get("name") as string;
     const position = formData.get("position") as string;
+    const isManager = formData.get("is_manager") === "true";
+    const salaryRaw = formData.get("salary") as string;
+    const salary =
+      salaryRaw === "" || salaryRaw == null ? null : Number(salaryRaw);
 
     if (!name) {
       return {
@@ -1684,11 +1688,22 @@ export async function createEmployee(formData: FormData) {
       };
     }
 
+    if (isManager) {
+      if (salary == null || Number.isNaN(salary) || salary < 0) {
+        return {
+          success: false,
+          error: "Для керівника необхідно вказати оклад",
+        };
+      }
+    }
+
     const { data, error } = await supabase
       .from("employees")
       .insert({
         name,
         position: position || null,
+        is_manager: isManager,
+        salary: isManager ? salary : null,
       })
       .select()
       .single();
@@ -2581,6 +2596,10 @@ export async function updateEmployee(formData: FormData) {
     const id = Number(formData.get("id"));
     const name = formData.get("name") as string;
     const position = formData.get("position") as string;
+    const isManager = formData.get("is_manager") === "true";
+    const salaryRaw = formData.get("salary") as string;
+    const salary =
+      salaryRaw === "" || salaryRaw == null ? null : Number(salaryRaw);
 
     if (!id || !name) {
       return {
@@ -2589,11 +2608,22 @@ export async function updateEmployee(formData: FormData) {
       };
     }
 
+    if (isManager) {
+      if (salary == null || Number.isNaN(salary) || salary < 0) {
+        return {
+          success: false,
+          error: "Для керівника необхідно вказати оклад",
+        };
+      }
+    }
+
     const { data, error } = await supabase
       .from("employees")
       .update({
         name,
         position: position || null,
+        is_manager: isManager,
+        salary: isManager ? salary : null,
       })
       .eq("id", id)
       .select()

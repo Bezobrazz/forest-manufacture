@@ -4,12 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import { EmployeeEditForm } from "@/components/employee-edit-form";
-
-type Employee = {
-  id: number;
-  name: string;
-  position: string | null;
-};
+import type { Employee } from "@/lib/types";
 
 type EmployeeEditButtonProps = {
   employee: Employee;
