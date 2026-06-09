@@ -443,6 +443,47 @@ export default function StatisticsPage() {
     [employees]
   );
 
+  const computeTotalCostPerBagForRange = (
+    startDay: string,
+    endDay: string
+  ): number | null => {
+    const purchaseCosts = sumPurchaseCostsInRange(startDay, endDay);
+    const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
+    const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
+    const tripBags = sumBagsInRange(startDay, endDay);
+    const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
+    const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
+    const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
+    const managementSalaryCosts = prorateMonthlyAmountForDateRange(
+      managementSalaryMonthlyTotal,
+      startDay,
+      endDay
+    );
+    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
+    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    if (purchaseCostPerBag == null || tripCostPerBag == null) return null;
+
+    const hourlyWagePerBag =
+      producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const electricityPerBag =
+      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
+    const managementSalaryPerBag =
+      producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
+    const managementSalaryPerBagInTotal = includeManagementSalaryInCost
+      ? managementSalaryPerBag
+      : 0;
+
+    return (
+      purchaseCostPerBag +
+      tripCostPerBag +
+      fixedRewardPerBag +
+      hourlyWagePerBag +
+      electricityPerBag +
+      managementSalaryPerBagInTotal +
+      latestPackingBagPriceUah
+    );
+  };
+
   const currentPeriodCostMetrics = useMemo(() => {
     const startDay = periodStartStr;
     const endDay = periodEndStr;
@@ -467,20 +508,7 @@ export default function StatisticsPage() {
       producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
     const managementSalaryPerBag =
       producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
-    const managementSalaryPerBagInTotal = includeManagementSalaryInCost
-      ? managementSalaryPerBag
-      : 0;
-    const packingBagFromLatestTx = latestPackingBagPriceUah;
-    const totalCostPerBag =
-      purchaseCostPerBag != null && tripCostPerBag != null
-        ? purchaseCostPerBag +
-          tripCostPerBag +
-          fixedRewardPerBag +
-          hourlyWagePerBag +
-          electricityPerBag +
-          managementSalaryPerBagInTotal +
-          packingBagFromLatestTx
-        : null;
+    const totalCostPerBag = computeTotalCostPerBagForRange(startDay, endDay);
 
     return {
       purchaseCosts,
@@ -497,7 +525,7 @@ export default function StatisticsPage() {
       hourlyWagePerBag,
       electricityPerBag,
       managementSalaryPerBag,
-      packingBagFromLatestTx,
+      packingBagFromLatestTx: latestPackingBagPriceUah,
       totalCostPerBag,
     };
   }, [
@@ -517,43 +545,8 @@ export default function StatisticsPage() {
     const prevStartDay = dateToYYYYMMDD(previousPeriodRange.prevStart);
     const prevEndDay = dateToYYYYMMDD(previousPeriodRange.prevEnd);
 
-    const purchaseCosts = sumPurchaseCostsInRange(prevStartDay, prevEndDay);
-    const purchaseBags = sumPurchaseBagsInRange(prevStartDay, prevEndDay);
-    const rawTripCosts = sumRawTripsCostsInRange(prevStartDay, prevEndDay);
-    const tripBags = sumBagsInRange(prevStartDay, prevEndDay);
-    const hourlyWageCosts = sumHourlyWageCostsInRange(prevStartDay, prevEndDay);
-    const electricityCosts = sumElectricityCostsInRange(prevStartDay, prevEndDay);
-    const producedQuantity = sumProducedQuantityInRange(prevStartDay, prevEndDay);
-    const managementSalaryCosts = prorateMonthlyAmountForDateRange(
-      managementSalaryMonthlyTotal,
-      prevStartDay,
-      prevEndDay
-    );
-    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
-    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
-    const hourlyWagePerBag =
-      producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
-    const electricityPerBag =
-      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
-    const managementSalaryPerBag =
-      producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
-    const managementSalaryPerBagInTotal = includeManagementSalaryInCost
-      ? managementSalaryPerBag
-      : 0;
-    const packingBagFromLatestTx = latestPackingBagPriceUah;
-    const totalCostPerBag =
-      purchaseCostPerBag != null && tripCostPerBag != null
-        ? purchaseCostPerBag +
-          tripCostPerBag +
-          fixedRewardPerBag +
-          hourlyWagePerBag +
-          electricityPerBag +
-          managementSalaryPerBagInTotal +
-          packingBagFromLatestTx
-        : null;
-
     return {
-      totalCostPerBag,
+      totalCostPerBag: computeTotalCostPerBagForRange(prevStartDay, prevEndDay),
     };
   }, [
     previousPeriodRange,
@@ -683,6 +676,76 @@ export default function StatisticsPage() {
     ];
     return months[monthIndex];
   };
+
+  const monthlyCostPerBagChartRange = useMemo(() => {
+    if (statsDateRange) {
+      return { start: statsDateRange.start, end: statsDateRange.end };
+    }
+    return {
+      start: `${selectedYear}-01-01`,
+      end: `${selectedYear}-12-31`,
+    };
+  }, [selectedYear, statsDateRange]);
+
+  const monthlyCostPerBagData = useMemo(() => {
+    const { start: chartStart, end: chartEnd } = monthlyCostPerBagChartRange;
+    const showYearInLabel =
+      statsDateRange != null && chartStart.slice(0, 4) !== chartEnd.slice(0, 4);
+
+    const monthBuckets: { key: string; start: string; end: string }[] = [];
+    const [sy, sm] = chartStart.split("-").map((x) => Number.parseInt(x, 10));
+    const [ey, em] = chartEnd.split("-").map((x) => Number.parseInt(x, 10));
+    let cursor = new Date(sy, sm - 1, 1);
+    const lastMonth = new Date(ey, em - 1, 1);
+
+    while (cursor <= lastMonth) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth() + 1;
+      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+      const bucketStart = monthStart > chartStart ? monthStart : chartStart;
+      const bucketEnd = monthEnd < chartEnd ? monthEnd : chartEnd;
+
+      if (bucketStart <= bucketEnd) {
+        monthBuckets.push({
+          key: `${year}-${String(month).padStart(2, "0")}`,
+          start: bucketStart,
+          end: bucketEnd,
+        });
+      }
+
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return monthBuckets.map(({ key, start, end }, index) => {
+      const [, monthPart] = key.split("-");
+      const monthIndex = Number.parseInt(monthPart, 10) - 1;
+      const yearLabel = key.slice(0, 4);
+      return {
+        month: showYearInLabel
+          ? `${getMonthName(monthIndex)} ${yearLabel}`
+          : getMonthName(monthIndex),
+        costPerBag: computeTotalCostPerBagForRange(start, end),
+        monthIndex: index,
+      };
+    });
+  }, [
+    monthlyCostPerBagChartRange,
+    statsDateRange,
+    expenses,
+    fixedRewardPerBag,
+    includeManagementSalaryInCost,
+    managementSalaryMonthlyTotal,
+    supplierDeliveries,
+    trips,
+    latestPackingBagPriceUah,
+    shifts,
+  ]);
+
+  const monthlyCostPerBagChartHasData = monthlyCostPerBagData.some(
+    (row) => row.costPerBag != null
+  );
 
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -1763,6 +1826,66 @@ export default function StatisticsPage() {
                 {totalDeltaPercent != null ? formatPercentage(totalDeltaPercent, 1) : "—"}
               </p>
             </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium mb-1 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Динаміка помісячної собівартості
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              {statsDateRange
+                ? `Підсумкова собівартість мішка по місяцях за період ${periodLabel}`
+                : `Підсумкова собівартість мішка по місяцях ${selectedYear} року`}
+            </p>
+            {!monthlyCostPerBagChartHasData ? (
+              <div className="text-center py-8 text-muted-foreground text-sm rounded-lg border bg-muted/20">
+                Немає даних для побудови графіка (потрібні закупки та поїздки за місяць)
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={monthlyCostPerBagData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 12 }}
+                    interval={0}
+                    angle={monthlyCostPerBagData.length > 6 ? -35 : 0}
+                    textAnchor={monthlyCostPerBagData.length > 6 ? "end" : "middle"}
+                    height={monthlyCostPerBagData.length > 6 ? 64 : 40}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value: number) => formatNumber(value)}
+                    label={{
+                      value: "Собівартість (₴)",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
+                  <Tooltip
+                    formatter={(value: number) =>
+                      value != null ? formatNumberWithUnit(value, "₴") : "—"
+                    }
+                    labelStyle={{ color: "hsl(var(--foreground))" }}
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--background))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "6px",
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="costPerBag"
+                    connectNulls={false}
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
