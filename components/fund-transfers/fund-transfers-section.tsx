@@ -38,14 +38,24 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
   const loadTransfers = useCallback(async () => {
     setIsLoading(true);
     try {
-      await pullFundTransfersFromKeepin();
+      try {
+        await pullFundTransfersFromKeepin();
+      } catch (pullError) {
+        console.error("pullFundTransfersFromKeepin:", pullError);
+        const message =
+          pullError instanceof Error
+            ? pullError.message
+            : "Не вдалося синхронізувати з KeepinCRM";
+        toast.error("Синхронізація з CRM", { description: message });
+      }
+
       const rows = await getFundTransfers();
       setTransfers(rows);
     } catch (error) {
       console.error("loadTransfers:", error);
-      toast.error("Помилка", {
-        description: "Не вдалося завантажити переміщення коштів з KeepinCRM",
-      });
+      const message =
+        error instanceof Error ? error.message : "Не вдалося завантажити переміщення";
+      toast.error("Помилка", { description: message });
     } finally {
       setIsLoading(false);
     }

@@ -70,6 +70,26 @@ export function isFundTransferSyncEnabled(): boolean {
   return Boolean(process.env.KEEPINCRM_API_KEY?.trim());
 }
 
+export function assertFundTransferPullConfigured(): {
+  fromPurseId: number;
+  toPurseId: number;
+} {
+  if (!isFundTransferSyncEnabled()) {
+    throw new Error(
+      "KEEPINCRM_API_KEY не налаштовано на сервері (перевірте env на Vercel Production)"
+    );
+  }
+
+  const configured = tryGetFundTransferPurseIds();
+  if (!configured) {
+    throw new Error(
+      "KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID та KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID не налаштовано на сервері"
+    );
+  }
+
+  return configured;
+}
+
 /** App → CRM push (POST/PATCH/DELETE transfer). За замовчуванням вимкнено: API KeepinCRM не приймає transfer. */
 export function isFundTransferPushEnabled(): boolean {
   const raw = process.env.KEEPINCRM_FUND_TRANSFER_PUSH_ENABLED?.trim().toLowerCase();

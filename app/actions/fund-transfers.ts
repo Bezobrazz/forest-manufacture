@@ -4,17 +4,20 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import {
+  assertFundTransferPullConfigured,
   getFundTransferFromPurseId,
   getFundTransferToPurseId,
   isFundTransferPushEnabled,
   isFundTransferSyncEnabled,
 } from "@/lib/crm/keepincrm/fund-transfer-config";
 import {
+  PULL_RECONCILE_MAX_PAGES,
   reconcileFundTransfersWithKeepin,
   syncFundTransferDeleteToKeepin,
   syncFundTransferToKeepin,
   syncFundTransferUpdateToKeepin,
 } from "@/lib/crm/keepincrm/sync-fund-transfer";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import type { FundTransfer } from "@/lib/types";
 
 function parseAmount(value: number): number {
@@ -75,12 +78,13 @@ export async function pullFundTransfersFromKeepin(): Promise<{
   removed: number;
   scanned: number;
 }> {
-  if (!isFundTransferSyncEnabled()) {
-    return { upserted: 0, removed: 0, scanned: 0 };
-  }
+  assertFundTransferPullConfigured();
 
-  const supabase = await createServerClient();
-  const result = await reconcileFundTransfersWithKeepin(supabase);
+  const supabase = createServiceRoleClient();
+  const result = await reconcileFundTransfersWithKeepin(supabase, {
+    maxPages: PULL_RECONCILE_MAX_PAGES,
+    removeMissing: false,
+  });
   revalidatePath("/expenses");
   return result;
 }

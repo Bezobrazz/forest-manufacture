@@ -20,6 +20,15 @@ import {
 import type { FundTransfer, FundTransferSource } from "@/lib/types";
 
 const RECONCILE_LOOKBACK_DAYS = 120;
+/** Повний reconcile (cron): до 120 сторінок KeepinCRM. */
+const CRON_RECONCILE_MAX_PAGES = 120;
+/** Pull з UI: лише перші сторінки, щоб вкластися в ліміт Vercel (~10s). */
+export const PULL_RECONCILE_MAX_PAGES = 15;
+
+export type ReconcileFundTransfersOptions = {
+  maxPages?: number;
+  removeMissing?: boolean;
+};
 
 function parsePositiveInt(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
@@ -283,7 +292,8 @@ function reconcileSinceYmd(): string {
 }
 
 export async function reconcileFundTransfersWithKeepin(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options: ReconcileFundTransfersOptions = {}
 ): Promise<{ upserted: number; removed: number; scanned: number }> {
   if (!isFundTransferSyncEnabled()) {
     return { upserted: 0, removed: 0, scanned: 0 };
@@ -294,9 +304,11 @@ export async function reconcileFundTransfersWithKeepin(
     return { upserted: 0, removed: 0, scanned: 0 };
   }
 
+  const maxPages = options.maxPages ?? CRON_RECONCILE_MAX_PAGES;
+  const removeMissing = options.removeMissing ?? true;
   const { fromPurseId, toPurseId } = configured;
   const sinceYmd = reconcileSinceYmd();
-  const payments = await fetchKeepinPaymentsSince(sinceYmd);
+  const payments = await fetchKeepinPaymentsSince(sinceYmd, maxPages);
 
   const transferItems = payments.filter((payment) =>
     isKeepinTransferListItem(payment, toPurseId)
@@ -324,26 +336,29 @@ export async function reconcileFundTransfersWithKeepin(
     upserted += 1;
   }
 
-  const crmIds = new Set(transferItems.map((item) => item.id));
-  const { data: localRows, error: localError } = await supabase
-    .from("fund_transfers")
-    .select("id, keepin_payment_id, transferred_at")
-    .not("keepin_payment_id", "is", null)
-    .gte("transferred_at", `${sinceYmd}T00:00:00.000Z`);
-
-  if (localError) {
-    throw new Error(localError.message);
-  }
-
   let removed = 0;
-  for (const row of localRows ?? []) {
-    const keepinPaymentId = row.keepin_payment_id as number;
-    if (!crmIds.has(keepinPaymentId)) {
-      const { error } = await supabase.from("fund_transfers").delete().eq("id", row.id);
-      if (error) {
-        throw new Error(error.message);
+
+  if (removeMissing) {
+    const crmIds = new Set(transferItems.map((item) => item.id));
+    const { data: localRows, error: localError } = await supabase
+      .from("fund_transfers")
+      .select("id, keepin_payment_id, transferred_at")
+      .not("keepin_payment_id", "is", null)
+      .gte("transferred_at", `${sinceYmd}T00:00:00.000Z`);
+
+    if (localError) {
+      throw new Error(localError.message);
+    }
+
+    for (const row of localRows ?? []) {
+      const keepinPaymentId = row.keepin_payment_id as number;
+      if (!crmIds.has(keepinPaymentId)) {
+        const { error } = await supabase.from("fund_transfers").delete().eq("id", row.id);
+        if (error) {
+          throw new Error(error.message);
+        }
+        removed += 1;
       }
-      removed += 1;
     }
   }
 
