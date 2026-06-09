@@ -12,6 +12,7 @@ import {
   getBarkShipmentsTotal,
   getBarkShipmentsBreakdown,
   getPackingBagPurchases,
+  getEmployees,
   type BarkShipmentsBreakdown,
   type StatisticsDateRange,
 } from "@/app/actions";
@@ -36,7 +37,16 @@ import {
   Truck,
   TrendingUp,
 } from "lucide-react";
-import type { ShiftWithDetails, Product, ProductCategory } from "@/lib/types";
+import type {
+  ShiftWithDetails,
+  Product,
+  ProductCategory,
+  Employee,
+} from "@/lib/types";
+import {
+  prorateMonthlyAmountForDateRange,
+  sumManagerMonthlySalaries,
+} from "@/lib/statistics/management-salary";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -84,6 +94,12 @@ import {
 } from "recharts";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
 
 type PeriodFilter = "year" | "month" | "week";
@@ -135,6 +151,7 @@ export default function StatisticsPage() {
     []
   );
   const [trips, setTrips] = useState<TripLike[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [latestPackingBagPriceUah, setLatestPackingBagPriceUah] = useState(0);
   const [barkShipmentsTotal, setBarkShipmentsTotal] = useState(0);
   const [barkShipmentsDetailOpen, setBarkShipmentsDetailOpen] = useState(false);
@@ -154,6 +171,8 @@ export default function StatisticsPage() {
   const [selectedBarkFractions, setSelectedBarkFractions] = useState<string[]>(
     []
   );
+  const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
+    useState(true);
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
@@ -219,6 +238,7 @@ export default function StatisticsPage() {
           packingBagPurchasesData,
           tripsData,
           barkShipped,
+          employeesData,
         ] =
           await Promise.all([
             getProductionStats(period, selectedYear, statsDateRange),
@@ -230,6 +250,7 @@ export default function StatisticsPage() {
             getPackingBagPurchases(),
             getTrips(),
             getBarkShipmentsTotal(period, selectedYear, statsDateRange),
+            getEmployees(),
           ]);
 
         setProductionStats(stats);
@@ -242,6 +263,7 @@ export default function StatisticsPage() {
           priceUahFromLatestPackingBagPurchase(packingBagPurchasesData || [])
         );
         setTrips((tripsData || []) as TripLike[]);
+        setEmployees(employeesData || []);
 
         const completedShifts = (shiftsData || []).filter(
           (shift) => shift.status === "completed"
@@ -257,6 +279,7 @@ export default function StatisticsPage() {
         setSupplierDeliveries([]);
         setLatestPackingBagPriceUah(0);
         setTrips([]);
+        setEmployees([]);
         setBarkShipmentsTotal(0);
       } finally {
         setIsLoading(false);
@@ -415,6 +438,11 @@ export default function StatisticsPage() {
     return firstRewardProduct ? Number(firstRewardProduct.reward ?? 0) : 0;
   }, [products]);
 
+  const managementSalaryMonthlyTotal = useMemo(
+    () => sumManagerMonthlySalaries(employees),
+    [employees]
+  );
+
   const currentPeriodCostMetrics = useMemo(() => {
     const startDay = periodStartStr;
     const endDay = periodEndStr;
@@ -426,12 +454,22 @@ export default function StatisticsPage() {
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
     const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
+    const managementSalaryCosts = prorateMonthlyAmountForDateRange(
+      managementSalaryMonthlyTotal,
+      startDay,
+      endDay
+    );
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const electricityPerBag =
       producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
+    const managementSalaryPerBag =
+      producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
+    const managementSalaryPerBagInTotal = includeManagementSalaryInCost
+      ? managementSalaryPerBag
+      : 0;
     const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
@@ -440,6 +478,7 @@ export default function StatisticsPage() {
           fixedRewardPerBag +
           hourlyWagePerBag +
           electricityPerBag +
+          managementSalaryPerBagInTotal +
           packingBagFromLatestTx
         : null;
 
@@ -451,11 +490,13 @@ export default function StatisticsPage() {
       producedQuantity,
       hourlyWageCosts,
       electricityCosts,
+      managementSalaryCosts,
       purchaseCostPerBag,
       tripCostPerBag,
       fixedRewardPerBag,
       hourlyWagePerBag,
       electricityPerBag,
+      managementSalaryPerBag,
       packingBagFromLatestTx,
       totalCostPerBag,
     };
@@ -464,6 +505,8 @@ export default function StatisticsPage() {
     periodEndStr,
     expenses,
     fixedRewardPerBag,
+    includeManagementSalaryInCost,
+    managementSalaryMonthlyTotal,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -481,12 +524,22 @@ export default function StatisticsPage() {
     const hourlyWageCosts = sumHourlyWageCostsInRange(prevStartDay, prevEndDay);
     const electricityCosts = sumElectricityCostsInRange(prevStartDay, prevEndDay);
     const producedQuantity = sumProducedQuantityInRange(prevStartDay, prevEndDay);
+    const managementSalaryCosts = prorateMonthlyAmountForDateRange(
+      managementSalaryMonthlyTotal,
+      prevStartDay,
+      prevEndDay
+    );
     const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
     const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const electricityPerBag =
       producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
+    const managementSalaryPerBag =
+      producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
+    const managementSalaryPerBagInTotal = includeManagementSalaryInCost
+      ? managementSalaryPerBag
+      : 0;
     const packingBagFromLatestTx = latestPackingBagPriceUah;
     const totalCostPerBag =
       purchaseCostPerBag != null && tripCostPerBag != null
@@ -495,6 +548,7 @@ export default function StatisticsPage() {
           fixedRewardPerBag +
           hourlyWagePerBag +
           electricityPerBag +
+          managementSalaryPerBagInTotal +
           packingBagFromLatestTx
         : null;
 
@@ -505,6 +559,8 @@ export default function StatisticsPage() {
     previousPeriodRange,
     expenses,
     fixedRewardPerBag,
+    includeManagementSalaryInCost,
+    managementSalaryMonthlyTotal,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -521,12 +577,17 @@ export default function StatisticsPage() {
     previousPeriodCostMetrics.totalCostPerBag
   );
 
+  const managementSalaryPerBagForStructure = includeManagementSalaryInCost
+    ? (currentPeriodCostMetrics.managementSalaryPerBag ?? 0)
+    : 0;
+
   const structureTotal =
     (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
     (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
     (currentPeriodCostMetrics.hourlyWagePerBag ?? 0) +
     (currentPeriodCostMetrics.electricityPerBag ?? 0) +
+    managementSalaryPerBagForStructure +
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
   const structureRows = [
     {
@@ -548,6 +609,11 @@ export default function StatisticsPage() {
     {
       label: "Електроенергія на мішок",
       value: currentPeriodCostMetrics.electricityPerBag ?? 0,
+    },
+    {
+      id: "managementSalary",
+      label: "Оклади керівництва на мішок",
+      value: managementSalaryPerBagForStructure,
     },
     {
       label: `«${PACKING_BAG_PRODUCT_NAME}» (остання закупівля)`,
@@ -1656,7 +1722,8 @@ export default function StatisticsPage() {
             Середня вартість мішка із закупок + з поїздок + фіксована винагорода +
             погодинна З.П. на мішок + електроенергія на мішок (категорія «
             {ELECTRICITY_EXPENSE_CATEGORY_NAME}», сума за період ÷ вироблені мішки) +
-            ціна «{PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
+            оклади керівництва (сума за період ÷ вироблені мішки) + ціна «
+            {PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1736,10 +1803,42 @@ export default function StatisticsPage() {
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">
-                К-ть готової продукції (база для З.П. та електроенергії)
+                К-ть готової продукції (база для З.П., електроенергії та окладів
+                керівництва)
               </span>
               <span className="tabular-nums">
                 {formatNumber(currentPeriodCostMetrics.producedQuantity)}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "flex justify-between gap-2 py-2 border-b",
+                !includeManagementSalaryInCost && "opacity-50"
+              )}
+            >
+              <span className="text-muted-foreground">
+                Оклади керівництва (місячна сума)
+                {!includeManagementSalaryInCost && " — не враховано"}
+              </span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(managementSalaryMonthlyTotal, "₴")}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "flex justify-between gap-2 py-2 border-b",
+                !includeManagementSalaryInCost && "opacity-50"
+              )}
+            >
+              <span className="text-muted-foreground">
+                Оклади керівництва (за період)
+                {!includeManagementSalaryInCost && " — не враховано"}
+              </span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(
+                  currentPeriodCostMetrics.managementSalaryCosts,
+                  "₴"
+                )}
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
@@ -1762,6 +1861,23 @@ export default function StatisticsPage() {
                 {formatNumberWithUnit(currentPeriodCostMetrics.electricityPerBag, "₴")}
               </span>
             </div>
+            <div
+              className={cn(
+                "flex justify-between gap-2 py-2 border-b",
+                !includeManagementSalaryInCost && "opacity-50"
+              )}
+            >
+              <span className="text-muted-foreground">
+                Оклади керівництва на мішок
+                {!includeManagementSalaryInCost && " — не враховано"}
+              </span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(
+                  currentPeriodCostMetrics.managementSalaryPerBag,
+                  "₴"
+                )}
+              </span>
+            </div>
             <div className="flex justify-between gap-2 py-2 border-b font-medium">
               <span className="text-muted-foreground">Підсумкова собівартість/мішок</span>
               <span className="tabular-nums">
@@ -1776,25 +1892,67 @@ export default function StatisticsPage() {
             <h3 className="text-sm font-medium mb-3">
               Структура підсумкової собівартості (за мішок)
             </h3>
-            <div className="space-y-3">
-              {structureRows.map((row) => (
-                <div key={row.label} className="space-y-1">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className="tabular-nums">
-                      {formatNumberWithUnit(row.value, "₴")} (
-                      {formatPercentage(row.percent, 1)})
-                    </span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+            <TooltipProvider>
+              <div className="space-y-3">
+                {structureRows.map((row) => {
+                  const rowBody = (
+                    <>
+                      <div className="flex justify-between items-center text-sm gap-3">
+                        {row.id === "managementSalary" ? (
+                          <label className="flex items-center gap-2 text-muted-foreground cursor-pointer min-w-0">
+                            <Checkbox
+                              checked={includeManagementSalaryInCost}
+                              onCheckedChange={(value) =>
+                                setIncludeManagementSalaryInCost(value === true)
+                              }
+                            />
+                            <span>{row.label}</span>
+                          </label>
+                        ) : (
+                          <span className="text-muted-foreground">{row.label}</span>
+                        )}
+                        <span className="tabular-nums shrink-0">
+                          {formatNumberWithUnit(row.value, "₴")} (
+                          {formatPercentage(row.percent, 1)})
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary/80"
+                          style={{ width: `${Math.max(row.percent, 0)}%` }}
+                        ></div>
+                      </div>
+                    </>
+                  );
+
+                  const isManagementSalaryExcluded =
+                    row.id === "managementSalary" && !includeManagementSalaryInCost;
+
+                  return (
                     <div
-                      className="h-full rounded-full bg-primary/80"
-                      style={{ width: `${Math.max(row.percent, 0)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      key={row.label}
+                      className={cn(
+                        "space-y-1",
+                        isManagementSalaryExcluded && "opacity-50"
+                      )}
+                    >
+                      {isManagementSalaryExcluded ? (
+                        <UiTooltip>
+                          <TooltipTrigger asChild>
+                            <div className="space-y-1 cursor-default">{rowBody}</div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            Потрібно вибрати для врахування
+                          </TooltipContent>
+                        </UiTooltip>
+                      ) : (
+                        rowBody
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
           </div>
         </CardContent>
       </Card>
