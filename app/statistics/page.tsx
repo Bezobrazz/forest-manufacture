@@ -622,7 +622,8 @@ export default function StatisticsPage() {
   ].map((item) => ({
     ...item,
     percent: structureTotal > 0 ? (item.value / structureTotal) * 100 : 0,
-  }));
+  }))
+    .sort((a, b) => b.value - a.value);
 
   const shiftsInPeriod = useMemo(() => {
     return shifts.filter((shift) => {
