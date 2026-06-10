@@ -101,6 +101,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
+import {
+  MIN_BAG_MARGIN_USD,
+  suggestedSellingPriceUah,
+} from "@/lib/exchange/usd-uah";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -173,6 +177,12 @@ export default function StatisticsPage() {
   );
   const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
     useState(false);
+  const [usdUahRate, setUsdUahRate] = useState<number | null>(null);
+  const [usdUahExchangeDate, setUsdUahExchangeDate] = useState<string | null>(
+    null
+  );
+  const [usdUahRateLoading, setUsdUahRateLoading] = useState(true);
+  const [usdUahRateError, setUsdUahRateError] = useState<string | null>(null);
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
@@ -223,6 +233,52 @@ export default function StatisticsPage() {
       cancelled = true;
     };
   }, [barkShipmentsDetailOpen, period, selectedYear, statsDateRangeKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUsdUahRate = async () => {
+      setUsdUahRateLoading(true);
+      setUsdUahRateError(null);
+
+      try {
+        const response = await fetch("/api/exchange-rate/usd-uah");
+        const data = (await response.json()) as {
+          ok?: boolean;
+          rate?: number;
+          exchangeDate?: string | null;
+          error?: string;
+        };
+
+        if (!response.ok || !data.ok || data.rate == null) {
+          throw new Error(data.error ?? "Не вдалося отримати курс долара");
+        }
+
+        if (!cancelled) {
+          setUsdUahRate(data.rate);
+          setUsdUahExchangeDate(data.exchangeDate ?? null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setUsdUahRate(null);
+          setUsdUahExchangeDate(null);
+          setUsdUahRateError(
+            error instanceof Error ? error.message : "Не вдалося отримати курс долара"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setUsdUahRateLoading(false);
+        }
+      }
+    };
+
+    void loadUsdUahRate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -402,6 +458,52 @@ export default function StatisticsPage() {
       return sum + Number(delivery.quantity ?? 0);
     }, 0);
 
+  const getLatestPurchaseCostPerBagInRange = (
+    startDay: string,
+    endDay: string
+  ): number | null => {
+    let latestCreatedAt = "";
+    let latestPrice: number | null = null;
+
+    for (const delivery of supplierDeliveries) {
+      const day = toDayKey(delivery.created_at);
+      if (!isDayInRange(day, startDay, endDay)) continue;
+      const price = Number(delivery.price_per_unit ?? 0);
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const createdAt = String(delivery.created_at ?? "");
+      if (createdAt > latestCreatedAt) {
+        latestCreatedAt = createdAt;
+        latestPrice = price;
+      }
+    }
+
+    return latestPrice;
+  };
+
+  const getLatestTripCostPerBagInRange = (
+    startDay: string,
+    endDay: string
+  ): number | null => {
+    let latestDay = "";
+    let latestCostPerBag: number | null = null;
+
+    for (const trip of trips) {
+      if (trip.trip_type !== "raw") continue;
+      const day = toDayKey(trip.trip_start_date || trip.trip_date);
+      if (!isDayInRange(day, startDay, endDay)) continue;
+      const bags = Number(trip.bags_count ?? 0);
+      const costs = Number(trip.total_costs_uah ?? 0);
+      if (bags < 1 || !Number.isFinite(costs) || costs <= 0) continue;
+      const costPerBag = costs / bags;
+      if (day > latestDay || (day === latestDay && latestCostPerBag == null)) {
+        latestDay = day;
+        latestCostPerBag = costPerBag;
+      }
+    }
+
+    return latestCostPerBag;
+  };
+
   const sumHourlyWageCostsInRange = (startDay: string, endDay: string) =>
     expenses.reduce((sum, expense) => {
       const day = toDayKey(expense.date);
@@ -447,10 +549,6 @@ export default function StatisticsPage() {
     startDay: string,
     endDay: string
   ): number | null => {
-    const purchaseCosts = sumPurchaseCostsInRange(startDay, endDay);
-    const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
-    const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
-    const tripBags = sumBagsInRange(startDay, endDay);
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
     const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
@@ -459,8 +557,8 @@ export default function StatisticsPage() {
       startDay,
       endDay
     );
-    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
-    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const purchaseCostPerBag = getLatestPurchaseCostPerBagInRange(startDay, endDay);
+    const tripCostPerBag = getLatestTripCostPerBagInRange(startDay, endDay);
     if (purchaseCostPerBag == null || tripCostPerBag == null) return null;
 
     const hourlyWagePerBag =
@@ -500,8 +598,8 @@ export default function StatisticsPage() {
       startDay,
       endDay
     );
-    const purchaseCostPerBag = purchaseBags > 0 ? purchaseCosts / purchaseBags : null;
-    const tripCostPerBag = tripBags > 0 ? rawTripCosts / tripBags : null;
+    const purchaseCostPerBag = getLatestPurchaseCostPerBagInRange(startDay, endDay);
+    const tripCostPerBag = getLatestTripCostPerBagInRange(startDay, endDay);
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const electricityPerBag =
@@ -570,6 +668,17 @@ export default function StatisticsPage() {
     previousPeriodCostMetrics.totalCostPerBag
   );
 
+  const minMarginUah =
+    usdUahRate != null ? MIN_BAG_MARGIN_USD * usdUahRate : null;
+
+  const suggestedSellingPrice =
+    currentPeriodCostMetrics.totalCostPerBag != null && usdUahRate != null
+      ? suggestedSellingPriceUah(
+          currentPeriodCostMetrics.totalCostPerBag,
+          usdUahRate
+        )
+      : null;
+
   const managementSalaryPerBagForStructure = includeManagementSalaryInCost
     ? (currentPeriodCostMetrics.managementSalaryPerBag ?? 0)
     : 0;
@@ -584,11 +693,11 @@ export default function StatisticsPage() {
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
   const structureRows = [
     {
-      label: "Середня вартість мішка із закупок",
+      label: "Поточна вартість мішка із закупок",
       value: currentPeriodCostMetrics.purchaseCostPerBag ?? 0,
     },
     {
-      label: "Середня вартість мішка з поїздок",
+      label: "Поточна вартість мішка з поїздок",
       value: currentPeriodCostMetrics.tripCostPerBag ?? 0,
     },
     {
@@ -1783,18 +1892,19 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
-            Середня вартість мішка із закупок + з поїздок + фіксована винагорода +
-            погодинна З.П. на мішок + електроенергія на мішок (категорія «
+            Поточна вартість мішка із закупок (остання закупівля за період) + з поїздок
+            (остання поїздка «Сировина» за період) + фіксована винагорода + погодинна З.П.
+            на мішок + електроенергія на мішок (категорія «
             {ELECTRICITY_EXPENSE_CATEGORY_NAME}», сума за період ÷ вироблені мішки) +
             оклади керівництва (сума за період ÷ вироблені мішки) + ціна «
             {PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border bg-muted/40 p-4">
               <p className="text-xs text-muted-foreground mb-1">
-                Середня вартість мішка із закупок
+                Поточна вартість мішка із закупок
               </p>
               <p className="text-xl font-semibold tabular-nums">
                 {currentPeriodCostMetrics.purchaseCostPerBag != null
@@ -1804,7 +1914,7 @@ export default function StatisticsPage() {
             </div>
             <div className="rounded-lg border bg-muted/40 p-4">
               <p className="text-xs text-muted-foreground mb-1">
-                Середня вартість мішка з поїздок
+                Поточна вартість мішка з поїздок
               </p>
               <p className="text-xl font-semibold tabular-nums">
                 {currentPeriodCostMetrics.tripCostPerBag != null
@@ -1824,6 +1934,29 @@ export default function StatisticsPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 Δ до попер. періоду:{" "}
                 {totalDeltaPercent != null ? formatPercentage(totalDeltaPercent, 1) : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-primary/5 border-primary/20 p-4">
+              <p className="text-xs text-muted-foreground mb-1">
+                Запропонована ціна продажу
+              </p>
+              {usdUahRateLoading ? (
+                <Skeleton className="h-7 w-28" />
+              ) : suggestedSellingPrice != null ? (
+                <p className="text-xl font-semibold tabular-nums text-primary">
+                  {formatNumberWithUnit(suggestedSellingPrice, "₴")}
+                </p>
+              ) : (
+                <p className="text-xl font-semibold tabular-nums">—</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                {usdUahRateLoading
+                  ? "Завантаження курсу НБУ…"
+                  : usdUahRateError
+                    ? usdUahRateError
+                    : minMarginUah != null && usdUahRate != null
+                      ? `Мін. маржа ${MIN_BAG_MARGIN_USD} $ (≈ ${formatNumberWithUnit(minMarginUah, "₴")}) · курс НБУ ${formatNumberWithUnit(usdUahRate, "₴/$")}${usdUahExchangeDate ? ` · ${usdUahExchangeDate}` : ""}`
+                      : "Потрібні собівартість і курс долара"}
               </p>
             </div>
           </div>
