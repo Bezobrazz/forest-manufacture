@@ -103,8 +103,9 @@ import {
 import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
 import {
   MIN_BAG_MARGIN_USD,
+  convertUahToEur,
   suggestedSellingPriceUah,
-} from "@/lib/exchange/usd-uah";
+} from "@/lib/exchange/nbu-rates";
 
 type PeriodFilter = "year" | "month" | "week";
 
@@ -178,11 +179,10 @@ export default function StatisticsPage() {
   const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
     useState(false);
   const [usdUahRate, setUsdUahRate] = useState<number | null>(null);
-  const [usdUahExchangeDate, setUsdUahExchangeDate] = useState<string | null>(
-    null
-  );
-  const [usdUahRateLoading, setUsdUahRateLoading] = useState(true);
-  const [usdUahRateError, setUsdUahRateError] = useState<string | null>(null);
+  const [eurUahRate, setEurUahRate] = useState<number | null>(null);
+  const [nbuExchangeDate, setNbuExchangeDate] = useState<string | null>(null);
+  const [nbuRatesLoading, setNbuRatesLoading] = useState(true);
+  const [nbuRatesError, setNbuRatesError] = useState<string | null>(null);
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
@@ -237,43 +237,52 @@ export default function StatisticsPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadUsdUahRate = async () => {
-      setUsdUahRateLoading(true);
-      setUsdUahRateError(null);
+    const loadNbuRates = async () => {
+      setNbuRatesLoading(true);
+      setNbuRatesError(null);
 
       try {
-        const response = await fetch("/api/exchange-rate/usd-uah");
+        const response = await fetch("/api/exchange-rate/nbu");
         const data = (await response.json()) as {
           ok?: boolean;
-          rate?: number;
-          exchangeDate?: string | null;
+          usd?: { rate?: number; exchangeDate?: string | null };
+          eur?: { rate?: number; exchangeDate?: string | null };
           error?: string;
         };
 
-        if (!response.ok || !data.ok || data.rate == null) {
-          throw new Error(data.error ?? "Не вдалося отримати курс долара");
+        if (
+          !response.ok ||
+          !data.ok ||
+          data.usd?.rate == null ||
+          data.eur?.rate == null
+        ) {
+          throw new Error(data.error ?? "Не вдалося отримати курси валют");
         }
 
         if (!cancelled) {
-          setUsdUahRate(data.rate);
-          setUsdUahExchangeDate(data.exchangeDate ?? null);
+          setUsdUahRate(data.usd.rate);
+          setEurUahRate(data.eur.rate);
+          setNbuExchangeDate(
+            data.usd.exchangeDate ?? data.eur.exchangeDate ?? null
+          );
         }
       } catch (error) {
         if (!cancelled) {
           setUsdUahRate(null);
-          setUsdUahExchangeDate(null);
-          setUsdUahRateError(
-            error instanceof Error ? error.message : "Не вдалося отримати курс долара"
+          setEurUahRate(null);
+          setNbuExchangeDate(null);
+          setNbuRatesError(
+            error instanceof Error ? error.message : "Не вдалося отримати курси валют"
           );
         }
       } finally {
         if (!cancelled) {
-          setUsdUahRateLoading(false);
+          setNbuRatesLoading(false);
         }
       }
     };
 
-    void loadUsdUahRate();
+    void loadNbuRates();
 
     return () => {
       cancelled = true;
@@ -677,6 +686,11 @@ export default function StatisticsPage() {
           currentPeriodCostMetrics.totalCostPerBag,
           usdUahRate
         )
+      : null;
+
+  const suggestedSellingPriceEur =
+    suggestedSellingPrice != null && eurUahRate != null
+      ? convertUahToEur(suggestedSellingPrice, eurUahRate)
       : null;
 
   const managementSalaryPerBagForStructure = includeManagementSalaryInCost
@@ -1940,23 +1954,30 @@ export default function StatisticsPage() {
               <p className="text-xs text-muted-foreground mb-1">
                 Запропонована ціна продажу
               </p>
-              {usdUahRateLoading ? (
+              {nbuRatesLoading ? (
                 <Skeleton className="h-7 w-28" />
               ) : suggestedSellingPrice != null ? (
-                <p className="text-xl font-semibold tabular-nums text-primary">
-                  {formatNumberWithUnit(suggestedSellingPrice, "₴")}
-                </p>
+                <>
+                  <p className="text-xl font-semibold tabular-nums text-primary">
+                    {formatNumberWithUnit(suggestedSellingPrice, "₴")}
+                  </p>
+                  {suggestedSellingPriceEur != null ? (
+                    <p className="text-sm font-medium tabular-nums text-primary/80 mt-1">
+                      ≈ {formatNumberWithUnit(suggestedSellingPriceEur, "€")}
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-xl font-semibold tabular-nums">—</p>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                {usdUahRateLoading
-                  ? "Завантаження курсу НБУ…"
-                  : usdUahRateError
-                    ? usdUahRateError
-                    : minMarginUah != null && usdUahRate != null
-                      ? `Мін. маржа ${MIN_BAG_MARGIN_USD} $ (≈ ${formatNumberWithUnit(minMarginUah, "₴")}) · курс НБУ ${formatNumberWithUnit(usdUahRate, "₴/$")}${usdUahExchangeDate ? ` · ${usdUahExchangeDate}` : ""}`
-                      : "Потрібні собівартість і курс долара"}
+                {nbuRatesLoading
+                  ? "Завантаження курсів НБУ…"
+                  : nbuRatesError
+                    ? nbuRatesError
+                    : minMarginUah != null && usdUahRate != null && eurUahRate != null
+                      ? `Мін. маржа ${MIN_BAG_MARGIN_USD} $ (≈ ${formatNumberWithUnit(minMarginUah, "₴")}) · курс НБУ ${formatNumberWithUnit(usdUahRate, "₴/$")} · ${formatNumberWithUnit(eurUahRate, "₴/€")}${nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""}`
+                      : "Потрібні собівартість і курси валют"}
               </p>
             </div>
           </div>
