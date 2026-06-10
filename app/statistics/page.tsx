@@ -172,7 +172,7 @@ export default function StatisticsPage() {
     []
   );
   const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
-    useState(true);
+    useState(false);
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
