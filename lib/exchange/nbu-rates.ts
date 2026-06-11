@@ -1,7 +1,7 @@
 const nbuCurrencyUrl = (currencyCode: string) =>
   `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&json`;
 
-export const MIN_BAG_MARGIN_USD = 1;
+export const SUGGESTED_PRICE_MARKUP_PERCENT = 45;
 
 type NbuRateRow = {
   cc?: string;
@@ -13,11 +13,6 @@ export type NbuRateSnapshot = {
   rate: number;
   exchangeDate: string | null;
   source: "nbu";
-};
-
-export type NbuUsdEurRates = {
-  usd: NbuRateSnapshot;
-  eur: NbuRateSnapshot;
 };
 
 export function parseNbuRate(
@@ -58,21 +53,15 @@ async function fetchNbuCurrencyRate(
   return snapshot;
 }
 
-export async function fetchNbuUsdEurRates(): Promise<NbuUsdEurRates> {
-  const [usd, eur] = await Promise.all([
-    fetchNbuCurrencyRate("USD"),
-    fetchNbuCurrencyRate("EUR"),
-  ]);
-
-  return { usd, eur };
+export async function fetchNbuEurRate(): Promise<NbuRateSnapshot> {
+  return fetchNbuCurrencyRate("EUR");
 }
 
 export function suggestedSellingPriceUah(
   costPerBagUah: number,
-  usdUahRate: number,
-  minMarginUsd: number = MIN_BAG_MARGIN_USD
+  markupPercent: number = SUGGESTED_PRICE_MARKUP_PERCENT
 ): number {
-  return costPerBagUah + minMarginUsd * usdUahRate;
+  return Math.ceil(costPerBagUah * (1 + markupPercent / 100));
 }
 
 export function convertUahToEur(uah: number, eurUahRate: number): number {

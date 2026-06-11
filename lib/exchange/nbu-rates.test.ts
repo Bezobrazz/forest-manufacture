@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MIN_BAG_MARGIN_USD,
+  SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
   parseNbuRate,
   suggestedSellingPriceUah,
@@ -13,20 +13,22 @@ test("parseNbuRate extracts currency row", () => {
       { cc: "EUR", rate: "52.1", exchangedate: "10.06.2026" },
       { cc: "USD", rate: "41.5", exchangedate: "10.06.2026" },
     ],
-    "USD"
+    "EUR"
   );
 
   assert.deepEqual(result, {
-    rate: 41.5,
+    rate: 52.1,
     exchangeDate: "10.06.2026",
     source: "nbu",
   });
 });
 
-test("suggestedSellingPriceUah adds minimum margin in UAH", () => {
-  assert.equal(suggestedSellingPriceUah(85.42, 41.5, MIN_BAG_MARGIN_USD), 126.92);
+test("suggestedSellingPriceUah adds markup and rounds up", () => {
+  assert.equal(suggestedSellingPriceUah(85.42, SUGGESTED_PRICE_MARKUP_PERCENT), 124);
+  assert.equal(suggestedSellingPriceUah(100, SUGGESTED_PRICE_MARKUP_PERCENT), 145);
+  assert.equal(suggestedSellingPriceUah(100.01, SUGGESTED_PRICE_MARKUP_PERCENT), 146);
 });
 
 test("convertUahToEur divides by EUR/UAH rate", () => {
-  assert.equal(convertUahToEur(126.92, 52.1), 126.92 / 52.1);
+  assert.equal(convertUahToEur(107, 52.1), 107 / 52.1);
 });

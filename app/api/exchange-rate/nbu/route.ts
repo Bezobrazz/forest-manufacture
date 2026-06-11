@@ -1,19 +1,15 @@
-import { fetchNbuUsdEurRates } from "@/lib/exchange/nbu-rates";
+import { fetchNbuEurRate } from "@/lib/exchange/nbu-rates";
 
 export async function GET() {
   try {
-    const rates = await fetchNbuUsdEurRates();
+    const eur = await fetchNbuEurRate();
 
     return Response.json(
       {
         ok: true,
-        usd: {
-          rate: rates.usd.rate,
-          exchangeDate: rates.usd.exchangeDate,
-        },
         eur: {
-          rate: rates.eur.rate,
-          exchangeDate: rates.eur.exchangeDate,
+          rate: eur.rate,
+          exchangeDate: eur.exchangeDate,
         },
         source: "nbu",
       },
@@ -25,7 +21,7 @@ export async function GET() {
     );
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to fetch NBU exchange rates";
+      error instanceof Error ? error.message : "Failed to fetch NBU exchange rate";
 
     return Response.json({ ok: false, error: message }, { status: 502 });
   }

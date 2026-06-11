@@ -102,7 +102,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
 import {
-  MIN_BAG_MARGIN_USD,
+  SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
   suggestedSellingPriceUah,
 } from "@/lib/exchange/nbu-rates";
@@ -178,7 +178,6 @@ export default function StatisticsPage() {
   );
   const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
     useState(false);
-  const [usdUahRate, setUsdUahRate] = useState<number | null>(null);
   const [eurUahRate, setEurUahRate] = useState<number | null>(null);
   const [nbuExchangeDate, setNbuExchangeDate] = useState<string | null>(null);
   const [nbuRatesLoading, setNbuRatesLoading] = useState(true);
@@ -245,34 +244,24 @@ export default function StatisticsPage() {
         const response = await fetch("/api/exchange-rate/nbu");
         const data = (await response.json()) as {
           ok?: boolean;
-          usd?: { rate?: number; exchangeDate?: string | null };
           eur?: { rate?: number; exchangeDate?: string | null };
           error?: string;
         };
 
-        if (
-          !response.ok ||
-          !data.ok ||
-          data.usd?.rate == null ||
-          data.eur?.rate == null
-        ) {
-          throw new Error(data.error ?? "Не вдалося отримати курси валют");
+        if (!response.ok || !data.ok || data.eur?.rate == null) {
+          throw new Error(data.error ?? "Не вдалося отримати курс євро");
         }
 
         if (!cancelled) {
-          setUsdUahRate(data.usd.rate);
           setEurUahRate(data.eur.rate);
-          setNbuExchangeDate(
-            data.usd.exchangeDate ?? data.eur.exchangeDate ?? null
-          );
+          setNbuExchangeDate(data.eur.exchangeDate ?? null);
         }
       } catch (error) {
         if (!cancelled) {
-          setUsdUahRate(null);
           setEurUahRate(null);
           setNbuExchangeDate(null);
           setNbuRatesError(
-            error instanceof Error ? error.message : "Не вдалося отримати курси валют"
+            error instanceof Error ? error.message : "Не вдалося отримати курс євро"
           );
         }
       } finally {
@@ -677,20 +666,19 @@ export default function StatisticsPage() {
     previousPeriodCostMetrics.totalCostPerBag
   );
 
-  const minMarginUah =
-    usdUahRate != null ? MIN_BAG_MARGIN_USD * usdUahRate : null;
-
   const suggestedSellingPrice =
-    currentPeriodCostMetrics.totalCostPerBag != null && usdUahRate != null
-      ? suggestedSellingPriceUah(
-          currentPeriodCostMetrics.totalCostPerBag,
-          usdUahRate
-        )
+    currentPeriodCostMetrics.totalCostPerBag != null
+      ? suggestedSellingPriceUah(currentPeriodCostMetrics.totalCostPerBag)
       : null;
 
   const suggestedSellingPriceEur =
     suggestedSellingPrice != null && eurUahRate != null
       ? convertUahToEur(suggestedSellingPrice, eurUahRate)
+      : null;
+
+  const totalCostPerBagEur =
+    currentPeriodCostMetrics.totalCostPerBag != null && eurUahRate != null
+      ? convertUahToEur(currentPeriodCostMetrics.totalCostPerBag, eurUahRate)
       : null;
 
   const managementSalaryPerBagForStructure = includeManagementSalaryInCost
@@ -1940,11 +1928,22 @@ export default function StatisticsPage() {
               <p className="text-xs text-muted-foreground mb-1">
                 Підсумкова собівартість мішка
               </p>
-              <p className="text-xl font-semibold tabular-nums">
-                {currentPeriodCostMetrics.totalCostPerBag != null
-                  ? formatNumberWithUnit(currentPeriodCostMetrics.totalCostPerBag, "₴")
-                  : "—"}
-              </p>
+              {currentPeriodCostMetrics.totalCostPerBag != null ? (
+                <>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {formatNumberWithUnit(currentPeriodCostMetrics.totalCostPerBag, "₴")}
+                  </p>
+                  {nbuRatesLoading ? (
+                    <Skeleton className="h-5 w-20 mt-1" />
+                  ) : totalCostPerBagEur != null ? (
+                    <p className="text-sm font-medium tabular-nums text-muted-foreground mt-1">
+                      ≈ {formatNumberWithUnit(totalCostPerBagEur, "€")}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-xl font-semibold tabular-nums">—</p>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
                 Δ до попер. періоду:{" "}
                 {totalDeltaPercent != null ? formatPercentage(totalDeltaPercent, 1) : "—"}
@@ -1954,14 +1953,14 @@ export default function StatisticsPage() {
               <p className="text-xs text-muted-foreground mb-1">
                 Запропонована ціна продажу
               </p>
-              {nbuRatesLoading ? (
-                <Skeleton className="h-7 w-28" />
-              ) : suggestedSellingPrice != null ? (
+              {suggestedSellingPrice != null ? (
                 <>
                   <p className="text-xl font-semibold tabular-nums text-primary">
                     {formatNumberWithUnit(suggestedSellingPrice, "₴")}
                   </p>
-                  {suggestedSellingPriceEur != null ? (
+                  {nbuRatesLoading ? (
+                    <Skeleton className="h-5 w-20 mt-1" />
+                  ) : suggestedSellingPriceEur != null ? (
                     <p className="text-sm font-medium tabular-nums text-primary/80 mt-1">
                       ≈ {formatNumberWithUnit(suggestedSellingPriceEur, "€")}
                     </p>
@@ -1972,12 +1971,12 @@ export default function StatisticsPage() {
               )}
               <p className="text-xs text-muted-foreground mt-1">
                 {nbuRatesLoading
-                  ? "Завантаження курсів НБУ…"
+                  ? "Завантаження курсу євро (НБУ)…"
                   : nbuRatesError
-                    ? nbuRatesError
-                    : minMarginUah != null && usdUahRate != null && eurUahRate != null
-                      ? `Мін. маржа ${MIN_BAG_MARGIN_USD} $ (≈ ${formatNumberWithUnit(minMarginUah, "₴")}) · курс НБУ ${formatNumberWithUnit(usdUahRate, "₴/$")} · ${formatNumberWithUnit(eurUahRate, "₴/€")}${nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""}`
-                      : "Потрібні собівартість і курси валют"}
+                    ? `+${SUGGESTED_PRICE_MARKUP_PERCENT}% до собівартості, округлення вгору · ${nbuRatesError}`
+                    : eurUahRate != null
+                      ? `+${SUGGESTED_PRICE_MARKUP_PERCENT}% до собівартості, округлення вгору · курс НБУ ${formatNumberWithUnit(eurUahRate, "₴/€")}${nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""}`
+                      : `+${SUGGESTED_PRICE_MARKUP_PERCENT}% до собівартості, округлення вгору`}
               </p>
             </div>
           </div>
