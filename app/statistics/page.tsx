@@ -3,24 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
-  getProductionStats,
-  getShifts,
-  getProducts,
-  getProductCategories,
-  getExpenses,
-  getSupplierDeliveries,
   getBarkShipmentsTotal,
   getBarkShipmentsBreakdown,
-  getPackingBagPurchases,
-  getEmployees,
   type BarkShipmentsBreakdown,
   type StatisticsDateRange,
 } from "@/app/actions";
-import {
-  PACKING_BAG_PRODUCT_NAME,
-  type PackingBagPurchase,
-} from "@/lib/packing-bags/packing-bag-purchase";
-import { getTrips } from "@/app/trips/actions";
+import { getStatisticsPageData } from "@/app/statistics/actions";
+import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
 import {
   Card,
   CardContent,
@@ -131,23 +120,9 @@ type TripLike = {
   trip_date: string;
 };
 
-const priceUahFromLatestPackingBagPurchase = (purchases: PackingBagPurchase[]) => {
-  const row = purchases[0];
-  if (!row) return 0;
-  const n = Number(row.price_uah);
-  return Number.isFinite(n) ? n : 0;
-};
-
 export default function StatisticsPage() {
   const [period, setPeriod] = useState<PeriodFilter>("year");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [productionStats, setProductionStats] = useState<{
-    totalProduction: number;
-    productionByCategory: Record<string, number>;
-  }>({
-    totalProduction: 0,
-    productionByCategory: {},
-  });
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -279,71 +254,75 @@ export default function StatisticsPage() {
   }, []);
 
   useEffect(() => {
-    const loadData = async () => {
+    let cancelled = false;
+
+    const loadPageData = async () => {
       setIsLoading(true);
       try {
-        const [
-          stats,
-          shiftsData,
-          productsData,
-          categoriesData,
-          expensesData,
-          deliveriesData,
-          packingBagPurchasesData,
-          tripsData,
-          barkShipped,
-          employeesData,
-        ] =
-          await Promise.all([
-            getProductionStats(period, selectedYear, statsDateRange),
-            getShifts(),
-            getProducts(),
-            getProductCategories(),
-            getExpenses(),
-            getSupplierDeliveries(),
-            getPackingBagPurchases(),
-            getTrips(),
-            getBarkShipmentsTotal(period, selectedYear, statsDateRange),
-            getEmployees(),
-          ]);
+        const data = await getStatisticsPageData();
+        if (cancelled) return;
 
-        setProductionStats(stats);
-        setBarkShipmentsTotal(barkShipped?.totalShipped ?? 0);
-        setProducts(productsData || []);
-        setCategories(categoriesData || []);
-        setExpenses((expensesData || []) as ExpenseLike[]);
-        setSupplierDeliveries((deliveriesData || []) as SupplierDeliveryLike[]);
-        setLatestPackingBagPriceUah(
-          priceUahFromLatestPackingBagPurchase(packingBagPurchasesData || [])
-        );
-        setTrips((tripsData || []) as TripLike[]);
-        setEmployees(employeesData || []);
-
-        const completedShifts = (shiftsData || []).filter(
-          (shift) => shift.status === "completed"
-        ) as ShiftWithDetails[];
-        setShifts(completedShifts);
+        setShifts(data.shifts);
+        setProducts(data.products);
+        setCategories(data.categories);
+        setExpenses(data.expenses as ExpenseLike[]);
+        setSupplierDeliveries(data.supplierDeliveries as SupplierDeliveryLike[]);
+        setLatestPackingBagPriceUah(data.latestPackingBagPriceUah);
+        setTrips(data.trips as TripLike[]);
+        setEmployees(data.employees);
       } catch (error) {
         console.error("Помилка при завантаженні даних:", error);
-        setProductionStats({ totalProduction: 0, productionByCategory: {} });
-        setProducts([]);
-        setCategories([]);
-        setShifts([]);
-        setExpenses([]);
-        setSupplierDeliveries([]);
-        setLatestPackingBagPriceUah(0);
-        setTrips([]);
-        setEmployees([]);
-        setBarkShipmentsTotal(0);
+        if (!cancelled) {
+          setProducts([]);
+          setCategories([]);
+          setShifts([]);
+          setExpenses([]);
+          setSupplierDeliveries([]);
+          setLatestPackingBagPriceUah(0);
+          setTrips([]);
+          setEmployees([]);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    loadData();
-  }, [period, selectedYear, statsDateRangeKey]);
+    void loadPageData();
 
-  const { totalProduction, productionByCategory } = productionStats;
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBarkShipments = async () => {
+      try {
+        const barkShipped = await getBarkShipmentsTotal(
+          period,
+          selectedYear,
+          statsDateRange
+        );
+        if (!cancelled) {
+          setBarkShipmentsTotal(barkShipped?.totalShipped ?? 0);
+        }
+      } catch (error) {
+        console.error("Помилка при завантаженні відвантажень кори:", error);
+        if (!cancelled) {
+          setBarkShipmentsTotal(0);
+        }
+      }
+    };
+
+    void loadBarkShipments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [period, selectedYear, statsDateRangeKey]);
 
   const neutralPalette = [
     "hsl(215, 32%, 48%)",
@@ -355,6 +334,57 @@ export default function StatisticsPage() {
     "hsl(150, 30%, 46%)",
     "hsl(240, 32%, 50%)",
   ];
+
+  const { startDate: periodStart, endDate: periodEnd } = useMemo(() => {
+    if (statsDateRange) {
+      const [ys, ms, ds] = statsDateRange.start
+        .split("-")
+        .map((x) => Number.parseInt(x, 10));
+      const [ye, me, de] = statsDateRange.end
+        .split("-")
+        .map((x) => Number.parseInt(x, 10));
+      return {
+        startDate: new Date(ys, ms - 1, ds, 0, 0, 0, 0),
+        endDate: new Date(ye, me - 1, de, 23, 59, 59, 999),
+      };
+    }
+    return getDateRangeForPeriod(period, selectedYear);
+  }, [statsDateRange, period, selectedYear]);
+  const periodStartStr = dateToYYYYMMDD(periodStart);
+  const periodEndStr = dateToYYYYMMDD(periodEnd);
+
+  const { totalProduction, productionByCategory } = useMemo(() => {
+    const productCategoryById = new Map(
+      products.map((product) => [
+        product.id,
+        product.category?.name ?? "Без категорії",
+      ])
+    );
+
+    let total = 0;
+    const byCategory: Record<string, number> = {};
+
+    shifts.forEach((shift) => {
+      if (shift.status !== "completed") return;
+      const day = shift.shift_date ? String(shift.shift_date).slice(0, 10) : "";
+      if (!day || day < periodStartStr || day > periodEndStr) return;
+
+      shift.production?.forEach((item) => {
+        const quantity = Math.round(Number(item.quantity ?? 0));
+        total += quantity;
+        const categoryName =
+          productCategoryById.get(item.product_id) ?? "Без категорії";
+        byCategory[categoryName] = Math.round(
+          (byCategory[categoryName] ?? 0) + quantity
+        );
+      });
+    });
+
+    return {
+      totalProduction: Math.round(total),
+      productionByCategory: byCategory,
+    };
+  }, [shifts, products, periodStartStr, periodEndStr]);
 
   const categoryColors: Record<string, string> = {
     "Без категорії": "hsl(var(--muted))",
@@ -382,24 +412,6 @@ export default function StatisticsPage() {
   const sortedCategories = Object.entries(productionByCategory).sort(
     (a, b) => b[1] - a[1]
   );
-
-  const { startDate: periodStart, endDate: periodEnd } = useMemo(() => {
-    if (statsDateRange) {
-      const [ys, ms, ds] = statsDateRange.start
-        .split("-")
-        .map((x) => Number.parseInt(x, 10));
-      const [ye, me, de] = statsDateRange.end
-        .split("-")
-        .map((x) => Number.parseInt(x, 10));
-      return {
-        startDate: new Date(ys, ms - 1, ds, 0, 0, 0, 0),
-        endDate: new Date(ye, me - 1, de, 23, 59, 59, 999),
-      };
-    }
-    return getDateRangeForPeriod(period, selectedYear);
-  }, [statsDateRange, period, selectedYear]);
-  const periodStartStr = dateToYYYYMMDD(periodStart);
-  const periodEndStr = dateToYYYYMMDD(periodEnd);
 
   const previousPeriodRange = useMemo(() => {
     const DAY_MS = 24 * 60 * 60 * 1000;

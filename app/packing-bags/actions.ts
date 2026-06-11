@@ -32,6 +32,31 @@ export async function getPackingBagStockQuantity(): Promise<number | null> {
   return getPackingBagQuantity(supabase);
 }
 
+export async function getLatestPackingBagPriceUah(): Promise<number> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return 0;
+
+  const { data, error } = await supabase
+    .from("packing_bag_purchases")
+    .select("price_uah")
+    .eq("user_id", user.id)
+    .order("purchase_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || data?.price_uah == null) {
+    if (error) {
+      console.error("Error fetching latest packing bag price:", error);
+    }
+    return 0;
+  }
+
+  const price = Number(data.price_uah);
+  return Number.isFinite(price) ? price : 0;
+}
+
 export async function getPackingBagPurchases(): Promise<PackingBagPurchase[]> {
   const supabase = await createServerSupabaseClient();
   const user = await getServerUser();
