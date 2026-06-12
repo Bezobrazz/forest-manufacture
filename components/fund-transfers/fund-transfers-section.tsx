@@ -38,15 +38,9 @@ export function FundTransfersSection({ isDateInRange }: FundTransfersSectionProp
   const loadTransfers = useCallback(async () => {
     setIsLoading(true);
     try {
-      try {
-        await pullFundTransfersFromKeepin();
-      } catch (pullError) {
-        console.error("pullFundTransfersFromKeepin:", pullError);
-        const message =
-          pullError instanceof Error
-            ? pullError.message
-            : "Не вдалося синхронізувати з KeepinCRM";
-        toast.error("Синхронізація з CRM", { description: message });
+      const pullResult = await pullFundTransfersFromKeepin();
+      if (!pullResult.ok) {
+        toast.error("Синхронізація з CRM", { description: pullResult.error });
       }
 
       const rows = await getFundTransfers();

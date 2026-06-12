@@ -23,7 +23,7 @@ const RECONCILE_LOOKBACK_DAYS = 120;
 /** Повний reconcile (cron): до 120 сторінок KeepinCRM. */
 const CRON_RECONCILE_MAX_PAGES = 120;
 /** Pull з UI: лише перші сторінки, щоб вкластися в ліміт Vercel (~10s). */
-export const PULL_RECONCILE_MAX_PAGES = 15;
+export const PULL_RECONCILE_MAX_PAGES = 8;
 
 export type ReconcileFundTransfersOptions = {
   maxPages?: number;

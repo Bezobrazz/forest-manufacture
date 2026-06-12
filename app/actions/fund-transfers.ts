@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import {
-  assertFundTransferPullConfigured,
   getFundTransferFromPurseId,
+  getFundTransferPullConfigError,
   getFundTransferToPurseId,
   isFundTransferPushEnabled,
   isFundTransferSyncEnabled,
@@ -17,8 +17,11 @@ import {
   syncFundTransferToKeepin,
   syncFundTransferUpdateToKeepin,
 } from "@/lib/crm/keepincrm/sync-fund-transfer";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import type { FundTransfer } from "@/lib/types";
+
+export type PullFundTransfersResult =
+  | { ok: true; upserted: number; removed: number; scanned: number }
+  | { ok: false; error: string };
 
 function parseAmount(value: number): number {
   const amount = Math.round(Number(value) * 100) / 100;
@@ -67,26 +70,31 @@ export async function getFundTransfers(): Promise<FundTransfer[]> {
 
   if (error) {
     console.error("getFundTransfers:", error);
-    throw error;
+    throw new Error(error.message ?? "Не вдалося завантажити переміщення");
   }
 
   return (data ?? []) as FundTransfer[];
 }
 
-export async function pullFundTransfersFromKeepin(): Promise<{
-  upserted: number;
-  removed: number;
-  scanned: number;
-}> {
-  assertFundTransferPullConfigured();
+export async function pullFundTransfersFromKeepin(): Promise<PullFundTransfersResult> {
+  const configError = getFundTransferPullConfigError();
+  if (configError) {
+    return { ok: false, error: configError };
+  }
 
-  const supabase = createServiceRoleClient();
-  const result = await reconcileFundTransfersWithKeepin(supabase, {
-    maxPages: PULL_RECONCILE_MAX_PAGES,
-    removeMissing: false,
-  });
-  revalidatePath("/expenses");
-  return result;
+  try {
+    const supabase = await createServerClient();
+    const result = await reconcileFundTransfersWithKeepin(supabase, {
+      maxPages: PULL_RECONCILE_MAX_PAGES,
+      removeMissing: false,
+    });
+    return { ok: true, ...result };
+  } catch (error) {
+    console.error("pullFundTransfersFromKeepin:", error);
+    const message =
+      error instanceof Error ? error.message : "Не вдалося синхронізувати з KeepinCRM";
+    return { ok: false, error: message };
+  }
 }
 
 export async function createFundTransfer(input: {
