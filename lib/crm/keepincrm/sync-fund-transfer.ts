@@ -6,7 +6,7 @@ import {
   isConfiguredFundTransferPair,
   isFundTransferPushEnabled,
   isFundTransferSyncEnabled,
-  tryGetFundTransferPurseIds,
+  resolveFundTransferPurseIds,
 } from "@/lib/crm/keepincrm/fund-transfer-config";
 import type { KeepinFinanceWebhookPayload } from "@/lib/crm/keepincrm/fund-transfer-types";
 import {
@@ -80,7 +80,10 @@ export function parseFinanceWebhookPursePair(payload: KeepinFinanceWebhookPayloa
   return { fromPurseId: null, toPurseId: null };
 }
 
-export function parseFinanceWebhookPayload(payload: KeepinFinanceWebhookPayload): {
+export function parseFinanceWebhookPayload(
+  payload: KeepinFinanceWebhookPayload,
+  configured: { fromPurseId: number; toPurseId: number }
+): {
   keepinPaymentId: number;
   amount: number;
   atYmd: string;
@@ -99,7 +102,7 @@ export function parseFinanceWebhookPayload(payload: KeepinFinanceWebhookPayload)
     return null;
   }
 
-  if (!isConfiguredFundTransferPair(fromPurseId, toPurseId)) {
+  if (!isConfiguredFundTransferPair(fromPurseId, toPurseId, configured)) {
     return null;
   }
 
@@ -139,8 +142,7 @@ export async function syncFundTransferToKeepin(input: {
     return null;
   }
 
-  const fromPurseId = getFundTransferFromPurseId();
-  const toPurseId = getFundTransferToPurseId();
+  const { fromPurseId, toPurseId } = await resolveFundTransferPurseIds();
   const comment = buildFundTransferAppComment(input.localId, input.comment);
 
   try {
@@ -172,12 +174,14 @@ export async function syncFundTransferUpdateToKeepin(input: {
   }
 
   try {
+    const fromPurseId = await getFundTransferFromPurseId();
+    const toPurseId = await getFundTransferToPurseId();
     await updateKeepinFundTransfer(input.keepinPaymentId, {
       amount: input.amount,
       atYmd: input.atYmd,
       comment: buildFundTransferAppComment(input.localId, input.comment),
-      fromPurseId: getFundTransferFromPurseId(),
-      toPurseId: getFundTransferToPurseId(),
+      fromPurseId,
+      toPurseId,
     });
   } catch (error) {
     console.warn(
@@ -299,11 +303,7 @@ export async function reconcileFundTransfersWithKeepin(
     return { upserted: 0, removed: 0, scanned: 0 };
   }
 
-  const configured = tryGetFundTransferPurseIds();
-  if (!configured) {
-    return { upserted: 0, removed: 0, scanned: 0 };
-  }
-
+  const configured = await resolveFundTransferPurseIds();
   const maxPages = options.maxPages ?? CRON_RECONCILE_MAX_PAGES;
   const removeMissing = options.removeMissing ?? true;
   const { fromPurseId, toPurseId } = configured;

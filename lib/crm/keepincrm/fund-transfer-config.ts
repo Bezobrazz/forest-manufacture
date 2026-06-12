@@ -1,41 +1,17 @@
+import { fetchAllKeepinPurses } from "@/lib/crm/keepincrm/payments";
+
 const DEFAULT_FROM_LABEL = "Безготівка";
 const DEFAULT_TO_LABEL = "Петрович";
+
+function normalizeLookupName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 function parseEnvId(name: string): number | null {
   const raw = process.env[name]?.trim();
   if (!raw) return null;
   const id = Number(raw);
   return Number.isFinite(id) && id > 0 ? Math.trunc(id) : null;
-}
-
-export function getFundTransferFromPurseId(): number {
-  const id = parseEnvId("KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID");
-  if (!id) {
-    throw new Error(
-      "KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID не налаштовано (ID гаманця-джерела)"
-    );
-  }
-  return id;
-}
-
-export function getFundTransferToPurseId(): number {
-  const id = parseEnvId("KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID");
-  if (!id) {
-    throw new Error(
-      "KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID не налаштовано (ID гаманця-отримувача)"
-    );
-  }
-  return id;
-}
-
-export function tryGetFundTransferPurseIds(): {
-  fromPurseId: number;
-  toPurseId: number;
-} | null {
-  const fromPurseId = parseEnvId("KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID");
-  const toPurseId = parseEnvId("KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID");
-  if (!fromPurseId || !toPurseId) return null;
-  return { fromPurseId, toPurseId };
 }
 
 export function getFundTransferFromPurseLabel(): string {
@@ -55,15 +31,76 @@ export function getFundTransferRouteLabel(): string {
   return `${getFundTransferFromPurseLabel()} → ${getFundTransferToPurseLabel()}`;
 }
 
+export function tryGetFundTransferPurseIds(): {
+  fromPurseId: number;
+  toPurseId: number;
+} | null {
+  const fromPurseId = parseEnvId("KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID");
+  const toPurseId = parseEnvId("KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID");
+  if (!fromPurseId || !toPurseId) return null;
+  return { fromPurseId, toPurseId };
+}
+
+let cachedResolvedPurseIds: { fromPurseId: number; toPurseId: number } | null | undefined;
+
+/** ID з env або пошук за назвами гаманців у KeepinCRM. */
+export async function resolveFundTransferPurseIds(): Promise<{
+  fromPurseId: number;
+  toPurseId: number;
+}> {
+  const fromEnv = tryGetFundTransferPurseIds();
+  if (fromEnv) {
+    cachedResolvedPurseIds = fromEnv;
+    return fromEnv;
+  }
+
+  if (cachedResolvedPurseIds !== undefined) {
+    if (cachedResolvedPurseIds === null) {
+      throw new Error(
+        `KeepinCRM: не знайдено гаманці «${getFundTransferFromPurseLabel()}» → «${getFundTransferToPurseLabel()}».`
+      );
+    }
+    return cachedResolvedPurseIds;
+  }
+
+  const fromName = normalizeLookupName(getFundTransferFromPurseLabel());
+  const toName = normalizeLookupName(getFundTransferToPurseLabel());
+  const purses = await fetchAllKeepinPurses();
+  const fromMatch = purses.find((p) => normalizeLookupName(p.name) === fromName);
+  const toMatch = purses.find((p) => normalizeLookupName(p.name) === toName);
+
+  if (!fromMatch || !toMatch) {
+    cachedResolvedPurseIds = null;
+    throw new Error(
+      `KeepinCRM: не знайдено гаманці «${getFundTransferFromPurseLabel()}» та «${getFundTransferToPurseLabel()}». Додайте KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID=1 та KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID=7 на Vercel.`
+    );
+  }
+
+  cachedResolvedPurseIds = {
+    fromPurseId: fromMatch.id,
+    toPurseId: toMatch.id,
+  };
+  return cachedResolvedPurseIds;
+}
+
+export async function getFundTransferFromPurseId(): Promise<number> {
+  const { fromPurseId } = await resolveFundTransferPurseIds();
+  return fromPurseId;
+}
+
+export async function getFundTransferToPurseId(): Promise<number> {
+  const { toPurseId } = await resolveFundTransferPurseIds();
+  return toPurseId;
+}
+
 export function isConfiguredFundTransferPair(
   fromPurseId: number,
-  toPurseId: number
+  toPurseId: number,
+  configured?: { fromPurseId: number; toPurseId: number }
 ): boolean {
-  const configured = tryGetFundTransferPurseIds();
-  if (!configured) return false;
-  return (
-    configured.fromPurseId === fromPurseId && configured.toPurseId === toPurseId
-  );
+  const pair = configured ?? tryGetFundTransferPurseIds() ?? cachedResolvedPurseIds ?? null;
+  if (!pair) return false;
+  return pair.fromPurseId === fromPurseId && pair.toPurseId === toPurseId;
 }
 
 export function isFundTransferSyncEnabled(): boolean {
@@ -74,11 +111,6 @@ export function getFundTransferPullConfigError(): string | null {
   if (!isFundTransferSyncEnabled()) {
     return "KEEPINCRM_API_KEY не налаштовано на сервері (перевірте env на Vercel Production)";
   }
-
-  if (!tryGetFundTransferPurseIds()) {
-    return "KEEPINCRM_FUND_TRANSFER_FROM_PURSE_ID та KEEPINCRM_FUND_TRANSFER_TO_PURSE_ID не налаштовано на сервері";
-  }
-
   return null;
 }
 

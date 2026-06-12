@@ -4,9 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import {
-  getFundTransferFromPurseId,
   getFundTransferPullConfigError,
-  getFundTransferToPurseId,
+  resolveFundTransferPurseIds,
   isFundTransferPushEnabled,
   isFundTransferSyncEnabled,
 } from "@/lib/crm/keepincrm/fund-transfer-config";
@@ -106,8 +105,7 @@ export async function createFundTransfer(input: {
   const amount = parseAmount(input.amount);
   const { iso, ymd } = parseTransferredAt(input.date);
   const comment = normalizeComment(input.comment);
-  const fromPurseId = getFundTransferFromPurseId();
-  const toPurseId = getFundTransferToPurseId();
+  const { fromPurseId, toPurseId } = await resolveFundTransferPurseIds();
 
   const { data: inserted, error: insertError } = await supabase
     .from("fund_transfers")
@@ -175,8 +173,7 @@ export async function updateFundTransfer(input: {
   const amount = parseAmount(input.amount);
   const { iso, ymd } = parseTransferredAt(input.date);
   const comment = normalizeComment(input.comment);
-  const fromPurseId = getFundTransferFromPurseId();
-  const toPurseId = getFundTransferToPurseId();
+  const { fromPurseId, toPurseId } = await resolveFundTransferPurseIds();
 
   const { data: current, error: currentError } = await supabase
     .from("fund_transfers")

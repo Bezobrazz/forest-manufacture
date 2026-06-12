@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { resolveFundTransferPurseIds } from "@/lib/crm/keepincrm/fund-transfer-config";
 import {
   deleteFundTransferByKeepinPaymentId,
   parseFinanceWebhookPayload,
@@ -43,7 +44,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const parsed = parseFinanceWebhookPayload(body ?? {});
+  let configured: { fromPurseId: number; toPurseId: number };
+  try {
+    configured = await resolveFundTransferPurseIds();
+  } catch (e: unknown) {
+    const msg =
+      e instanceof Error ? e.message : "Fund transfer purse IDs not configured";
+    return NextResponse.json({ ok: false, error: msg }, { status: 503 });
+  }
+
+  const parsed = parseFinanceWebhookPayload(body ?? {}, configured);
   if (!parsed) {
     return NextResponse.json(
       {
