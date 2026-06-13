@@ -62,6 +62,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
+import { stripQueueShipmentNotesPrefix } from "@/lib/shipments/shipped-cards";
 import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
 import type { CalendarProps } from "@/components/ui/calendar";
 
@@ -577,20 +578,16 @@ export default function ShipmentsPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Відвантажені картки</CardTitle>
               <CardDescription>
-                За {selectedMonth.toLocaleDateString("uk-UA", { month: "long", year: "numeric" })}
+                Фактичні списання зі складу через «Відвантажити» в черзі. За{" "}
+                {selectedMonth.toLocaleDateString("uk-UA", { month: "long", year: "numeric" })}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 max-h-[320px] overflow-y-auto">
+            <CardContent className="space-y-2">
               {shippedCardsInMonth.length === 0 ? (
                 <p className="text-sm text-muted-foreground">У цьому місяці відвантажень поки немає.</p>
               ) : (
                 shippedCardsInMonth.map((card, idx) => (
-                  <div key={`${card.created_at}-${idx}`} className="rounded-md border p-2 text-sm">
-                    <div className="font-medium truncate">{card.notes.replace(/^Відвантаження черги:\s*/i, "")}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDate(card.created_at)} · позицій: {card.rowsCount} · всього: {card.totalQuantity} шт
-                    </div>
-                  </div>
+                  <ShippedQueueCardRow key={`${card.created_at}-${idx}`} card={card} />
                 ))
               )}
             </CardContent>
@@ -1159,6 +1156,45 @@ export default function ShipmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ShippedQueueCardRow({ card }: { card: ShippedQueueCard }) {
+  const title = stripQueueShipmentNotesPrefix(card.notes);
+
+  return (
+    <div className="rounded-md border p-3 text-sm space-y-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="font-medium break-words min-w-0">{title}</div>
+        <div className="flex flex-wrap gap-1.5 shrink-0">
+          {card.isPartial === true ? (
+            <Badge variant="secondary">Часткове</Badge>
+          ) : card.isPartial === false ? (
+            <Badge variant="default">Повне</Badge>
+          ) : null}
+        </div>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {formatDate(card.created_at)} · позицій: {card.rowsCount} · всього: {card.totalQuantity} шт
+      </div>
+      {card.lines.length > 0 ? (
+        <ul className="space-y-1.5 text-xs">
+          {card.lines.map((line) => (
+            <li key={line.productId} className="rounded-sm bg-muted/40 px-2 py-1.5">
+              <div className="font-medium text-foreground">{line.productName}</div>
+              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 tabular-nums">
+                <span>Списано зі складу: {line.quantity} шт</span>
+                {line.balanceAfter != null ? (
+                  <span className="text-foreground/80">
+                    Залишок на складі після списання: {line.balanceAfter} шт
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

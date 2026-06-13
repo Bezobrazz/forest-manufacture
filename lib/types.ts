@@ -74,6 +74,7 @@ export interface InventoryTransaction {
   transaction_type: "production" | "shipment" | "adjustment" | "income";
   reference_id?: number | null;
   notes: string | null;
+  balance_after?: number | null;
   created_at: string;
   product?: Product;
 }

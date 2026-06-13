@@ -15,6 +15,15 @@ import type { CrmOrderWithDetails, Product } from "@/lib/types";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import type { AvgDailyByProduct } from "@/lib/shipments/eta";
 import {
+  computeShipmentFulfillmentPartial,
+  enrichQueueShipmentRowsWithBalance,
+  computeBalanceAfterByTransactionIdFromInventory,
+  groupQueueShipmentTransactions,
+  loadAllInventoryLedgerRows,
+  parseShipmentQueueNotesRef,
+  type InventoryLedgerRow,
+} from "@/lib/shipments/shipped-cards";
+import {
   compareShipmentQueueDefault,
   isLocalShipmentOrderCrmId,
   LOCAL_SHIPMENT_CRM_PREFIX,
@@ -173,6 +182,7 @@ async function deductInventoryForQueueShipment(
     transaction_type: "shipment",
     notes,
     created_at: createdAt,
+    balance_after: newQty,
   };
   if (warehouseId != null) {
     txPayload.warehouse_id = warehouseId;
@@ -630,18 +640,30 @@ export async function getShipmentProductsAction(): Promise<
   return data as Pick<Product, "id" | "name" | "description">[];
 }
 
+export type ShippedQueueCardLine = {
+  productId: number;
+  productName: string;
+  quantity: number;
+  balanceAfter: number | null;
+};
+
 export type ShippedQueueCard = {
   notes: string;
   created_at: string;
   totalQuantity: number;
   rowsCount: number;
+  lines: ShippedQueueCardLine[];
+  /** null — невідомо (немає прив’язки до угоди або мапінгу) */
+  isPartial: boolean | null;
 };
 
 export async function getShippedQueueCardsAction(): Promise<ShippedQueueCard[]> {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("inventory_transactions")
-    .select("notes, created_at, quantity")
+    .select(
+      "id, notes, created_at, quantity, product_id, balance_after, product:products(name)"
+    )
     .eq("transaction_type", "shipment")
     .ilike("notes", "Відвантаження черги:%")
     .order("created_at", { ascending: false });
@@ -651,35 +673,102 @@ export async function getShippedQueueCardsAction(): Promise<ShippedQueueCard[]> 
     return [];
   }
 
-  const grouped = new Map<
-    string,
-    { notes: string; created_at: string; totalQuantity: number; rowsCount: number }
-  >();
-  for (const row of data) {
-    const notes =
-      typeof row.notes === "string" ? row.notes.trim() : "Відвантаження черги";
-    const createdAt =
-      typeof row.created_at === "string" ? row.created_at : new Date().toISOString();
-    const dayKey = createdAt.slice(0, 10);
-    const key = `${dayKey}|${notes}`;
-    const prev = grouped.get(key);
-    if (prev) {
-      prev.totalQuantity += Math.abs(Number(row.quantity) || 0);
-      prev.rowsCount += 1;
-      if (Date.parse(createdAt) > Date.parse(prev.created_at)) {
-        prev.created_at = createdAt;
+  let rows = data;
+  const needsBackfill = data.some(
+    (row) => row.balance_after == null && row.product_id != null
+  );
+
+  if (needsBackfill) {
+    const productIds = [
+      ...new Set(
+        data
+          .map((row) => (row.product_id != null ? Number(row.product_id) : null))
+          .filter((id): id is number => id != null && id > 0)
+      ),
+    ];
+
+    if (productIds.length > 0) {
+      try {
+        const { data: inventoryRows, error: inventoryErr } = await supabase
+          .from("inventory")
+          .select("product_id, quantity")
+          .in("product_id", productIds);
+
+        if (inventoryErr) throw inventoryErr;
+
+        const currentInventoryByProduct: Record<number, number> = {};
+        for (const row of inventoryRows ?? []) {
+          const pid = row.product_id != null ? Number(row.product_id) : NaN;
+          if (!Number.isFinite(pid) || pid <= 0) continue;
+          currentInventoryByProduct[pid] = Number(row.quantity) || 0;
+        }
+
+        const ledger = await loadAllInventoryLedgerRows(async ({ from, to }) => {
+          const { data: ledgerPage, error: ledgerErr } = await supabase
+            .from("inventory_transactions")
+            .select("id, product_id, quantity, created_at")
+            .in("product_id", productIds)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to);
+
+          if (ledgerErr) throw ledgerErr;
+          return (ledgerPage ?? []) as InventoryLedgerRow[];
+        });
+
+        const balanceByTxId = computeBalanceAfterByTransactionIdFromInventory({
+          currentInventoryByProduct,
+          ledger,
+        });
+        rows = enrichQueueShipmentRowsWithBalance(data, balanceByTxId);
+      } catch (ledgerErr) {
+        console.error("getShippedQueueCardsAction ledger:", ledgerErr);
       }
-    } else {
-      grouped.set(key, {
-        notes,
-        created_at: createdAt,
-        totalQuantity: Math.abs(Number(row.quantity) || 0),
-        rowsCount: 1,
-      });
     }
   }
 
-  return [...grouped.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const grouped = groupQueueShipmentTransactions(rows);
+  const crmIds = new Set<string>();
+  for (const card of grouped) {
+    const ref = parseShipmentQueueNotesRef(card.notes);
+    if (ref?.kind === "crm") crmIds.add(ref.crmId);
+  }
+
+  const orderItemsByCrmId = new Map<string, { product_id: number | null; quantity: number }[]>();
+  if (crmIds.size > 0) {
+    const { data: orders, error: ordersErr } = await supabase
+      .from("crm_orders")
+      .select("crm_id, items:crm_order_items(product_id, quantity)")
+      .in("crm_id", [...crmIds]);
+
+    if (ordersErr) {
+      console.error("getShippedQueueCardsAction crm_orders:", ordersErr);
+    } else {
+      for (const order of orders ?? []) {
+        const crmId = typeof order.crm_id === "string" ? order.crm_id : "";
+        if (!crmId) continue;
+        orderItemsByCrmId.set(
+          crmId,
+          (order.items ?? []) as { product_id: number | null; quantity: number }[]
+        );
+      }
+    }
+  }
+
+  return grouped.map((card) => {
+    const ref = parseShipmentQueueNotesRef(card.notes);
+    let isPartial: boolean | null = null;
+    if (ref?.kind === "local") {
+      isPartial = false;
+    } else if (ref?.kind === "crm") {
+      isPartial = computeShipmentFulfillmentPartial(
+        card.lines,
+        orderItemsByCrmId.get(ref.crmId) ?? []
+      );
+    }
+
+    return { ...card, isPartial };
+  });
 }
 
 export async function reorderShipmentQueueAction(

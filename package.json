@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import tsx --test lib/trips/calc.test.ts lib/trips/export.test.ts lib/inventory/inventoryView.test.ts lib/production/parseProductionForm.test.ts lib/production/barkFinishedProduct.test.ts lib/statistics/management-salary.test.ts lib/exchange/nbu-rates.test.ts lib/telegram.test.ts lib/shipments/eta.test.ts lib/shipments/local-shipment.test.ts lib/shipments/queue-priority.test.ts",
+    "test": "node --import tsx --test lib/trips/calc.test.ts lib/trips/export.test.ts lib/inventory/inventoryView.test.ts lib/production/parseProductionForm.test.ts lib/production/barkFinishedProduct.test.ts lib/statistics/management-salary.test.ts lib/exchange/nbu-rates.test.ts lib/telegram.test.ts lib/shipments/eta.test.ts lib/shipments/local-shipment.test.ts lib/shipments/queue-priority.test.ts lib/shipments/shipped-cards.test.ts",
     "delete-user": "tsx scripts/delete-user.ts",
     "keepin-payment-ids": "tsx scripts/keepin-payment-ids.ts"
   },
