@@ -68,6 +68,16 @@ import type { CalendarProps } from "@/components/ui/calendar";
 
 const WEEK_STARTS_SAT = 6;
 
+type ShippedCardsFilterMode = "month" | "year" | "range";
+
+const SHIPPED_MONTH_LABELS = [...Array(12)].map((_, i) =>
+  new Date(2024, i, 15).toLocaleDateString("uk-UA", { month: "long" })
+);
+
+function cardShipmentDateKey(createdAt: string): string {
+  return dateToYYYYMMDD(new Date(createdAt));
+}
+
 const shipmentMonthCalendarClassNames: NonNullable<CalendarProps["classNames"]> = {
   months: "w-full",
   month: "w-full space-y-4",
@@ -142,6 +152,11 @@ export default function ShipmentsPage() {
   const [fulfillDate, setFulfillDate] = useState<Date>(() => startOfDay(new Date()));
   const [fulfillDatePopoverOpen, setFulfillDatePopoverOpen] = useState(false);
   const [fulfillSubmitting, setFulfillSubmitting] = useState(false);
+  const now = new Date();
+  const [shippedFilterMode, setShippedFilterMode] = useState<ShippedCardsFilterMode>("month");
+  const [shippedFilterMonth, setShippedFilterMonth] = useState<number>(now.getMonth());
+  const [shippedFilterYear, setShippedFilterYear] = useState<number>(now.getFullYear());
+  const [shippedFilterRange, setShippedFilterRange] = useState<{ from?: Date; to?: Date }>({});
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ignoreRealtimeUntilRef = useRef<number>(0);
 
@@ -290,14 +305,62 @@ export default function ShipmentsPage() {
   const selectedDayKey = dateToYYYYMMDD(selectedDay);
 
   const selectedDayEtaList = forecastsByEta.get(selectedDayKey) ?? [];
-  const shippedCardsInMonth = useMemo(() => {
-    const y = selectedMonth.getFullYear();
-    const m = selectedMonth.getMonth();
-    return shippedCards.filter((x) => {
-      const d = new Date(x.created_at);
-      return d.getFullYear() === y && d.getMonth() === m;
+
+  const shippedYearOptions = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
+    for (const card of shippedCards) {
+      years.add(new Date(card.created_at).getFullYear());
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [shippedCards]);
+
+  const filteredShippedCards = useMemo(() => {
+    return shippedCards.filter((card) => {
+      const key = cardShipmentDateKey(card.created_at);
+      const d = new Date(card.created_at);
+
+      if (shippedFilterMode === "range") {
+        if (!shippedFilterRange.from || !shippedFilterRange.to) return false;
+        const fromKey = dateToYYYYMMDD(startOfDay(shippedFilterRange.from));
+        const toKey = dateToYYYYMMDD(startOfDay(shippedFilterRange.to));
+        return key >= fromKey && key <= toKey;
+      }
+
+      if (shippedFilterMode === "year") {
+        return d.getFullYear() === shippedFilterYear;
+      }
+
+      return d.getFullYear() === shippedFilterYear && d.getMonth() === shippedFilterMonth;
     });
-  }, [shippedCards, selectedMonth]);
+  }, [
+    shippedCards,
+    shippedFilterMode,
+    shippedFilterMonth,
+    shippedFilterYear,
+    shippedFilterRange.from,
+    shippedFilterRange.to,
+  ]);
+
+  const shippedCardsFilterLabel = useMemo(() => {
+    if (
+      shippedFilterMode === "range" &&
+      shippedFilterRange.from &&
+      shippedFilterRange.to
+    ) {
+      return `${formatDate(`${dateToYYYYMMDD(shippedFilterRange.from)}T12:00:00.000Z`)} — ${formatDate(`${dateToYYYYMMDD(shippedFilterRange.to)}T12:00:00.000Z`)}`;
+    }
+    if (shippedFilterMode === "year") {
+      return String(shippedFilterYear);
+    }
+    const monthLabel = SHIPPED_MONTH_LABELS[shippedFilterMonth] ?? "";
+    return `${monthLabel} ${shippedFilterYear}`;
+  }, [
+    shippedFilterMode,
+    shippedFilterMonth,
+    shippedFilterYear,
+    shippedFilterRange.from,
+    shippedFilterRange.to,
+  ]);
 
   const weekStart = startOfWeek(weekAnchor, { weekStartsOn: WEEK_STARTS_SAT });
   const weekDays = [...Array(7)].map((_, i) => addDays(weekStart, i));
@@ -575,18 +638,37 @@ export default function ShipmentsPage() {
             </div>
           </div>
           <Card className="w-full min-w-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Відвантажені картки</CardTitle>
-              <CardDescription>
-                Фактичні списання зі складу через «Відвантажити» в черзі. За{" "}
-                {selectedMonth.toLocaleDateString("uk-UA", { month: "long", year: "numeric" })}
-              </CardDescription>
+            <CardHeader className="pb-2 space-y-3">
+              <div>
+                <CardTitle className="text-lg">Відвантажені картки</CardTitle>
+                <CardDescription>
+                  Фактичні списання зі складу через «Відвантажити» в черзі. Період:{" "}
+                  {shippedCardsFilterLabel}
+                </CardDescription>
+              </div>
+              <ShippedCardsFilters
+                mode={shippedFilterMode}
+                onModeChange={setShippedFilterMode}
+                month={shippedFilterMonth}
+                onMonthChange={setShippedFilterMonth}
+                year={shippedFilterYear}
+                onYearChange={setShippedFilterYear}
+                yearOptions={shippedYearOptions}
+                dateRange={shippedFilterRange}
+                onDateRangeChange={setShippedFilterRange}
+              />
             </CardHeader>
             <CardContent className="space-y-2">
-              {shippedCardsInMonth.length === 0 ? (
-                <p className="text-sm text-muted-foreground">У цьому місяці відвантажень поки немає.</p>
+              {filteredShippedCards.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {shippedFilterMode === "range" &&
+                  shippedFilterRange.from &&
+                  !shippedFilterRange.to
+                    ? "Оберіть кінцеву дату діапазону"
+                    : "За обраний період відвантажень немає."}
+                </p>
               ) : (
-                shippedCardsInMonth.map((card, idx) => (
+                filteredShippedCards.map((card, idx) => (
                   <ShippedQueueCardRow key={`${card.created_at}-${idx}`} card={card} />
                 ))
               )}
@@ -1156,6 +1238,152 @@ export default function ShipmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ShippedCardsFilters({
+  mode,
+  onModeChange,
+  month,
+  onMonthChange,
+  year,
+  onYearChange,
+  yearOptions,
+  dateRange,
+  onDateRangeChange,
+}: {
+  mode: ShippedCardsFilterMode;
+  onModeChange: (mode: ShippedCardsFilterMode) => void;
+  month: number;
+  onMonthChange: (month: number) => void;
+  year: number;
+  onYearChange: (year: number) => void;
+  yearOptions: number[];
+  dateRange: { from?: Date; to?: Date };
+  onDateRangeChange: (range: { from?: Date; to?: Date }) => void;
+}) {
+  const rangeActive = mode === "range" && Boolean(dateRange.from && dateRange.to);
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "month" ? "default" : "outline"}
+          onClick={() => {
+            onModeChange("month");
+            onDateRangeChange({});
+          }}
+        >
+          Місяць
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "year" ? "default" : "outline"}
+          onClick={() => {
+            onModeChange("year");
+            onDateRangeChange({});
+          }}
+        >
+          Рік
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant={rangeActive || mode === "range" ? "default" : "outline"}
+              className={cn(
+                "justify-start font-normal",
+                mode !== "range" && !dateRange.from && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+              {rangeActive ? (
+                <>
+                  {formatDate(`${dateToYYYYMMDD(dateRange.from!)}T12:00:00.000Z`)} —{" "}
+                  {formatDate(`${dateToYYYYMMDD(dateRange.to!)}T12:00:00.000Z`)}
+                </>
+              ) : dateRange.from ? (
+                <>
+                  {formatDate(`${dateToYYYYMMDD(dateRange.from)}T12:00:00.000Z`)}{" "}
+                  <span className="text-muted-foreground">— …</span>
+                </>
+              ) : (
+                "Діапазон дат"
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange.from ?? new Date(year, month, 1)}
+              selected={dateRange}
+              onSelect={(range) => {
+                onModeChange("range");
+                if (range) {
+                  onDateRangeChange({ from: range.from, to: range.to });
+                } else {
+                  onDateRangeChange({});
+                }
+              }}
+              numberOfMonths={2}
+              locale={uk}
+              weekStartsOn={WEEK_STARTS_SAT}
+            />
+            <div className="border-t p-2 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => {
+                  onDateRangeChange({});
+                  onModeChange("month");
+                }}
+              >
+                Скинути
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {mode === "month" ? (
+          <Select value={String(month)} onValueChange={(v) => onMonthChange(Number(v))}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="Місяць" />
+            </SelectTrigger>
+            <SelectContent>
+              {SHIPPED_MONTH_LABELS.map((label, idx) => (
+                <SelectItem key={label} value={String(idx)}>
+                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {mode === "month" || mode === "year" ? (
+          <Select value={String(year)} onValueChange={(v) => onYearChange(Number(v))}>
+            <SelectTrigger className="h-8 w-[100px]">
+              <SelectValue placeholder="Рік" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
     </div>
   );
 }
