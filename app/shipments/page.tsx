@@ -62,8 +62,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
-import { stripQueueShipmentNotesPrefix } from "@/lib/shipments/shipped-cards";
-import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { stripQueueShipmentNotesPrefix, parseShipmentQueueNotesRef } from "@/lib/shipments/shipped-cards";
+import { cn, dateToYYYYMMDD, formatDate, formatNumber } from "@/lib/utils";
 import type { CalendarProps } from "@/components/ui/calendar";
 
 const WEEK_STARTS_SAT = 6;
@@ -658,7 +658,7 @@ export default function ShipmentsPage() {
                 onDateRangeChange={setShippedFilterRange}
               />
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {filteredShippedCards.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {shippedFilterMode === "range" &&
@@ -1388,41 +1388,122 @@ function ShippedCardsFilters({
   );
 }
 
+function shippedCardHeaderMeta(notes: string): {
+  customer: string;
+  dealLabel: string | null;
+  isLocal: boolean;
+} {
+  const ref = parseShipmentQueueNotesRef(notes);
+  const stripped = stripQueueShipmentNotesPrefix(notes);
+
+  if (ref?.kind === "crm") {
+    return {
+      customer: stripped.replace(/,\s*угода\s+\S+\s*$/i, "").trim(),
+      dealLabel: `#${ref.crmId}`,
+      isLocal: false,
+    };
+  }
+
+  if (ref?.kind === "local") {
+    return {
+      customer: stripped.replace(/\s*\(локальна картка #\d+\)\s*$/i, "").trim(),
+      dealLabel: "Локальна картка",
+      isLocal: true,
+    };
+  }
+
+  return { customer: stripped, dealLabel: null, isLocal: false };
+}
+
+function ShippedFulfillmentBadge({ isPartial, isFull }: { isPartial: boolean; isFull: boolean }) {
+  if (isPartial) {
+    return (
+      <Badge className="bg-amber-500/15 text-amber-800 hover:bg-amber-500/15 dark:text-amber-300 border-amber-500/30">
+        Часткове
+      </Badge>
+    );
+  }
+  if (isFull) {
+    return (
+      <Badge className="bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/15 dark:text-emerald-300 border-emerald-500/30">
+        Повне
+      </Badge>
+    );
+  }
+  return null;
+}
+
 function ShippedQueueCardRow({ card }: { card: ShippedQueueCard }) {
-  const title = stripQueueShipmentNotesPrefix(card.notes);
+  const { customer, dealLabel, isLocal } = shippedCardHeaderMeta(card.notes);
+  const isPartial = card.isPartial === true;
+  const isFull = card.isPartial === false;
 
   return (
-    <div className="rounded-md border p-3 text-sm space-y-2">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="font-medium break-words min-w-0">{title}</div>
-        <div className="flex flex-wrap gap-1.5 shrink-0">
-          {card.isPartial === true ? (
-            <Badge variant="secondary">Часткове</Badge>
-          ) : card.isPartial === false ? (
-            <Badge variant="default">Повне</Badge>
-          ) : null}
+    <div className="rounded-lg border border-dashed bg-muted/20 p-4 font-sans shadow-sm">
+      <div className="border-b border-dashed pb-3 mb-3 space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="space-y-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              Відвантаження зі складу
+            </p>
+            <h3 className="text-base font-semibold leading-snug break-words">{customer}</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {dealLabel && !isLocal ? (
+                <Badge variant="outline" className="text-xs font-normal">
+                  {dealLabel}
+                </Badge>
+              ) : null}
+              {isLocal ? (
+                <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-700">
+                  Локальна
+                </Badge>
+              ) : null}
+              <ShippedFulfillmentBadge isPartial={isPartial} isFull={isFull} />
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-xs text-muted-foreground">{formatDate(card.created_at)}</p>
+            <p className="mt-1 font-mono text-xl font-bold tabular-nums">
+              −{formatNumber(card.totalQuantity)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">шт загалом</p>
+          </div>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground">
-        {formatDate(card.created_at)} · позицій: {card.rowsCount} · всього: {card.totalQuantity} шт
-      </div>
+
       {card.lines.length > 0 ? (
-        <ul className="space-y-1.5 text-xs">
-          {card.lines.map((line) => (
-            <li key={line.productId} className="rounded-sm bg-muted/40 px-2 py-1.5">
-              <div className="font-medium text-foreground">{line.productName}</div>
-              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 tabular-nums">
-                <span>Списано зі складу: {line.quantity} шт</span>
-                {line.balanceAfter != null ? (
-                  <span className="text-foreground/80">
-                    Залишок на складі після списання: {line.balanceAfter} шт
-                  </span>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <table className="w-full min-w-[280px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="pb-2 pr-2 font-medium">Товар</th>
+                <th className="pb-2 px-2 font-medium text-right w-20">Списано</th>
+                <th className="pb-2 pl-2 font-medium text-right w-24">Залишок</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-dashed">
+              {card.lines.map((line) => (
+                <tr key={line.productId} className="align-top">
+                  <td className="py-2.5 pr-2 text-sm leading-snug">{line.productName}</td>
+                  <td className="py-2.5 px-2 text-right font-mono font-semibold tabular-nums text-destructive">
+                    −{formatNumber(line.quantity)}
+                  </td>
+                  <td className="py-2.5 pl-2 text-right font-mono tabular-nums text-muted-foreground">
+                    {line.balanceAfter != null ? `${formatNumber(line.balanceAfter)}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
+
+      <div className="mt-3 pt-3 border-t border-dashed text-xs text-muted-foreground font-mono">
+        <span>
+          {card.lines.length || card.rowsCount}{" "}
+          {(card.lines.length || card.rowsCount) === 1 ? "позиція" : "позиції"} у відвантаженні
+        </span>
+      </div>
     </div>
   );
 }
