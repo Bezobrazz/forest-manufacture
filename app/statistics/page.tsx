@@ -121,7 +121,7 @@ type TripLike = {
 };
 
 export default function StatisticsPage() {
-  const [period, setPeriod] = useState<PeriodFilter>("year");
+  const [period, setPeriod] = useState<PeriodFilter>("month");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -468,34 +468,33 @@ export default function StatisticsPage() {
       return sum + Number(delivery.quantity ?? 0);
     }, 0);
 
-  const getLatestPurchaseCostPerBagInRange = (
+  const getAveragePurchaseCostPerBagInRange = (
     startDay: string,
     endDay: string
   ): number | null => {
-    let latestCreatedAt = "";
-    let latestPrice: number | null = null;
+    let totalCost = 0;
+    let totalBags = 0;
 
     for (const delivery of supplierDeliveries) {
       const day = toDayKey(delivery.created_at);
       if (!isDayInRange(day, startDay, endDay)) continue;
+      const quantity = Number(delivery.quantity ?? 0);
       const price = Number(delivery.price_per_unit ?? 0);
-      if (!Number.isFinite(price) || price <= 0) continue;
-      const createdAt = String(delivery.created_at ?? "");
-      if (createdAt > latestCreatedAt) {
-        latestCreatedAt = createdAt;
-        latestPrice = price;
-      }
+      if (quantity <= 0 || !Number.isFinite(price) || price <= 0) continue;
+      totalCost += quantity * price;
+      totalBags += quantity;
     }
 
-    return latestPrice;
+    if (totalBags <= 0) return null;
+    return totalCost / totalBags;
   };
 
-  const getLatestTripCostPerBagInRange = (
+  const getAverageTripCostPerBagInRange = (
     startDay: string,
     endDay: string
   ): number | null => {
-    let latestDay = "";
-    let latestCostPerBag: number | null = null;
+    let totalCost = 0;
+    let totalBags = 0;
 
     for (const trip of trips) {
       if (trip.trip_type !== "raw") continue;
@@ -504,14 +503,12 @@ export default function StatisticsPage() {
       const bags = Number(trip.bags_count ?? 0);
       const costs = Number(trip.total_costs_uah ?? 0);
       if (bags < 1 || !Number.isFinite(costs) || costs <= 0) continue;
-      const costPerBag = costs / bags;
-      if (day > latestDay || (day === latestDay && latestCostPerBag == null)) {
-        latestDay = day;
-        latestCostPerBag = costPerBag;
-      }
+      totalCost += costs;
+      totalBags += bags;
     }
 
-    return latestCostPerBag;
+    if (totalBags <= 0) return null;
+    return totalCost / totalBags;
   };
 
   const sumHourlyWageCostsInRange = (startDay: string, endDay: string) =>
@@ -567,8 +564,8 @@ export default function StatisticsPage() {
       startDay,
       endDay
     );
-    const purchaseCostPerBag = getLatestPurchaseCostPerBagInRange(startDay, endDay);
-    const tripCostPerBag = getLatestTripCostPerBagInRange(startDay, endDay);
+    const purchaseCostPerBag = getAveragePurchaseCostPerBagInRange(startDay, endDay);
+    const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
     if (purchaseCostPerBag == null || tripCostPerBag == null) return null;
 
     const hourlyWagePerBag =
@@ -608,8 +605,8 @@ export default function StatisticsPage() {
       startDay,
       endDay
     );
-    const purchaseCostPerBag = getLatestPurchaseCostPerBagInRange(startDay, endDay);
-    const tripCostPerBag = getLatestTripCostPerBagInRange(startDay, endDay);
+    const purchaseCostPerBag = getAveragePurchaseCostPerBagInRange(startDay, endDay);
+    const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const electricityPerBag =
@@ -707,11 +704,11 @@ export default function StatisticsPage() {
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
   const structureRows = [
     {
-      label: "Поточна вартість мішка із закупок",
+      label: "Середня вартість мішка із закупок",
       value: currentPeriodCostMetrics.purchaseCostPerBag ?? 0,
     },
     {
-      label: "Поточна вартість мішка з поїздок",
+      label: "Середня вартість мішка з поїздок",
       value: currentPeriodCostMetrics.tripCostPerBag ?? 0,
     },
     {
@@ -1390,7 +1387,9 @@ export default function StatisticsPage() {
             Рік
           </Button>
           <Button
-            variant={period === "month" ? "default" : "outline"}
+            variant={
+              period === "month" && !statsDateRange ? "default" : "outline"
+            }
             onClick={() => {
               setPeriod("month");
               setFilterDateRange({});
@@ -1400,7 +1399,9 @@ export default function StatisticsPage() {
             Місяць
           </Button>
           <Button
-            variant={period === "week" ? "default" : "outline"}
+            variant={
+              period === "week" && !statsDateRange ? "default" : "outline"
+            }
             onClick={() => {
               setPeriod("week");
               setFilterDateRange({});
@@ -1906,8 +1907,8 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
-            Поточна вартість мішка із закупок (остання закупівля за період) + з поїздок
-            (остання поїздка «Сировина» за період) + фіксована винагорода + погодинна З.П.
+            Середня вартість мішка із закупок за період + середня вартість мішка з поїздок
+            «Сировина» за період + фіксована винагорода + погодинна З.П.
             на мішок + електроенергія на мішок (категорія «
             {ELECTRICITY_EXPENSE_CATEGORY_NAME}», сума за період ÷ вироблені мішки) +
             оклади керівництва (сума за період ÷ вироблені мішки) + ціна «
@@ -1918,7 +1919,7 @@ export default function StatisticsPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border bg-muted/40 p-4">
               <p className="text-xs text-muted-foreground mb-1">
-                Поточна вартість мішка із закупок
+                Середня вартість мішка із закупок
               </p>
               <p className="text-xl font-semibold tabular-nums">
                 {currentPeriodCostMetrics.purchaseCostPerBag != null
@@ -1928,7 +1929,7 @@ export default function StatisticsPage() {
             </div>
             <div className="rounded-lg border bg-muted/40 p-4">
               <p className="text-xs text-muted-foreground mb-1">
-                Поточна вартість мішка з поїздок
+                Середня вартість мішка з поїздок
               </p>
               <p className="text-xl font-semibold tabular-nums">
                 {currentPeriodCostMetrics.tripCostPerBag != null
