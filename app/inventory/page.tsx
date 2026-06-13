@@ -70,6 +70,31 @@ function transactionDateKey(createdAt: string): string {
   return dateToYYYYMMDD(new Date(createdAt));
 }
 
+const ALL_TRANSACTION_OPERATIONS = "all";
+
+const TRANSACTION_OPERATION_LABELS: Record<
+  InventoryTransaction["transaction_type"],
+  string
+> = {
+  production: "Виробництво",
+  shipment: "Відвантаження",
+  income: "Надходження",
+  adjustment: "Коригування",
+};
+
+const TRANSACTION_OPERATION_LABEL_ORDER = [
+  "Виробництво",
+  "Відвантаження",
+  "Надходження",
+  "Коригування",
+];
+
+function getTransactionOperationLabel(
+  transaction: InventoryTransaction
+): string {
+  return TRANSACTION_OPERATION_LABELS[transaction.transaction_type];
+}
+
 function TransactionHistoryFilters({
   mode,
   onModeChange,
@@ -80,6 +105,9 @@ function TransactionHistoryFilters({
   yearOptions,
   dateRange,
   onDateRangeChange,
+  operation,
+  onOperationChange,
+  operationOptions,
 }: {
   mode: TransactionFilterMode;
   onModeChange: (mode: TransactionFilterMode) => void;
@@ -90,6 +118,9 @@ function TransactionHistoryFilters({
   yearOptions: number[];
   dateRange: { from?: Date; to?: Date };
   onDateRangeChange: (range: { from?: Date; to?: Date }) => void;
+  operation: string;
+  onOperationChange: (operation: string) => void;
+  operationOptions: string[];
 }) {
   const rangeActive = mode === "range" && Boolean(dateRange.from && dateRange.to);
 
@@ -211,6 +242,22 @@ function TransactionHistoryFilters({
             </SelectContent>
           </Select>
         ) : null}
+
+        <Select value={operation} onValueChange={onOperationChange}>
+          <SelectTrigger className="h-8 w-[180px]">
+            <SelectValue placeholder="Операція" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_TRANSACTION_OPERATIONS}>
+              Усі операції
+            </SelectItem>
+            {operationOptions.map((operationName) => (
+              <SelectItem key={operationName} value={operationName}>
+                {operationName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
@@ -363,6 +410,9 @@ export default function InventoryPage() {
     from?: Date;
     to?: Date;
   }>({});
+  const [transactionFilterOperation, setTransactionFilterOperation] = useState(
+    ALL_TRANSACTION_OPERATIONS
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -497,6 +547,14 @@ export default function InventoryPage() {
     });
   }, [inventory, transactions]);
 
+  const transactionOperationOptions = useMemo(() => {
+    const labels = new Set<string>();
+    for (const transaction of transactions) {
+      labels.add(getTransactionOperationLabel(transaction));
+    }
+    return TRANSACTION_OPERATION_LABEL_ORDER.filter((label) => labels.has(label));
+  }, [transactions]);
+
   const transactionYearOptions = useMemo(() => {
     const years = new Set<number>([new Date().getFullYear()]);
     for (const transaction of transactions) {
@@ -508,6 +566,13 @@ export default function InventoryPage() {
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
       if (!transaction) return false;
+
+      if (
+        transactionFilterOperation !== ALL_TRANSACTION_OPERATIONS &&
+        getTransactionOperationLabel(transaction) !== transactionFilterOperation
+      ) {
+        return false;
+      }
 
       const key = transactionDateKey(transaction.created_at);
       const d = new Date(transaction.created_at);
@@ -532,6 +597,7 @@ export default function InventoryPage() {
     });
   }, [
     transactions,
+    transactionFilterOperation,
     transactionFilterMode,
     transactionFilterMonth,
     transactionFilterYear,
@@ -540,24 +606,33 @@ export default function InventoryPage() {
   ]);
 
   const transactionsFilterLabel = useMemo(() => {
+    let label = "";
+
     if (
       transactionFilterMode === "range" &&
       transactionFilterRange.from &&
       transactionFilterRange.to
     ) {
-      return `${formatDate(`${dateToYYYYMMDD(transactionFilterRange.from)}T12:00:00.000Z`)} — ${formatDate(`${dateToYYYYMMDD(transactionFilterRange.to)}T12:00:00.000Z`)}`;
+      label = `${formatDate(`${dateToYYYYMMDD(transactionFilterRange.from)}T12:00:00.000Z`)} — ${formatDate(`${dateToYYYYMMDD(transactionFilterRange.to)}T12:00:00.000Z`)}`;
+    } else if (transactionFilterMode === "year") {
+      label = String(transactionFilterYear);
+    } else {
+      const monthLabel = TRANSACTION_MONTH_LABELS[transactionFilterMonth] ?? "";
+      label = `${monthLabel} ${transactionFilterYear}`;
     }
-    if (transactionFilterMode === "year") {
-      return String(transactionFilterYear);
+
+    if (transactionFilterOperation !== ALL_TRANSACTION_OPERATIONS) {
+      label = `${label}, операція: ${transactionFilterOperation}`;
     }
-    const monthLabel = TRANSACTION_MONTH_LABELS[transactionFilterMonth] ?? "";
-    return `${monthLabel} ${transactionFilterYear}`;
+
+    return label;
   }, [
     transactionFilterMode,
     transactionFilterMonth,
     transactionFilterYear,
     transactionFilterRange.from,
     transactionFilterRange.to,
+    transactionFilterOperation,
   ]);
 
   // Функція для отримання номера фракції з опису продукту
@@ -763,6 +838,9 @@ export default function InventoryPage() {
                 yearOptions={transactionYearOptions}
                 dateRange={transactionFilterRange}
                 onDateRangeChange={setTransactionFilterRange}
+                operation={transactionFilterOperation}
+                onOperationChange={setTransactionFilterOperation}
+                operationOptions={transactionOperationOptions}
               />
             </CardHeader>
             <CardContent>
@@ -779,7 +857,7 @@ export default function InventoryPage() {
                     transactionFilterRange.from &&
                     !transactionFilterRange.to
                       ? "Оберіть кінцеву дату діапазону"
-                      : "За обраний період операцій немає"}
+                      : "За обрані фільтри операцій немає"}
                   </p>
                 </div>
               ) : (
@@ -810,13 +888,7 @@ export default function InventoryPage() {
                           )}
                           <div>
                             <div className="font-medium">
-                              {transaction.transaction_type === "production"
-                                ? "Виробництво"
-                                : transaction.transaction_type === "shipment"
-                                ? "Відвантаження"
-                                : transaction.transaction_type === "income"
-                                ? "Надходження"
-                                : "Коригування"}
+                              {getTransactionOperationLabel(transaction)}
                             </div>
                             <div className="text-sm">
                               {transaction.product?.name ||
