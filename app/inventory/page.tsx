@@ -17,23 +17,204 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft,
   Package,
   ArrowUp,
   ArrowDown,
   Settings,
-  DollarSign,
   Coins,
+  Calendar as CalendarIcon,
 } from "lucide-react";
-import { formatDateTime, formatNumberWithUnit } from "@/lib/utils";
+import { startOfDay } from "date-fns";
+import { uk } from "date-fns/locale";
+import {
+  cn,
+  dateToYYYYMMDD,
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatNumberWithUnit,
+} from "@/lib/utils";
+import { computeBalanceAfterByTransactionIdFromInventory } from "@/lib/shipments/shipped-cards";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isFinishedProductRow } from "@/lib/inventory/inventoryView";
 import type { Inventory, InventoryTransaction, Product } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+
+const WEEK_STARTS_SAT = 6;
+
+type TransactionFilterMode = "month" | "year" | "range";
+
+const TRANSACTION_MONTH_LABELS = [...Array(12)].map((_, i) =>
+  new Date(2024, i, 15).toLocaleDateString("uk-UA", { month: "long" })
+);
+
+function transactionDateKey(createdAt: string): string {
+  return dateToYYYYMMDD(new Date(createdAt));
+}
+
+function TransactionHistoryFilters({
+  mode,
+  onModeChange,
+  month,
+  onMonthChange,
+  year,
+  onYearChange,
+  yearOptions,
+  dateRange,
+  onDateRangeChange,
+}: {
+  mode: TransactionFilterMode;
+  onModeChange: (mode: TransactionFilterMode) => void;
+  month: number;
+  onMonthChange: (month: number) => void;
+  year: number;
+  onYearChange: (year: number) => void;
+  yearOptions: number[];
+  dateRange: { from?: Date; to?: Date };
+  onDateRangeChange: (range: { from?: Date; to?: Date }) => void;
+}) {
+  const rangeActive = mode === "range" && Boolean(dateRange.from && dateRange.to);
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "month" ? "default" : "outline"}
+          onClick={() => {
+            onModeChange("month");
+            onDateRangeChange({});
+          }}
+        >
+          Місяць
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === "year" ? "default" : "outline"}
+          onClick={() => {
+            onModeChange("year");
+            onDateRangeChange({});
+          }}
+        >
+          Рік
+        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant={rangeActive || mode === "range" ? "default" : "outline"}
+              className={cn(
+                "justify-start font-normal",
+                mode !== "range" && !dateRange.from && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+              {rangeActive ? (
+                <>
+                  {formatDate(`${dateToYYYYMMDD(dateRange.from!)}T12:00:00.000Z`)} —{" "}
+                  {formatDate(`${dateToYYYYMMDD(dateRange.to!)}T12:00:00.000Z`)}
+                </>
+              ) : dateRange.from ? (
+                <>
+                  {formatDate(`${dateToYYYYMMDD(dateRange.from)}T12:00:00.000Z`)}{" "}
+                  <span className="text-muted-foreground">— …</span>
+                </>
+              ) : (
+                "Діапазон дат"
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange.from ?? new Date(year, month, 1)}
+              selected={dateRange}
+              onSelect={(range) => {
+                onModeChange("range");
+                if (range) {
+                  onDateRangeChange({ from: range.from, to: range.to });
+                } else {
+                  onDateRangeChange({});
+                }
+              }}
+              numberOfMonths={2}
+              locale={uk}
+              weekStartsOn={WEEK_STARTS_SAT}
+            />
+            <div className="border-t p-2 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => {
+                  onDateRangeChange({});
+                  onModeChange("month");
+                }}
+              >
+                Скинути
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {mode === "month" ? (
+          <Select value={String(month)} onValueChange={(v) => onMonthChange(Number(v))}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="Місяць" />
+            </SelectTrigger>
+            <SelectContent>
+              {TRANSACTION_MONTH_LABELS.map((label, idx) => (
+                <SelectItem key={label} value={String(idx)}>
+                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {mode === "month" || mode === "year" ? (
+          <Select value={String(year)} onValueChange={(v) => onYearChange(Number(v))}>
+            <SelectTrigger className="h-8 w-[100px]">
+              <SelectValue placeholder="Рік" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function LoadingSkeleton() {
   return (
@@ -169,6 +350,19 @@ export default function InventoryPage() {
   const [productType, setProductType] = useState<"finished" | "materials">(
     "finished"
   );
+  const now = new Date();
+  const [transactionFilterMode, setTransactionFilterMode] =
+    useState<TransactionFilterMode>("month");
+  const [transactionFilterMonth, setTransactionFilterMonth] = useState<number>(
+    now.getMonth()
+  );
+  const [transactionFilterYear, setTransactionFilterYear] = useState<number>(
+    now.getFullYear()
+  );
+  const [transactionFilterRange, setTransactionFilterRange] = useState<{
+    from?: Date;
+    to?: Date;
+  }>({});
 
   useEffect(() => {
     async function loadData() {
@@ -278,6 +472,93 @@ export default function InventoryPage() {
     const quantity = item.quantity || 0;
     return total + productCost * quantity;
   }, 0);
+
+  const shipmentBalanceByTxId = useMemo(() => {
+    const currentInventoryByProduct: Record<number, number> = {};
+    for (const item of inventory) {
+      const productId = item.product_id;
+      if (productId != null) {
+        currentInventoryByProduct[productId] = item.quantity ?? 0;
+      }
+    }
+
+    const ledger = transactions
+      .filter((transaction) => transaction?.product_id != null)
+      .map((transaction) => ({
+        id: transaction.id,
+        product_id: transaction.product_id,
+        quantity: transaction.quantity,
+        created_at: transaction.created_at,
+      }));
+
+    return computeBalanceAfterByTransactionIdFromInventory({
+      currentInventoryByProduct,
+      ledger,
+    });
+  }, [inventory, transactions]);
+
+  const transactionYearOptions = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
+    for (const transaction of transactions) {
+      years.add(new Date(transaction.created_at).getFullYear());
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      if (!transaction) return false;
+
+      const key = transactionDateKey(transaction.created_at);
+      const d = new Date(transaction.created_at);
+
+      if (transactionFilterMode === "range") {
+        if (!transactionFilterRange.from || !transactionFilterRange.to) {
+          return false;
+        }
+        const fromKey = dateToYYYYMMDD(startOfDay(transactionFilterRange.from));
+        const toKey = dateToYYYYMMDD(startOfDay(transactionFilterRange.to));
+        return key >= fromKey && key <= toKey;
+      }
+
+      if (transactionFilterMode === "year") {
+        return d.getFullYear() === transactionFilterYear;
+      }
+
+      return (
+        d.getFullYear() === transactionFilterYear &&
+        d.getMonth() === transactionFilterMonth
+      );
+    });
+  }, [
+    transactions,
+    transactionFilterMode,
+    transactionFilterMonth,
+    transactionFilterYear,
+    transactionFilterRange.from,
+    transactionFilterRange.to,
+  ]);
+
+  const transactionsFilterLabel = useMemo(() => {
+    if (
+      transactionFilterMode === "range" &&
+      transactionFilterRange.from &&
+      transactionFilterRange.to
+    ) {
+      return `${formatDate(`${dateToYYYYMMDD(transactionFilterRange.from)}T12:00:00.000Z`)} — ${formatDate(`${dateToYYYYMMDD(transactionFilterRange.to)}T12:00:00.000Z`)}`;
+    }
+    if (transactionFilterMode === "year") {
+      return String(transactionFilterYear);
+    }
+    const monthLabel = TRANSACTION_MONTH_LABELS[transactionFilterMonth] ?? "";
+    return `${monthLabel} ${transactionFilterYear}`;
+  }, [
+    transactionFilterMode,
+    transactionFilterMonth,
+    transactionFilterYear,
+    transactionFilterRange.from,
+    transactionFilterRange.to,
+  ]);
 
   // Функція для отримання номера фракції з опису продукту
   function getFractionNumber(productDescription?: string): number {
@@ -465,9 +746,24 @@ export default function InventoryPage() {
 
         <TabsContent value="transactions" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Історія операцій</CardTitle>
-              <CardDescription>Лог операцій зі складом</CardDescription>
+            <CardHeader className="space-y-3">
+              <div>
+                <CardTitle>Історія операцій</CardTitle>
+                <CardDescription>
+                  Лог операцій зі складом. Період: {transactionsFilterLabel}
+                </CardDescription>
+              </div>
+              <TransactionHistoryFilters
+                mode={transactionFilterMode}
+                onModeChange={setTransactionFilterMode}
+                month={transactionFilterMonth}
+                onMonthChange={setTransactionFilterMonth}
+                year={transactionFilterYear}
+                onYearChange={setTransactionFilterYear}
+                yearOptions={transactionYearOptions}
+                dateRange={transactionFilterRange}
+                onDateRangeChange={setTransactionFilterRange}
+              />
             </CardHeader>
             <CardContent>
               {transactions.length === 0 ? (
@@ -476,11 +772,28 @@ export default function InventoryPage() {
                     Немає даних про операції
                   </p>
                 </div>
+              ) : filteredTransactions.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">
+                    {transactionFilterMode === "range" &&
+                    transactionFilterRange.from &&
+                    !transactionFilterRange.to
+                      ? "Оберіть кінцеву дату діапазону"
+                      : "За обраний період операцій немає"}
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {transactions
-                    .filter((transaction) => transaction != null)
-                    .map((transaction) => (
+                  {filteredTransactions.map((transaction) => {
+                    const shipmentBalanceAfter =
+                      transaction.transaction_type === "shipment"
+                        ? transaction.balance_after != null &&
+                          Number.isFinite(Number(transaction.balance_after))
+                          ? Number(transaction.balance_after)
+                          : (shipmentBalanceByTxId.get(transaction.id) ?? null)
+                        : null;
+
+                    return (
                       <div
                         key={transaction.id}
                         className="flex items-start justify-between py-2 border-b last:border-0"
@@ -525,17 +838,28 @@ export default function InventoryPage() {
                             </div>
                           </div>
                         </div>
-                        <Badge
-                          variant={
-                            transaction.quantity > 0 ? "default" : "destructive"
-                          }
-                          className="ml-2 whitespace-nowrap"
-                        >
-                          {transaction.quantity > 0 ? "+" : ""}
-                          {formatNumberWithUnit(transaction.quantity, "шт")}
-                        </Badge>
+                        <div className="ml-2 flex flex-col items-end gap-1 shrink-0">
+                          <Badge
+                            variant={
+                              transaction.quantity > 0 ? "default" : "destructive"
+                            }
+                            className="whitespace-nowrap"
+                          >
+                            {transaction.quantity > 0 ? "+" : ""}
+                            {formatNumberWithUnit(transaction.quantity, "шт")}
+                          </Badge>
+                          {transaction.transaction_type === "shipment" ? (
+                            <span className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                              Залишок:{" "}
+                              {shipmentBalanceAfter != null
+                                ? `${formatNumber(shipmentBalanceAfter)} шт`
+                                : "—"}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
