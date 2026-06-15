@@ -65,6 +65,7 @@ import { uk } from "date-fns/locale";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
+import { DebtsSection } from "@/components/debts/debts-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
@@ -172,7 +173,7 @@ function LoadingSkeleton() {
   );
 }
 
-type ExpensesPageTab = "expenses" | "transfers";
+type ExpensesPageTab = "expenses" | "transfers" | "debts";
 
 export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState<ExpensesPageTab>("expenses");
@@ -1394,6 +1395,7 @@ export default function ExpensesPage() {
         <TabsList>
           <TabsTrigger value="expenses">Витрати</TabsTrigger>
           <TabsTrigger value="transfers">Переміщення коштів</TabsTrigger>
+          <TabsTrigger value="debts">Борги</TabsTrigger>
         </TabsList>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1765,6 +1767,12 @@ export default function ExpensesPage() {
       <TabsContent value="transfers" className="mt-0">
         {activeTab === "transfers" && (
           <FundTransfersSection isDateInRange={isDateInRange} />
+        )}
+      </TabsContent>
+
+      <TabsContent value="debts" className="mt-0">
+        {activeTab === "debts" && (
+          <DebtsSection isDateInRange={isDateInRange} />
         )}
       </TabsContent>
       </Tabs>
