@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   deleteDebt,
   deleteDebtRepayment,
   getDebtsWithRepayments,
+  updateDebt,
 } from "@/app/actions/debts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -110,6 +112,18 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     amount: number;
   }>({ isOpen: false, repaymentId: null, amount: 0 });
   const [isDeleteRepaymentPending, setIsDeleteRepaymentPending] = useState(false);
+
+  const [editDebtDialog, setEditDebtDialog] = useState<{
+    isOpen: boolean;
+    debt: DebtWithRepayments | null;
+  }>({ isOpen: false, debt: null });
+  const [editCounterparty, setEditCounterparty] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDirection, setEditDirection] = useState<DebtDirection>("we_owe");
+  const [editComment, setEditComment] = useState("");
+  const [editDebtDate, setEditDebtDate] = useState<Date | undefined>();
+  const [editDebtDatePickerOpen, setEditDebtDatePickerOpen] = useState(false);
+  const [isEditDebtPending, setIsEditDebtPending] = useState(false);
 
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
@@ -261,6 +275,50 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     setRepaymentAmount(debt.remaining_amount.toFixed(2));
     setRepaymentComment("");
     setRepaymentDate(new Date());
+  };
+
+  const openEditDebtDialog = (debt: DebtWithRepayments) => {
+    setEditDebtDialog({ isOpen: true, debt });
+    setEditCounterparty(debt.counterparty);
+    setEditAmount(String(debt.amount));
+    setEditDirection(debt.direction);
+    setEditComment(debt.comment ?? "");
+    setEditDebtDate(parseDebtDate(debt.debt_date));
+  };
+
+  const handleEditDebt = async () => {
+    if (!editDebtDialog.debt) return;
+
+    const amount = Number(editAmount);
+    if (!editCounterparty.trim()) {
+      toast.error("Помилка", { description: "Вкажіть контрагента" });
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Помилка", { description: "Вкажіть коректну суму" });
+      return;
+    }
+
+    setIsEditDebtPending(true);
+    try {
+      await updateDebt({
+        id: editDebtDialog.debt.id,
+        counterparty: editCounterparty,
+        amount,
+        direction: editDirection,
+        date: editDebtDate?.toISOString(),
+        comment: editComment,
+      });
+      toast.success("Борг оновлено");
+      setEditDebtDialog({ isOpen: false, debt: null });
+      await loadDebts();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Не вдалося оновити борг";
+      toast.error("Помилка", { description: message });
+    } finally {
+      setIsEditDebtPending(false);
+    }
   };
 
   const handleRepayment = async () => {
@@ -419,49 +477,67 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               {paginatedActiveDebts.map((debt) => (
                 <Card key={debt.id}>
                   <CardContent className="py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{debt.counterparty}</span>
-                          <Badge variant="secondary">
-                            {DIRECTION_LABELS[debt.direction]}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          від {formatDate(debt.debt_date)}
-                        </p>
-                        <div className="text-lg font-bold">
-                          Залишок:{" "}
-                          {formatNumberWithUnit(debt.remaining_amount, "₴")}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Загалом {formatNumberWithUnit(debt.amount, "₴")} ·
-                          погашено {formatNumberWithUnit(debt.repaid_amount, "₴")}
-                        </p>
-                        {debt.comment ? (
-                          <p className="text-sm text-muted-foreground pt-1">
-                            {debt.comment}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{debt.counterparty}</span>
+                            <Badge variant="secondary">
+                              {DIRECTION_LABELS[debt.direction]}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            від {formatDate(debt.debt_date)}
                           </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-lg font-bold">
+                            Залишок:{" "}
+                            {formatNumberWithUnit(debt.remaining_amount, "₴")}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Загалом {formatNumberWithUnit(debt.amount, "₴")} ·
+                            погашено {formatNumberWithUnit(debt.repaid_amount, "₴")}
+                          </p>
+                        </div>
                         <Button
                           size="sm"
+                          className="shrink-0"
                           onClick={() => openRepaymentDialog(debt)}
                         >
                           {getRepaymentActionLabel(debt.direction)}
                         </Button>
-                        {debt.repayments.length === 0 ? (
+                      </div>
+                      <div className="flex items-start justify-between gap-2 sm:gap-3">
+                        {debt.comment ? (
+                          <p className="text-sm text-muted-foreground min-w-0 flex-1 break-words">
+                            {debt.comment}
+                          </p>
+                        ) : (
+                          <span className="flex-1" aria-hidden />
+                        )}
+                        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
-                              setDeleteDebtDialog({ isOpen: true, debt })
-                            }
+                            className="h-8 w-8 sm:h-9 sm:w-9"
+                            onClick={() => openEditDebtDialog(debt)}
+                            aria-label="Редагувати борг"
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        ) : null}
+                          {debt.repayments.length === 0 ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 sm:h-9 sm:w-9"
+                              onClick={() =>
+                                setDeleteDebtDialog({ isOpen: true, debt })
+                              }
+                              aria-label="Видалити борг"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -721,6 +797,133 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                 </>
               ) : (
                 "Додати"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editDebtDialog.isOpen}
+        onOpenChange={(open) => {
+          if (!open) setEditDebtDialog({ isOpen: false, debt: null });
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редагувати борг</DialogTitle>
+            <DialogDescription>
+              {editDebtDialog.debt && editDebtDialog.debt.repaid_amount > 0
+                ? `Погашено ${formatNumberWithUnit(
+                    editDebtDialog.debt.repaid_amount,
+                    "₴"
+                  )} — сума не може бути меншою`
+                : "Змініть дані боргу"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-debt-counterparty">Контрагент</Label>
+              <Input
+                id="edit-debt-counterparty"
+                value={editCounterparty}
+                onChange={(e) => setEditCounterparty(e.target.value)}
+                placeholder="Ім'я або назва"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Тип боргу</Label>
+              <Select
+                value={editDirection}
+                onValueChange={(value) =>
+                  setEditDirection(value as DebtDirection)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="we_owe">Ми винні</SelectItem>
+                  <SelectItem value="owed_to_us">Нам винні</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Дата</Label>
+              <Popover
+                open={editDebtDatePickerOpen}
+                onOpenChange={setEditDebtDatePickerOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !editDebtDate && "text-muted-foreground"
+                    )}
+                  >
+                    {editDebtDate
+                      ? formatDate(editDebtDate.toISOString())
+                      : "Оберіть дату"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={editDebtDate}
+                    onSelect={(date) => {
+                      setEditDebtDate(date);
+                      setEditDebtDatePickerOpen(false);
+                    }}
+                    locale={uk}
+                    weekStartsOn={1}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-debt-amount">Сума</Label>
+              <Input
+                id="edit-debt-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-debt-comment">Коментар</Label>
+              <Textarea
+                id="edit-debt-comment"
+                value={editComment}
+                onChange={(e) => setEditComment(e.target.value)}
+                rows={2}
+                placeholder="Необов'язково"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditDebtDialog({ isOpen: false, debt: null })}
+              disabled={isEditDebtPending}
+            >
+              Скасувати
+            </Button>
+            <Button
+              onClick={() => void handleEditDebt()}
+              disabled={isEditDebtPending}
+              aria-busy={isEditDebtPending}
+            >
+              {isEditDebtPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Збереження…
+                </>
+              ) : (
+                "Зберегти"
               )}
             </Button>
           </DialogFooter>

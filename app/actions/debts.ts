@@ -167,6 +167,73 @@ export async function createDebt(input: {
   return mapDebtWithRepayments(data as Debt, []);
 }
 
+export async function updateDebt(input: {
+  id: number;
+  counterparty: string;
+  amount: number;
+  direction: DebtDirection;
+  date?: string;
+  comment?: string | null;
+}): Promise<DebtWithRepayments> {
+  const supabase = await createServerClient();
+  const amount = parseAmount(input.amount);
+  const counterparty = normalizeCounterparty(input.counterparty);
+  const direction = parseDirection(input.direction);
+  const { iso } = parseDebtDate(input.date);
+  const comment = normalizeComment(input.comment);
+
+  const { data: debt, error: debtError } = await supabase
+    .from("debts")
+    .select("*")
+    .eq("id", input.id)
+    .single();
+
+  if (debtError || !debt) {
+    throw new Error("Борг не знайдено");
+  }
+
+  const { data: repayments, error: repaymentsError } = await supabase
+    .from("debt_repayments")
+    .select("*")
+    .eq("debt_id", input.id);
+
+  if (repaymentsError) {
+    throw new Error(repaymentsError.message);
+  }
+
+  const current = mapDebtWithRepayments(
+    debt as Debt,
+    (repayments ?? []) as DebtRepayment[]
+  );
+
+  if (amount < current.repaid_amount) {
+    throw new Error(
+      `Сума не може бути меншою за уже погашене (${current.repaid_amount.toFixed(2)} ₴)`
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("debts")
+    .update({
+      counterparty,
+      amount,
+      direction,
+      debt_date: iso,
+      comment,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Не вдалося оновити борг");
+  }
+
+  revalidatePath("/expenses");
+  return mapDebtWithRepayments(data as Debt, current.repayments);
+}
+
 export async function createDebtRepayment(input: {
   debtId: number;
   amount: number;
