@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { createRawCostRepayment, deleteExpense } from "@/app/actions";
 import {
   createDebt,
   createDebtRepayment,
@@ -17,6 +19,10 @@ import {
   getDebtsWithRepayments,
   updateDebt,
 } from "@/app/actions/debts";
+import {
+  getRawDeliveryDebt,
+  type RawDeliveryDebtData,
+} from "@/app/actions/raw-delivery-debt";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +51,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { DebtDirection, DebtWithRepayments } from "@/lib/debts/types";
-import { cn, formatDate, formatNumberWithUnit } from "@/lib/utils";
+import { RAW_DELIVERY_DEBT_TITLE } from "@/lib/debts/raw-delivery-debt";
+import { cn, dateToYYYYMMDD, formatDate, formatNumberWithUnit } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { toast } from "sonner";
 
@@ -55,6 +62,33 @@ type DebtsSectionProps = {
 
 const DEBTS_PER_PAGE = 5;
 const REPAYMENTS_PER_PAGE = 5;
+
+type RepaymentHistoryItem =
+  | {
+      kind: "debt";
+      id: number;
+      date: string;
+      amount: number;
+      comment: string | null;
+      debt: DebtWithRepayments;
+    }
+  | {
+      kind: "raw-delivery";
+      id: number;
+      date: string;
+      amount: number;
+      comment: string | null;
+    };
+
+type RepaymentTarget =
+  | { kind: "debt"; debt: DebtWithRepayments }
+  | { kind: "raw-delivery"; remainingAmount: number };
+
+type DeleteRepaymentTarget = {
+  kind: "debt" | "raw-delivery";
+  repaymentId: number;
+  amount: number;
+};
 
 const DIRECTION_LABELS: Record<DebtDirection, string> = {
   we_owe: "Ми винні",
@@ -77,6 +111,8 @@ function getRepaymentPendingLabel(direction: DebtDirection): string {
 
 export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   const [debts, setDebts] = useState<DebtWithRepayments[]>([]);
+  const [rawDeliveryDebt, setRawDeliveryDebt] =
+    useState<RawDeliveryDebtData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [debtsPage, setDebtsPage] = useState(1);
   const [repaymentsPage, setRepaymentsPage] = useState(1);
@@ -92,8 +128,8 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
 
   const [repaymentDialog, setRepaymentDialog] = useState<{
     isOpen: boolean;
-    debt: DebtWithRepayments | null;
-  }>({ isOpen: false, debt: null });
+    target: RepaymentTarget | null;
+  }>({ isOpen: false, target: null });
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentComment, setRepaymentComment] = useState("");
   const [repaymentDate, setRepaymentDate] = useState<Date | undefined>(() => new Date());
@@ -108,9 +144,8 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
 
   const [deleteRepaymentDialog, setDeleteRepaymentDialog] = useState<{
     isOpen: boolean;
-    repaymentId: number | null;
-    amount: number;
-  }>({ isOpen: false, repaymentId: null, amount: 0 });
+    target: DeleteRepaymentTarget | null;
+  }>({ isOpen: false, target: null });
   const [isDeleteRepaymentPending, setIsDeleteRepaymentPending] = useState(false);
 
   const [editDebtDialog, setEditDebtDialog] = useState<{
@@ -128,8 +163,12 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const rows = await getDebtsWithRepayments();
+      const [rows, rawDebt] = await Promise.all([
+        getDebtsWithRepayments(),
+        getRawDeliveryDebt(),
+      ]);
       setDebts(rows);
+      setRawDeliveryDebt(rawDebt);
     } catch (error) {
       console.error("loadDebts:", error);
       const message =
@@ -149,6 +188,14 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     [debts]
   );
 
+  const hasRawDeliveryDebtActive = Boolean(
+    rawDeliveryDebt &&
+      !rawDeliveryDebt.isClosed &&
+      rawDeliveryDebt.remainingAmountUah > 0
+  );
+
+  const hasActiveDebts = activeDebts.length > 0 || hasRawDeliveryDebtActive;
+
   const filteredNewDebts = useMemo(
     () =>
       debts.filter((debt) => isDateInRange(parseDebtDate(debt.debt_date))),
@@ -156,30 +203,44 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   );
 
   const filteredRepayments = useMemo(() => {
-    const rows = debts.flatMap((debt) =>
+    const debtRows: RepaymentHistoryItem[] = debts.flatMap((debt) =>
       debt.repayments.map((repayment) => ({
-        repayment,
+        kind: "debt" as const,
+        id: repayment.id,
+        date: repayment.repayment_date,
+        amount: Number(repayment.amount),
+        comment: repayment.comment,
         debt,
       }))
     );
-    return rows
-      .filter((row) =>
-        isDateInRange(parseDebtDate(row.repayment.repayment_date))
-      )
+
+    const rawRows: RepaymentHistoryItem[] = (rawDeliveryDebt?.repayments ?? []).map(
+      (repayment) => ({
+        kind: "raw-delivery" as const,
+        id: repayment.id,
+        date: repayment.date,
+        amount: repayment.amount,
+        comment: repayment.description.trim() || null,
+      })
+    );
+
+    return [...debtRows, ...rawRows]
+      .filter((row) => isDateInRange(parseDebtDate(row.date)))
       .sort(
         (a, b) =>
-          parseDebtDate(b.repayment.repayment_date).getTime() -
-          parseDebtDate(a.repayment.repayment_date).getTime()
+          parseDebtDate(b.date).getTime() - parseDebtDate(a.date).getTime()
       );
-  }, [debts, isDateInRange]);
+  }, [debts, rawDeliveryDebt, isDateInRange]);
 
-  const totalWeOwe = useMemo(
-    () =>
-      activeDebts
-        .filter((debt) => debt.direction === "we_owe")
-        .reduce((sum, debt) => sum + debt.remaining_amount, 0),
-    [activeDebts]
-  );
+  const totalWeOwe = useMemo(() => {
+    const manualWeOwe = activeDebts
+      .filter((debt) => debt.direction === "we_owe")
+      .reduce((sum, debt) => sum + debt.remaining_amount, 0);
+    const rawRemaining = hasRawDeliveryDebtActive
+      ? (rawDeliveryDebt?.remainingAmountUah ?? 0)
+      : 0;
+    return manualWeOwe + rawRemaining;
+  }, [activeDebts, hasRawDeliveryDebtActive, rawDeliveryDebt]);
 
   const totalOwedToUs = useMemo(
     () =>
@@ -195,11 +256,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   );
 
   const periodRepaymentsTotal = useMemo(
-    () =>
-      filteredRepayments.reduce(
-        (sum, row) => sum + Number(row.repayment.amount),
-        0
-      ),
+    () => filteredRepayments.reduce((sum, row) => sum + row.amount, 0),
     [filteredRepayments]
   );
 
@@ -271,8 +328,25 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   };
 
   const openRepaymentDialog = (debt: DebtWithRepayments) => {
-    setRepaymentDialog({ isOpen: true, debt });
+    setRepaymentDialog({
+      isOpen: true,
+      target: { kind: "debt", debt },
+    });
     setRepaymentAmount(debt.remaining_amount.toFixed(2));
+    setRepaymentComment("");
+    setRepaymentDate(new Date());
+  };
+
+  const openRawDeliveryRepaymentDialog = () => {
+    if (!rawDeliveryDebt) return;
+    setRepaymentDialog({
+      isOpen: true,
+      target: {
+        kind: "raw-delivery",
+        remainingAmount: rawDeliveryDebt.remainingAmountUah,
+      },
+    });
+    setRepaymentAmount(rawDeliveryDebt.remainingAmountUah.toFixed(2));
     setRepaymentComment("");
     setRepaymentDate(new Date());
   };
@@ -322,7 +396,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   };
 
   const handleRepayment = async () => {
-    if (!repaymentDialog.debt) return;
+    if (!repaymentDialog.target) return;
 
     const amount = Number(repaymentAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -330,16 +404,45 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
       return;
     }
 
+    const remainingAmount =
+      repaymentDialog.target.kind === "debt"
+        ? repaymentDialog.target.debt.remaining_amount
+        : repaymentDialog.target.remainingAmount;
+
+    if (amount > remainingAmount) {
+      toast.error("Помилка", {
+        description: `Сума перевищує залишок (${remainingAmount.toFixed(2)} ₴)`,
+      });
+      return;
+    }
+
     setIsRepaymentPending(true);
     try {
-      await createDebtRepayment({
-        debtId: repaymentDialog.debt.id,
-        amount,
-        date: repaymentDate?.toISOString(),
-        comment: repaymentComment,
-      });
+      if (repaymentDialog.target.kind === "debt") {
+        await createDebtRepayment({
+          debtId: repaymentDialog.target.debt.id,
+          amount,
+          date: repaymentDate?.toISOString(),
+          comment: repaymentComment,
+        });
+      } else {
+        if (!repaymentDate) {
+          toast.error("Помилка", { description: "Оберіть дату" });
+          return;
+        }
+        const result = await createRawCostRepayment(
+          dateToYYYYMMDD(repaymentDate),
+          amount,
+          repaymentComment
+        );
+        if (!result.ok) {
+          toast.error("Помилка", { description: result.error });
+          return;
+        }
+      }
+
       toast.success("Погашення записано");
-      setRepaymentDialog({ isOpen: false, debt: null });
+      setRepaymentDialog({ isOpen: false, target: null });
       await loadDebts();
     } catch (error) {
       const message =
@@ -369,17 +472,17 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   };
 
   const handleDeleteRepayment = async () => {
-    if (!deleteRepaymentDialog.repaymentId) return;
+    if (!deleteRepaymentDialog.target) return;
 
     setIsDeleteRepaymentPending(true);
     try {
-      await deleteDebtRepayment(deleteRepaymentDialog.repaymentId);
+      if (deleteRepaymentDialog.target.kind === "debt") {
+        await deleteDebtRepayment(deleteRepaymentDialog.target.repaymentId);
+      } else {
+        await deleteExpense(deleteRepaymentDialog.target.repaymentId);
+      }
       toast.success("Запис погашення видалено");
-      setDeleteRepaymentDialog({
-        isOpen: false,
-        repaymentId: null,
-        amount: 0,
-      });
+      setDeleteRepaymentDialog({ isOpen: false, target: null });
       await loadDebts();
     } catch (error) {
       const message =
@@ -465,7 +568,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               Завантаження боргів…
             </CardContent>
           </Card>
-        ) : activeDebts.length === 0 ? (
+        ) : !hasActiveDebts ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
               Немає активних боргів
@@ -474,6 +577,66 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
         ) : (
           <>
             <div className="space-y-3">
+              {hasRawDeliveryDebtActive && rawDeliveryDebt ? (
+                <Card>
+                  <CardContent className="py-4">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                              {RAW_DELIVERY_DEBT_TITLE}
+                            </span>
+                            <Badge variant="secondary">Ми винні</Badge>
+                            <Badge variant="outline">Поїздки</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {rawDeliveryDebt.tripsCount} рейсів ·{" "}
+                            {rawDeliveryDebt.bagsCount} мішків
+                          </p>
+                          <div className="text-lg font-bold">
+                            Залишок:{" "}
+                            {formatNumberWithUnit(
+                              rawDeliveryDebt.remainingAmountUah,
+                              "₴"
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Загалом{" "}
+                            {formatNumberWithUnit(
+                              rawDeliveryDebt.totalCostsUah,
+                              "₴"
+                            )}{" "}
+                            · погашено{" "}
+                            {formatNumberWithUnit(
+                              rawDeliveryDebt.repaidAmountUah,
+                              "₴"
+                            )}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="shrink-0"
+                          onClick={openRawDeliveryRepaymentDialog}
+                        >
+                          Повернути
+                        </Button>
+                      </div>
+                      <div className="flex items-start justify-between gap-2 sm:gap-3">
+                        <p className="text-sm text-muted-foreground min-w-0 flex-1 break-words">
+                          Витрати на рейси сировини.{" "}
+                          <Link
+                            href="/trips"
+                            className="text-foreground underline-offset-4 hover:underline"
+                          >
+                            Відкрити поїздки
+                          </Link>
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
               {paginatedActiveDebts.map((debt) => (
                 <Card key={debt.id}>
                   <CardContent className="py-4">
@@ -598,41 +761,52 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
         ) : (
           <>
             <div className="space-y-3">
-              {paginatedRepayments.map(({ repayment, debt }) => (
-                <Card key={repayment.id}>
+              {paginatedRepayments.map((item) => (
+                <Card key={`${item.kind}-${item.id}`}>
                   <CardContent className="py-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
+                      <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">
-                            {formatDate(repayment.repayment_date)}
+                            {formatDate(item.date)}
                           </span>
-                          <Badge variant="outline">
-                            {DIRECTION_LABELS[debt.direction]}
-                          </Badge>
+                          {item.kind === "raw-delivery" ? (
+                            <Badge variant="outline">Доставка сировини</Badge>
+                          ) : (
+                            <Badge variant="outline">
+                              {DIRECTION_LABELS[item.debt.direction]}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {debt.counterparty}
+                          {item.kind === "raw-delivery"
+                            ? RAW_DELIVERY_DEBT_TITLE
+                            : item.debt.counterparty}
                         </p>
                         <div className="text-lg font-bold">
-                          {formatNumberWithUnit(Number(repayment.amount), "₴")}
+                          {formatNumberWithUnit(item.amount, "₴")}
                         </div>
-                        {repayment.comment ? (
-                          <p className="text-sm text-muted-foreground pt-1">
-                            {repayment.comment}
+                        {item.comment ? (
+                          <p className="text-sm text-muted-foreground pt-1 break-words">
+                            {item.comment}
                           </p>
                         ) : null}
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="shrink-0"
                         onClick={() =>
                           setDeleteRepaymentDialog({
                             isOpen: true,
-                            repaymentId: repayment.id,
-                            amount: Number(repayment.amount),
+                            target: {
+                              kind: item.kind,
+                              repaymentId: item.id,
+                              amount: item.amount,
+                            },
                           })
                         }
+                        aria-label="Видалити погашення"
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -933,23 +1107,30 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
       <Dialog
         open={repaymentDialog.isOpen}
         onOpenChange={(open) => {
-          if (!open) setRepaymentDialog({ isOpen: false, debt: null });
+          if (!open) setRepaymentDialog({ isOpen: false, target: null });
         }}
       >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {repaymentDialog.debt
-                ? getRepaymentActionLabel(repaymentDialog.debt.direction)
-                : "Погашення"}
+              {repaymentDialog.target?.kind === "raw-delivery"
+                ? "Повернути"
+                : repaymentDialog.target?.kind === "debt"
+                  ? getRepaymentActionLabel(repaymentDialog.target.debt.direction)
+                  : "Погашення"}
             </DialogTitle>
             <DialogDescription>
-              {repaymentDialog.debt
-                ? `${repaymentDialog.debt.counterparty} · залишок ${formatNumberWithUnit(
-                    repaymentDialog.debt.remaining_amount,
+              {repaymentDialog.target?.kind === "raw-delivery"
+                ? `${RAW_DELIVERY_DEBT_TITLE} · залишок ${formatNumberWithUnit(
+                    repaymentDialog.target.remainingAmount,
                     "₴"
                   )}`
-                : ""}
+                : repaymentDialog.target?.kind === "debt"
+                  ? `${repaymentDialog.target.debt.counterparty} · залишок ${formatNumberWithUnit(
+                      repaymentDialog.target.debt.remaining_amount,
+                      "₴"
+                    )}`
+                  : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -1011,7 +1192,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setRepaymentDialog({ isOpen: false, debt: null })}
+              onClick={() => setRepaymentDialog({ isOpen: false, target: null })}
               disabled={isRepaymentPending}
             >
               Скасувати
@@ -1024,12 +1205,16 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               {isRepaymentPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {repaymentDialog.debt
-                    ? getRepaymentPendingLabel(repaymentDialog.debt.direction)
-                    : "Збереження…"}
+                  {repaymentDialog.target?.kind === "debt"
+                    ? getRepaymentPendingLabel(
+                        repaymentDialog.target.debt.direction
+                      )
+                    : "Повернення…"}
                 </>
-              ) : repaymentDialog.debt ? (
-                getRepaymentActionLabel(repaymentDialog.debt.direction)
+              ) : repaymentDialog.target?.kind === "raw-delivery" ? (
+                "Повернути"
+              ) : repaymentDialog.target?.kind === "debt" ? (
+                getRepaymentActionLabel(repaymentDialog.target.debt.direction)
               ) : (
                 "Зберегти"
               )}
@@ -1087,11 +1272,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
         open={deleteRepaymentDialog.isOpen}
         onOpenChange={(open) => {
           if (!open) {
-            setDeleteRepaymentDialog({
-              isOpen: false,
-              repaymentId: null,
-              amount: 0,
-            });
+            setDeleteRepaymentDialog({ isOpen: false, target: null });
           }
         }}
       >
@@ -1099,7 +1280,11 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
           <DialogHeader>
             <DialogTitle>Видалити погашення?</DialogTitle>
             <DialogDescription>
-              Запис на {formatNumberWithUnit(deleteRepaymentDialog.amount, "₴")}{" "}
+              Запис на{" "}
+              {formatNumberWithUnit(
+                deleteRepaymentDialog.target?.amount ?? 0,
+                "₴"
+              )}{" "}
               буде видалено, залишок боргу оновиться.
             </DialogDescription>
           </DialogHeader>
@@ -1107,11 +1292,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
             <Button
               variant="outline"
               onClick={() =>
-                setDeleteRepaymentDialog({
-                  isOpen: false,
-                  repaymentId: null,
-                  amount: 0,
-                })
+                setDeleteRepaymentDialog({ isOpen: false, target: null })
               }
               disabled={isDeleteRepaymentPending}
             >

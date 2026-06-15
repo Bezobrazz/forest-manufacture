@@ -22,6 +22,7 @@ import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct"
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
 
 // Отримання інформації про склад
 export async function getInventory(): Promise<Inventory[]> {
@@ -2332,8 +2333,6 @@ export async function createExpense(
   }
 }
 
-const RAW_REPAYMENT_CATEGORY_NAME = "Погашення доставки (сировина)";
-
 export async function createRawCostRepayment(
   date: string,
   amount: number,
@@ -2357,6 +2356,8 @@ export async function createRawCostRepayment(
     }
 
     await createExpense(category.id, amount, comment?.trim() ?? "", date);
+    revalidatePath("/expenses");
+    revalidatePath("/trips");
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Помилка при збереженні";
@@ -2512,6 +2513,8 @@ export async function updateRawRepayment(
       console.error("Error updating raw repayment:", error);
       throw error;
     }
+    revalidatePath("/expenses");
+    revalidatePath("/trips");
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Помилка при оновленні";
@@ -2530,6 +2533,8 @@ export async function deleteExpense(id: number) {
       throw error;
     }
 
+    revalidatePath("/expenses");
+    revalidatePath("/trips");
     return true;
   } catch (error) {
     console.error("Error in deleteExpense:", error);
