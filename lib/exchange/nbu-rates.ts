@@ -57,6 +57,21 @@ export async function fetchNbuEurRate(): Promise<NbuRateSnapshot> {
   return fetchNbuCurrencyRate("EUR");
 }
 
+export async function fetchNbuUsdRate(): Promise<NbuRateSnapshot> {
+  return fetchNbuCurrencyRate("USD");
+}
+
+export async function fetchNbuDebtCurrencyRates(): Promise<{
+  USD: NbuRateSnapshot;
+  EUR: NbuRateSnapshot;
+}> {
+  const [usd, eur] = await Promise.all([
+    fetchNbuUsdRate(),
+    fetchNbuEurRate(),
+  ]);
+  return { USD: usd, EUR: eur };
+}
+
 export function suggestedSellingPriceUah(
   costPerBagUah: number,
   markupPercent: number = SUGGESTED_PRICE_MARKUP_PERCENT

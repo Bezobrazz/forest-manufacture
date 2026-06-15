@@ -51,6 +51,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { DebtDirection, DebtWithRepayments } from "@/lib/debts/types";
+import {
+  convertDebtAmountToUah,
+  DEBT_CURRENCIES,
+  DEBT_CURRENCY_LABELS,
+  formatDebtCurrencyAmount,
+  getDebtOriginalAmount,
+  getDebtRepaidOriginal,
+  getDebtRemainingOriginal,
+  type DebtCurrency,
+} from "@/lib/debts/currency";
 import { RAW_DELIVERY_DEBT_TITLE } from "@/lib/debts/raw-delivery-debt";
 import { cn, dateToYYYYMMDD, formatDate, formatNumberWithUnit } from "@/lib/utils";
 import { uk } from "date-fns/locale";
@@ -95,6 +105,11 @@ const DIRECTION_LABELS: Record<DebtDirection, string> = {
   owed_to_us: "Нам винні",
 };
 
+type DebtExchangeRates = Record<
+  Exclude<DebtCurrency, "UAH">,
+  { rate: number; exchangeDate: string | null }
+>;
+
 function parseDebtDate(value: string): Date {
   if (!value) return new Date();
   if (value.includes("T")) return new Date(value);
@@ -121,6 +136,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   const [isAddDebtPending, setIsAddDebtPending] = useState(false);
   const [newCounterparty, setNewCounterparty] = useState("");
   const [newAmount, setNewAmount] = useState("");
+  const [newCurrency, setNewCurrency] = useState<DebtCurrency>("UAH");
   const [newDirection, setNewDirection] = useState<DebtDirection>("we_owe");
   const [newComment, setNewComment] = useState("");
   const [newDebtDate, setNewDebtDate] = useState<Date | undefined>(() => new Date());
@@ -154,11 +170,54 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   }>({ isOpen: false, debt: null });
   const [editCounterparty, setEditCounterparty] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editCurrency, setEditCurrency] = useState<DebtCurrency>("UAH");
   const [editDirection, setEditDirection] = useState<DebtDirection>("we_owe");
   const [editComment, setEditComment] = useState("");
   const [editDebtDate, setEditDebtDate] = useState<Date | undefined>();
   const [editDebtDatePickerOpen, setEditDebtDatePickerOpen] = useState(false);
   const [isEditDebtPending, setIsEditDebtPending] = useState(false);
+
+  const [exchangeRates, setExchangeRates] = useState<DebtExchangeRates | null>(
+    null
+  );
+  const [isExchangeRatesLoading, setIsExchangeRatesLoading] = useState(false);
+  const [exchangeRatesError, setExchangeRatesError] = useState<string | null>(
+    null
+  );
+
+  const loadExchangeRates = useCallback(async () => {
+    setIsExchangeRatesLoading(true);
+    setExchangeRatesError(null);
+    try {
+      const response = await fetch("/api/exchange-rate/nbu");
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        usd?: { rate?: number; exchangeDate?: string | null };
+        eur?: { rate?: number; exchangeDate?: string | null };
+      };
+      if (!response.ok || !data.ok || !data.usd?.rate || !data.eur?.rate) {
+        throw new Error(data.error ?? "Не вдалося отримати курси НБУ");
+      }
+      setExchangeRates({
+        USD: {
+          rate: data.usd.rate,
+          exchangeDate: data.usd.exchangeDate ?? null,
+        },
+        EUR: {
+          rate: data.eur.rate,
+          exchangeDate: data.eur.exchangeDate ?? null,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Не вдалося отримати курси НБУ";
+      setExchangeRatesError(message);
+      setExchangeRates(null);
+    } finally {
+      setIsExchangeRatesLoading(false);
+    }
+  }, []);
 
   const loadDebts = useCallback(async () => {
     setIsLoading(true);
@@ -182,6 +241,30 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   useEffect(() => {
     void loadDebts();
   }, [loadDebts]);
+
+  useEffect(() => {
+    if (!isAddDebtOpen && !editDebtDialog.isOpen) return;
+    void loadExchangeRates();
+  }, [isAddDebtOpen, editDebtDialog.isOpen, loadExchangeRates]);
+
+  const getCurrencyPreview = (
+    amountValue: string,
+    currency: DebtCurrency
+  ): { amountUah: number; rate: number; exchangeDate: string | null } | null => {
+    if (currency === "UAH") return null;
+    const amount = Number(amountValue);
+    if (!Number.isFinite(amount) || amount <= 0 || !exchangeRates) return null;
+    const snapshot = exchangeRates[currency];
+    if (!snapshot) return null;
+    return {
+      amountUah: convertDebtAmountToUah(amount, currency, snapshot.rate),
+      rate: snapshot.rate,
+      exchangeDate: snapshot.exchangeDate,
+    };
+  };
+
+  const newAmountPreview = getCurrencyPreview(newAmount, newCurrency);
+  const editAmountPreview = getCurrencyPreview(editAmount, editCurrency);
 
   const activeDebts = useMemo(
     () => debts.filter((debt) => !debt.is_closed),
@@ -289,6 +372,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   const resetAddDebtForm = () => {
     setNewCounterparty("");
     setNewAmount("");
+    setNewCurrency("UAH");
     setNewDirection("we_owe");
     setNewComment("");
     setNewDebtDate(new Date());
@@ -310,6 +394,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
       await createDebt({
         counterparty: newCounterparty,
         amount,
+        currency: newCurrency,
         direction: newDirection,
         date: newDebtDate?.toISOString(),
         comment: newComment,
@@ -354,7 +439,8 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   const openEditDebtDialog = (debt: DebtWithRepayments) => {
     setEditDebtDialog({ isOpen: true, debt });
     setEditCounterparty(debt.counterparty);
-    setEditAmount(String(debt.amount));
+    setEditAmount(String(getDebtOriginalAmount(debt)));
+    setEditCurrency(debt.currency);
     setEditDirection(debt.direction);
     setEditComment(debt.comment ?? "");
     setEditDebtDate(parseDebtDate(debt.debt_date));
@@ -379,6 +465,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
         id: editDebtDialog.debt.id,
         counterparty: editCounterparty,
         amount,
+        currency: editCurrency,
         direction: editDirection,
         date: editDebtDate?.toISOString(),
         comment: editComment,
@@ -648,6 +735,9 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                             <Badge variant="secondary">
                               {DIRECTION_LABELS[debt.direction]}
                             </Badge>
+                            {debt.currency !== "UAH" ? (
+                              <Badge variant="outline">{debt.currency}</Badge>
+                            ) : null}
                           </div>
                           <p className="text-sm text-muted-foreground">
                             від {formatDate(debt.debt_date)}
@@ -656,9 +746,33 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                             Залишок:{" "}
                             {formatNumberWithUnit(debt.remaining_amount, "₴")}
                           </div>
+                          {debt.currency !== "UAH" ? (
+                            <p className="text-sm text-muted-foreground">
+                              {formatDebtCurrencyAmount(
+                                getDebtRemainingOriginal(debt),
+                                debt.currency
+                              )}{" "}
+                              · курс {debt.exchange_rate.toFixed(2)} ₴
+                            </p>
+                          ) : null}
                           <p className="text-xs text-muted-foreground">
-                            Загалом {formatNumberWithUnit(debt.amount, "₴")} ·
-                            погашено {formatNumberWithUnit(debt.repaid_amount, "₴")}
+                            Загалом{" "}
+                            {debt.currency === "UAH"
+                              ? formatNumberWithUnit(debt.amount, "₴")
+                              : formatDebtCurrencyAmount(
+                                  getDebtOriginalAmount(debt),
+                                  debt.currency
+                                )}{" "}
+                            · погашено{" "}
+                            {debt.currency === "UAH"
+                              ? formatNumberWithUnit(debt.repaid_amount, "₴")
+                              : formatDebtCurrencyAmount(
+                                  getDebtRepaidOriginal(debt),
+                                  debt.currency
+                                )}
+                            {debt.currency !== "UAH"
+                              ? ` (${formatNumberWithUnit(debt.repaid_amount, "₴")})`
+                              : null}
                           </p>
                         </div>
                         <Button
@@ -929,6 +1043,24 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               </Popover>
             </div>
             <div className="space-y-2">
+              <Label>Валюта</Label>
+              <Select
+                value={newCurrency}
+                onValueChange={(value) => setNewCurrency(value as DebtCurrency)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEBT_CURRENCIES.map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {DEBT_CURRENCY_LABELS[currency]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="debt-amount">Сума</Label>
               <Input
                 id="debt-amount"
@@ -939,6 +1071,27 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                 onChange={(e) => setNewAmount(e.target.value)}
                 placeholder="0.00"
               />
+              {newCurrency !== "UAH" ? (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  {isExchangeRatesLoading ? (
+                    <p>Завантаження курсу НБУ…</p>
+                  ) : exchangeRatesError ? (
+                    <p className="text-destructive">{exchangeRatesError}</p>
+                  ) : newAmountPreview ? (
+                    <p>
+                      ≈ {formatNumberWithUnit(newAmountPreview.amountUah, "₴")} (курс
+                      НБУ {newAmountPreview.rate.toFixed(2)} ₴/
+                      {newCurrency === "USD" ? "$" : "€"}
+                      {newAmountPreview.exchangeDate
+                        ? ` · ${newAmountPreview.exchangeDate}`
+                        : ""}
+                      )
+                    </p>
+                  ) : (
+                    <p>Вкажіть суму для перерахунку в гривню</p>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="debt-comment">Коментар</Label>
@@ -1056,6 +1209,24 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               </Popover>
             </div>
             <div className="space-y-2">
+              <Label>Валюта</Label>
+              <Select
+                value={editCurrency}
+                onValueChange={(value) => setEditCurrency(value as DebtCurrency)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEBT_CURRENCIES.map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {DEBT_CURRENCY_LABELS[currency]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-debt-amount">Сума</Label>
               <Input
                 id="edit-debt-amount"
@@ -1066,6 +1237,27 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                 onChange={(e) => setEditAmount(e.target.value)}
                 placeholder="0.00"
               />
+              {editCurrency !== "UAH" ? (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  {isExchangeRatesLoading ? (
+                    <p>Завантаження курсу НБУ…</p>
+                  ) : exchangeRatesError ? (
+                    <p className="text-destructive">{exchangeRatesError}</p>
+                  ) : editAmountPreview ? (
+                    <p>
+                      ≈ {formatNumberWithUnit(editAmountPreview.amountUah, "₴")} (курс
+                      НБУ {editAmountPreview.rate.toFixed(2)} ₴/
+                      {editCurrency === "USD" ? "$" : "€"}
+                      {editAmountPreview.exchangeDate
+                        ? ` · ${editAmountPreview.exchangeDate}`
+                        : ""}
+                      )
+                    </p>
+                  ) : (
+                    <p>Вкажіть суму для перерахунку в гривню</p>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-debt-comment">Коментар</Label>
@@ -1129,7 +1321,16 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                   ? `${repaymentDialog.target.debt.counterparty} · залишок ${formatNumberWithUnit(
                       repaymentDialog.target.debt.remaining_amount,
                       "₴"
-                    )}`
+                    )}${
+                      repaymentDialog.target.debt.currency !== "UAH"
+                        ? ` (${formatDebtCurrencyAmount(
+                            getDebtRemainingOriginal(
+                              repaymentDialog.target.debt
+                            ),
+                            repaymentDialog.target.debt.currency
+                          )})`
+                        : ""
+                    }`
                   : ""}
             </DialogDescription>
           </DialogHeader>

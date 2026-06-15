@@ -180,6 +180,7 @@ export type ShipmentForecast = {
 export type { FundTransfer, FundTransferSource } from "@/lib/crm/keepincrm/fund-transfer-types";
 export type {
   Debt,
+  DebtCurrency,
   DebtDirection,
   DebtRepayment,
   DebtWithRepayments,

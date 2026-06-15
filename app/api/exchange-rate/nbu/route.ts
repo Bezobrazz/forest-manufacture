@@ -1,15 +1,19 @@
-import { fetchNbuEurRate } from "@/lib/exchange/nbu-rates";
+import { fetchNbuDebtCurrencyRates } from "@/lib/exchange/nbu-rates";
 
 export async function GET() {
   try {
-    const eur = await fetchNbuEurRate();
+    const rates = await fetchNbuDebtCurrencyRates();
 
     return Response.json(
       {
         ok: true,
+        usd: {
+          rate: rates.USD.rate,
+          exchangeDate: rates.USD.exchangeDate,
+        },
         eur: {
-          rate: eur.rate,
-          exchangeDate: eur.exchangeDate,
+          rate: rates.EUR.rate,
+          exchangeDate: rates.EUR.exchangeDate,
         },
         source: "nbu",
       },

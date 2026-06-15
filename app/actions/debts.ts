@@ -8,6 +8,14 @@ import type {
   DebtRepayment,
   DebtWithRepayments,
 } from "@/lib/debts/types";
+import {
+  convertDebtAmountToUah,
+  convertUahToDebtCurrency,
+  parseDebtCurrency,
+  roundMoney,
+  type DebtCurrency,
+} from "@/lib/debts/currency";
+import { fetchNbuDebtCurrencyRates } from "@/lib/exchange/nbu-rates";
 import { dateToYYYYMMDD } from "@/lib/utils";
 
 function parseAmount(value: number): number {
@@ -71,19 +79,61 @@ function mapDebtWithRepayments(
     (sum, row) => sum + Number(row.amount),
     0
   );
-  const roundedRepaid = Math.round(repaidAmount * 100) / 100;
-  const remainingAmount = Math.max(
-    0,
-    Math.round((Number(debt.amount) - roundedRepaid) * 100) / 100
-  );
+  const roundedRepaid = roundMoney(repaidAmount);
+  const amountUah = roundMoney(Number(debt.amount));
+  const remainingAmount = Math.max(0, roundMoney(amountUah - roundedRepaid));
+  const currency = debt.currency ?? "UAH";
+  const exchangeRate = Number(debt.exchange_rate ?? 1);
 
   return {
     ...debt,
-    amount: Number(debt.amount),
+    amount: amountUah,
+    original_amount: roundMoney(Number(debt.original_amount ?? debt.amount)),
+    currency,
+    exchange_rate: exchangeRate,
     repayments,
     repaid_amount: roundedRepaid,
     remaining_amount: remainingAmount,
+    remaining_original_amount: convertUahToDebtCurrency(
+      remainingAmount,
+      currency,
+      exchangeRate
+    ),
     is_closed: remainingAmount <= 0,
+  };
+}
+
+async function resolveDebtAmounts(input: {
+  originalAmount: number;
+  currency: DebtCurrency;
+}): Promise<{
+  originalAmount: number;
+  amountUah: number;
+  exchangeRate: number;
+}> {
+  const originalAmount = parseAmount(input.originalAmount);
+  const currency = parseDebtCurrency(input.currency);
+
+  if (currency === "UAH") {
+    return {
+      originalAmount,
+      amountUah: originalAmount,
+      exchangeRate: 1,
+    };
+  }
+
+  const rates = await fetchNbuDebtCurrencyRates();
+  const snapshot = rates[currency];
+  const amountUah = convertDebtAmountToUah(
+    originalAmount,
+    currency,
+    snapshot.rate
+  );
+
+  return {
+    originalAmount,
+    amountUah,
+    exchangeRate: snapshot.rate,
   };
 }
 
@@ -134,23 +184,30 @@ export async function getDebtsWithRepayments(): Promise<DebtWithRepayments[]> {
 export async function createDebt(input: {
   counterparty: string;
   amount: number;
+  currency?: DebtCurrency;
   direction: DebtDirection;
   date?: string;
   comment?: string | null;
 }): Promise<DebtWithRepayments> {
   const supabase = await createServerClient();
-  const amount = parseAmount(input.amount);
   const counterparty = normalizeCounterparty(input.counterparty);
   const direction = parseDirection(input.direction);
   const { iso } = parseDebtDate(input.date);
   const comment = normalizeComment(input.comment);
+  const { originalAmount, amountUah, exchangeRate } = await resolveDebtAmounts({
+    originalAmount: input.amount,
+    currency: input.currency ?? "UAH",
+  });
 
   const { data, error } = await supabase
     .from("debts")
     .insert([
       {
         counterparty,
-        amount,
+        amount: amountUah,
+        original_amount: originalAmount,
+        currency: input.currency ?? "UAH",
+        exchange_rate: exchangeRate,
         direction,
         debt_date: iso,
         comment,
@@ -171,12 +228,12 @@ export async function updateDebt(input: {
   id: number;
   counterparty: string;
   amount: number;
+  currency?: DebtCurrency;
   direction: DebtDirection;
   date?: string;
   comment?: string | null;
 }): Promise<DebtWithRepayments> {
   const supabase = await createServerClient();
-  const amount = parseAmount(input.amount);
   const counterparty = normalizeCounterparty(input.counterparty);
   const direction = parseDirection(input.direction);
   const { iso } = parseDebtDate(input.date);
@@ -206,7 +263,13 @@ export async function updateDebt(input: {
     (repayments ?? []) as DebtRepayment[]
   );
 
-  if (amount < current.repaid_amount) {
+  const currency = input.currency ?? current.currency;
+  const { originalAmount, amountUah, exchangeRate } = await resolveDebtAmounts({
+    originalAmount: input.amount,
+    currency,
+  });
+
+  if (amountUah < current.repaid_amount) {
     throw new Error(
       `Сума не може бути меншою за уже погашене (${current.repaid_amount.toFixed(2)} ₴)`
     );
@@ -216,7 +279,10 @@ export async function updateDebt(input: {
     .from("debts")
     .update({
       counterparty,
-      amount,
+      amount: amountUah,
+      original_amount: originalAmount,
+      currency,
+      exchange_rate: exchangeRate,
       direction,
       debt_date: iso,
       comment,
