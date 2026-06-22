@@ -363,3 +363,38 @@ export async function deleteTrip(
 
   return { ok: true };
 }
+
+function nextIsoDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Сума мішків сировини з постачань постачальників за дату (YYYY-MM-DD). */
+export async function getSupplierDeliveryBagsCountForDate(
+  date: string
+): Promise<number> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return 0;
+
+  const day = date.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return 0;
+
+  const { data, error } = await supabase
+    .from("supplier_deliveries")
+    .select("quantity")
+    .gte("created_at", `${day}T00:00:00.000Z`)
+    .lt("created_at", `${nextIsoDate(day)}T00:00:00.000Z`);
+
+  if (error) {
+    console.error("Error fetching supplier deliveries for date:", error);
+    return 0;
+  }
+
+  const total = (data ?? []).reduce(
+    (sum, row) => sum + Number(row.quantity ?? 0),
+    0
+  );
+  return Math.round(total);
+}

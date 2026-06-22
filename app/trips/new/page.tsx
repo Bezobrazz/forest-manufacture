@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createTrip, type CreateTripPayload } from "@/app/trips/actions";
+import { createTrip, getSupplierDeliveryBagsCountForDate, type CreateTripPayload } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
 import {
   calculateTripMetrics,
@@ -216,6 +216,22 @@ export default function NewTripPage() {
       setDailyTaxes(String(vehicle.default_daily_taxes_uah));
     }
   }, [vehicleId, vehicles]);
+
+  useEffect(() => {
+    if (tripType !== "raw") return;
+
+    const date = dateToYYYYMMDD(tripStartDate);
+    let cancelled = false;
+
+    getSupplierDeliveryBagsCountForDate(date).then((count) => {
+      if (cancelled) return;
+      setBagsCount(count > 0 ? String(count) : "");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tripType, tripStartDate]);
 
   const previewMetrics = useMemo(() => {
     const mileage = getMileageFields(
