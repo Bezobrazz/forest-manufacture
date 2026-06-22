@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createTrip, type CreateTripPayload } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
-import { calculateTripMetrics, type DriverPayMode, type TripType } from "@/lib/trips/calc";
+import {
+  calculateTripMetrics,
+  type DistanceInputMode,
+  type DriverPayMode,
+  type TripType,
+} from "@/lib/trips/calc";
 import {
   Card,
   CardContent,
@@ -52,6 +57,30 @@ function parseNum(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function getMileageFields(
+  tripType: TripType,
+  distanceInputMode: DistanceInputMode,
+  startOdometer: string,
+  endOdometer: string,
+  totalDistanceKm: string
+) {
+  if (tripType === "commerce" && distanceInputMode === "total") {
+    return {
+      distance_input_mode: "total" as const,
+      start_odometer_km: null,
+      end_odometer_km: null,
+      total_distance_km: parseNum(totalDistanceKm),
+    };
+  }
+
+  return {
+    distance_input_mode: "odometer" as const,
+    start_odometer_km: parseNum(startOdometer),
+    end_odometer_km: parseNum(endOdometer),
+    total_distance_km: null,
+  };
+}
+
 function Field({
   id,
   label,
@@ -91,6 +120,8 @@ export default function NewTripPage() {
   const [vehicleId, setVehicleId] = useState("");
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
+  const [distanceInputMode, setDistanceInputMode] = useState<DistanceInputMode>("odometer");
+  const [totalDistanceKm, setTotalDistanceKm] = useState("");
   const [fuelConsumption, setFuelConsumption] = useState("");
   const [fuelPrice, setFuelPrice] = useState("");
   const [depreciation, setDepreciation] = useState("");
@@ -127,14 +158,20 @@ export default function NewTripPage() {
   }, [vehicleId, vehicles]);
 
   const previewMetrics = useMemo(() => {
+    const mileage = getMileageFields(
+      tripType,
+      distanceInputMode,
+      startOdometer,
+      endOdometer,
+      totalDistanceKm
+    );
     const input = {
       user_id: "",
       vehicle_id: vehicleId,
       trip_start_date: tripStartDate,
       trip_end_date: tripEndDate,
       trip_type: tripType,
-      start_odometer_km: parseNum(startOdometer),
-      end_odometer_km: parseNum(endOdometer),
+      ...mileage,
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
       fuel_price_uah_per_l: parseNum(fuelPrice),
       depreciation_uah_per_km: parseNum(depreciation),
@@ -158,8 +195,10 @@ export default function NewTripPage() {
     tripStartDate,
     tripEndDate,
     tripType,
+    distanceInputMode,
     startOdometer,
     endOdometer,
+    totalDistanceKm,
     fuelConsumption,
     fuelPrice,
     depreciation,
@@ -175,14 +214,20 @@ export default function NewTripPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const mileage = getMileageFields(
+      tripType,
+      distanceInputMode,
+      startOdometer,
+      endOdometer,
+      totalDistanceKm
+    );
     const payloadForValidation = {
       name: name.trim(),
       trip_start_date: tripStartDate.trim(),
       trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
-      start_odometer_km: parseNum(startOdometer),
-      end_odometer_km: parseNum(endOdometer),
+      ...mileage,
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
       fuel_price_uah_per_l: parseNum(fuelPrice),
       depreciation_uah_per_km: parseNum(depreciation),
@@ -202,6 +247,7 @@ export default function NewTripPage() {
     if (!parsed.success) {
       const first = parsed.error.flatten().fieldErrors;
       const msg =
+        first.total_distance_km?.[0] ??
         first.bags_count?.[0] ??
         first.end_odometer_km?.[0] ??
         first.name?.[0] ??
@@ -220,8 +266,7 @@ export default function NewTripPage() {
       trip_end_date: tripEndDate.trim(),
       vehicle_id: vehicleId,
       trip_type: tripType,
-      start_odometer_km: parseNum(startOdometer),
-      end_odometer_km: parseNum(endOdometer),
+      ...mileage,
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
       fuel_price_uah_per_l: parseNum(fuelPrice),
       depreciation_uah_per_km: parseNum(depreciation),
@@ -462,28 +507,58 @@ export default function NewTripPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 Пробіг
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field id="start_odometer" label="Початок (км)">
+              {tripType === "commerce" && (
+                <Field id="distance_input_mode" label="Спосіб введення" className="mb-4">
+                  <ToggleGroup
+                    type="single"
+                    value={distanceInputMode}
+                    onValueChange={(v) => v && setDistanceInputMode(v as DistanceInputMode)}
+                    className="justify-start"
+                  >
+                    <ToggleGroupItem value="odometer" aria-label="Початок і кінець">
+                      Початок і кінець
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="total" aria-label="Загальний пробіг">
+                      Загальний пробіг
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </Field>
+              )}
+              {tripType === "commerce" && distanceInputMode === "total" ? (
+                <Field id="total_distance_km" label="Загальний пробіг (км)">
                   <Input
-                    id="start_odometer"
+                    id="total_distance_km"
                     type="text"
                     inputMode="decimal"
-                    value={startOdometer}
-                    onChange={(e) => setStartOdometer(parseNumericInput(e.target.value))}
+                    value={totalDistanceKm}
+                    onChange={(e) => setTotalDistanceKm(parseNumericInput(e.target.value))}
                     placeholder="0"
                   />
                 </Field>
-                <Field id="end_odometer" label="Кінець (км)">
-                  <Input
-                    id="end_odometer"
-                    type="text"
-                    inputMode="decimal"
-                    value={endOdometer}
-                    onChange={(e) => setEndOdometer(parseNumericInput(e.target.value))}
-                    placeholder="0"
-                  />
-                </Field>
-              </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id="start_odometer" label="Початок (км)">
+                    <Input
+                      id="start_odometer"
+                      type="text"
+                      inputMode="decimal"
+                      value={startOdometer}
+                      onChange={(e) => setStartOdometer(parseNumericInput(e.target.value))}
+                      placeholder="0"
+                    />
+                  </Field>
+                  <Field id="end_odometer" label="Кінець (км)">
+                    <Input
+                      id="end_odometer"
+                      type="text"
+                      inputMode="decimal"
+                      value={endOdometer}
+                      onChange={(e) => setEndOdometer(parseNumericInput(e.target.value))}
+                      placeholder="0"
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
 
             <Separator />

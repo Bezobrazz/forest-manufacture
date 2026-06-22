@@ -18,8 +18,10 @@ export const tripFormSchema = z
       required_error: "Оберіть тип поїздки",
       invalid_type_error: "Оберіть тип поїздки",
     }),
+    distance_input_mode: z.enum(["odometer", "total"]).default("odometer"),
     start_odometer_km: optionalNum(),
     end_odometer_km: optionalNum(),
+    total_distance_km: optionalNum(),
     fuel_consumption_l_per_100km: optionalNum(),
     fuel_price_uah_per_l: optionalNum(),
     depreciation_uah_per_km: optionalNum(),
@@ -47,14 +49,42 @@ export const tripFormSchema = z
       .nullable()
       .transform((s) => (s?.trim() || null) ?? null),
   })
-  .refine(
-    (data) => {
-      const start = data.start_odometer_km ?? 0;
-      const end = data.end_odometer_km ?? 0;
-      return end >= start;
-    },
-    { message: "Кінець пробігу не може бути меншим за початок", path: ["end_odometer_km"] }
-  )
+  .superRefine((data, ctx) => {
+    if (data.trip_type === "commerce" && data.distance_input_mode === "total") {
+      if (data.total_distance_km == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Вкажіть загальний пробіг",
+          path: ["total_distance_km"],
+        });
+      }
+      return;
+    }
+
+    const start = data.start_odometer_km ?? 0;
+    const end = data.end_odometer_km ?? 0;
+    if (end < start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Кінець пробігу не може бути меншим за початок",
+        path: ["end_odometer_km"],
+      });
+    }
+  })
+  .transform((data) => {
+    if (data.trip_type === "commerce" && data.distance_input_mode === "total") {
+      return {
+        ...data,
+        start_odometer_km: null,
+        end_odometer_km: null,
+      };
+    }
+
+    return {
+      ...data,
+      total_distance_km: null,
+    };
+  })
   .refine(
     (data) => {
       if (!data.trip_start_date || !data.trip_end_date) return true;

@@ -3,12 +3,14 @@
 import { createServerSupabaseClient, getServerUser } from "@/lib/supabase/server-auth";
 import {
   calculateTripMetrics,
+  type DistanceInputMode,
   type TripInput,
 } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
 
 export type CreateTripPayload = Omit<TripInput, "user_id" | "id"> & {
   user_id?: string;
+  distance_input_mode?: DistanceInputMode;
 };
 
 export type TripListItem = {
@@ -76,6 +78,7 @@ export type TripDetail = {
   trip_type: string | null;
   start_odometer_km: number | null;
   end_odometer_km: number | null;
+  total_distance_km: number | null;
   fuel_consumption_l_per_100km: number | null;
   fuel_price_uah_per_l: number | null;
   depreciation_uah_per_km: number | null;
@@ -132,8 +135,10 @@ export async function createTrip(
     trip_end_date: payload.trip_end_date ?? "",
     vehicle_id: payload.vehicle_id,
     trip_type: payload.trip_type ?? "raw",
+    distance_input_mode: payload.distance_input_mode ?? "odometer",
     start_odometer_km: payload.start_odometer_km,
     end_odometer_km: payload.end_odometer_km,
+    total_distance_km: payload.total_distance_km,
     fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
     fuel_price_uah_per_l: payload.fuel_price_uah_per_l,
     depreciation_uah_per_km: payload.depreciation_uah_per_km,
@@ -152,6 +157,7 @@ export async function createTrip(
   if (!parsed.success) {
     const first = parsed.error.flatten().fieldErrors;
     const msg =
+      first.total_distance_km?.[0] ??
       first.bags_count?.[0] ??
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
@@ -189,6 +195,7 @@ export async function createTrip(
     trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,
+    total_distance_km: d.total_distance_km ?? null,
     fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,
     fuel_price_uah_per_l: d.fuel_price_uah_per_l ?? null,
     depreciation_uah_per_km: d.depreciation_uah_per_km ?? null,
@@ -240,8 +247,10 @@ export async function updateTrip(
     trip_end_date: payload.trip_end_date ?? "",
     vehicle_id: payload.vehicle_id,
     trip_type: payload.trip_type ?? "raw",
+    distance_input_mode: payload.distance_input_mode ?? "odometer",
     start_odometer_km: payload.start_odometer_km,
     end_odometer_km: payload.end_odometer_km,
+    total_distance_km: payload.total_distance_km,
     fuel_consumption_l_per_100km: payload.fuel_consumption_l_per_100km,
     fuel_price_uah_per_l: payload.fuel_price_uah_per_l,
     depreciation_uah_per_km: payload.depreciation_uah_per_km,
@@ -260,6 +269,7 @@ export async function updateTrip(
   if (!parsed.success) {
     const first = parsed.error.flatten().fieldErrors;
     const msg =
+      first.total_distance_km?.[0] ??
       first.bags_count?.[0] ??
       first.end_odometer_km?.[0] ??
       first.name?.[0] ??
@@ -296,6 +306,7 @@ export async function updateTrip(
     trip_type: d.trip_type,
     start_odometer_km: d.start_odometer_km ?? null,
     end_odometer_km: d.end_odometer_km ?? null,
+    total_distance_km: d.total_distance_km ?? null,
     fuel_consumption_l_per_100km: d.fuel_consumption_l_per_100km ?? null,
     fuel_price_uah_per_l: d.fuel_price_uah_per_l ?? null,
     depreciation_uah_per_km: d.depreciation_uah_per_km ?? null,

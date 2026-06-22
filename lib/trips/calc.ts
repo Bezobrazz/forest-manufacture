@@ -14,6 +14,7 @@ export type TripInput = {
   trip_type: TripType;
   start_odometer_km: number | null;
   end_odometer_km: number | null;
+  total_distance_km?: number | null;
   fuel_consumption_l_per_100km: number | null;
   fuel_price_uah_per_l: number | null;
   depreciation_uah_per_km: number | null;
@@ -50,13 +51,25 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 const ensureNonNegative = (value: number | null | undefined): number =>
   Math.max(0, value ?? 0);
 
-export function calculateTripMetrics(input: TripInput): TripMetrics {
+export type DistanceInputMode = "odometer" | "total";
+
+function resolveDistanceKm(input: TripInput): number {
+  if (input.trip_type === "commerce" && input.total_distance_km != null) {
+    return round2(ensureNonNegative(input.total_distance_km));
+  }
+
   const start = input.start_odometer_km ?? 0;
   const end = input.end_odometer_km ?? 0;
 
   if (end < start) {
     throw new Error("end_odometer_km cannot be less than start_odometer_km");
   }
+
+  return round2(end - start);
+}
+
+export function calculateTripMetrics(input: TripInput): TripMetrics {
+  const distanceKm = resolveDistanceKm(input);
 
   const daysCount = (input.days_count ?? 0) < 1 ? 1 : (input.days_count ?? 1);
   const fuelConsumption = ensureNonNegative(
@@ -74,7 +87,6 @@ export function calculateTripMetrics(input: TripInput): TripMetrics {
   );
   const extraCosts = ensureNonNegative(input.extra_costs_uah);
 
-  const distanceKm = round2(end - start);
   const fuelUsedL = round2((distanceKm * fuelConsumption) / 100);
   const fuelCostUah = round2(fuelUsedL * fuelPrice);
   const depreciationCostUah = round2(distanceKm * depreciationPerKm);

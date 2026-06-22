@@ -58,6 +58,33 @@ test("calculateTripMetrics: distance = 0", () => {
   assert.strictEqual(m.status, "profit");
 });
 
+test("calculateTripMetrics: commerce з загальним пробігом", () => {
+  const input: TripInput = {
+    ...baseInput,
+    trip_type: "commerce",
+    start_odometer_km: 0,
+    end_odometer_km: 999,
+    total_distance_km: 250,
+  };
+  const m = calculateTripMetrics(input);
+
+  assert.strictEqual(m.distance_km, 250);
+  assert.strictEqual(m.fuel_used_l, 25);
+});
+
+test("calculateTripMetrics: commerce з загальним пробігом ігнорує одометр", () => {
+  const input: TripInput = {
+    ...baseInput,
+    trip_type: "commerce",
+    start_odometer_km: 100,
+    end_odometer_km: 50,
+    total_distance_km: 120,
+  };
+  const m = calculateTripMetrics(input);
+
+  assert.strictEqual(m.distance_km, 120);
+});
+
 test("calculateTripMetrics: end < start (error)", () => {
   const input: TripInput = {
     ...baseInput,
