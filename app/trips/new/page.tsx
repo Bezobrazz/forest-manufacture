@@ -32,10 +32,18 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ArrowLeft, Calendar as CalendarIcon, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
+import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { uk } from "date-fns/locale";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 
@@ -102,6 +110,60 @@ function Field({
   );
 }
 
+function TripDateField({
+  id,
+  label,
+  date,
+  onSelect,
+  open,
+  onOpenChange,
+  disabled,
+}: {
+  id: string;
+  label: string;
+  date: Date;
+  onSelect: (date: Date) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  disabled?: (date: Date) => boolean;
+}) {
+  return (
+    <Field id={id} label={label}>
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            className={cn(
+              "w-full min-w-0 justify-start text-left font-normal",
+              !date && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            {formatDate(date.toISOString())}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <CalendarComponent
+            mode="single"
+            selected={date}
+            onSelect={(nextDate) => {
+              if (nextDate) {
+                onSelect(nextDate);
+                onOpenChange(false);
+              }
+            }}
+            disabled={disabled}
+            locale={uk}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </Field>
+  );
+}
+
 export default function NewTripPage() {
   const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -109,12 +171,10 @@ export default function NewTripPage() {
   const [isPending, setIsPending] = useState(false);
 
   const [name, setName] = useState("");
-  const [tripStartDate, setTripStartDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
-  const [tripEndDate, setTripEndDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
+  const [tripStartDate, setTripStartDate] = useState(() => new Date());
+  const [tripEndDate, setTripEndDate] = useState(() => new Date());
+  const [tripStartDatePopoverOpen, setTripStartDatePopoverOpen] = useState(false);
+  const [tripEndDatePopoverOpen, setTripEndDatePopoverOpen] = useState(false);
   const [tripType, setTripType] = useState<TripType>("raw");
   const [bagsCount, setBagsCount] = useState("");
   const [vehicleId, setVehicleId] = useState("");
@@ -168,8 +228,8 @@ export default function NewTripPage() {
     const input = {
       user_id: "",
       vehicle_id: vehicleId,
-      trip_start_date: tripStartDate,
-      trip_end_date: tripEndDate,
+      trip_start_date: dateToYYYYMMDD(tripStartDate),
+      trip_end_date: dateToYYYYMMDD(tripEndDate),
       trip_type: tripType,
       ...mileage,
       fuel_consumption_l_per_100km: parseNum(fuelConsumption),
@@ -223,8 +283,8 @@ export default function NewTripPage() {
     );
     const payloadForValidation = {
       name: name.trim(),
-      trip_start_date: tripStartDate.trim(),
-      trip_end_date: tripEndDate.trim(),
+      trip_start_date: dateToYYYYMMDD(tripStartDate),
+      trip_end_date: dateToYYYYMMDD(tripEndDate),
       vehicle_id: vehicleId,
       trip_type: tripType,
       ...mileage,
@@ -262,8 +322,8 @@ export default function NewTripPage() {
     setIsPending(true);
     const payload: CreateTripPayload = {
       name: name.trim(),
-      trip_start_date: tripStartDate.trim(),
-      trip_end_date: tripEndDate.trim(),
+      trip_start_date: dateToYYYYMMDD(tripStartDate),
+      trip_end_date: dateToYYYYMMDD(tripEndDate),
       vehicle_id: vehicleId,
       trip_type: tripType,
       ...mileage,
@@ -431,24 +491,34 @@ export default function NewTripPage() {
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field id="trip_start_date" label="Дата початку поїздки *">
-                <Input
-                  id="trip_start_date"
-                  type="date"
-                  value={tripStartDate}
-                  onChange={(e) => setTripStartDate(e.target.value)}
-                  required
-                />
-              </Field>
-              <Field id="trip_end_date" label="Дата кінця поїздки *">
-                <Input
-                  id="trip_end_date"
-                  type="date"
-                  value={tripEndDate}
-                  onChange={(e) => setTripEndDate(e.target.value)}
-                  required
-                />
-              </Field>
+              <TripDateField
+                id="trip_start_date"
+                label="Дата початку поїздки *"
+                date={tripStartDate}
+                onSelect={(nextDate) => {
+                  setTripStartDate(nextDate);
+                  if (nextDate > tripEndDate) {
+                    setTripEndDate(nextDate);
+                  }
+                }}
+                open={tripStartDatePopoverOpen}
+                onOpenChange={setTripStartDatePopoverOpen}
+              />
+              <TripDateField
+                id="trip_end_date"
+                label="Дата кінця поїздки *"
+                date={tripEndDate}
+                onSelect={setTripEndDate}
+                open={tripEndDatePopoverOpen}
+                onOpenChange={setTripEndDatePopoverOpen}
+                disabled={(date) => {
+                  const start = new Date(tripStartDate);
+                  start.setHours(0, 0, 0, 0);
+                  const candidate = new Date(date);
+                  candidate.setHours(0, 0, 0, 0);
+                  return candidate < start;
+                }}
+              />
             </div>
             <Field id="trip_type" label="Тип поїздки *">
               <ToggleGroup
