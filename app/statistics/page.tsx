@@ -36,6 +36,20 @@ import {
   prorateMonthlyAmountForDateRange,
   sumManagerMonthlySalaries,
 } from "@/lib/statistics/management-salary";
+import {
+  AVERAGE_PRODUCTION_MONTHS_BACK,
+  averageMonthlyProductionBags,
+  monthlyOverheadPerBag,
+} from "@/lib/statistics/fixed-overhead";
+import {
+  parseFixedOverheadSettings,
+  parseMonthlyOverheadInput,
+  serializeFixedOverheadSettings,
+  STATISTICS_FIXED_OVERHEAD_STORAGE_KEY,
+} from "@/lib/statistics/fixed-overhead-settings";
+import { parseNumericInput } from "@/lib/format";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -89,7 +103,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ELECTRICITY_EXPENSE_CATEGORY_NAME } from "@/lib/expenses/constants";
 import {
   SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
@@ -152,6 +165,10 @@ export default function StatisticsPage() {
     []
   );
   const [includeManagementSalaryInCost, setIncludeManagementSalaryInCost] =
+    useState(false);
+  const [monthlyTaxesInput, setMonthlyTaxesInput] = useState("5000");
+  const [monthlyElectricityInput, setMonthlyElectricityInput] = useState("13000");
+  const [fixedOverheadSettingsLoaded, setFixedOverheadSettingsLoaded] =
     useState(false);
   const [eurUahRate, setEurUahRate] = useState<number | null>(null);
   const [nbuExchangeDate, setNbuExchangeDate] = useState<string | null>(null);
@@ -324,6 +341,31 @@ export default function StatisticsPage() {
     };
   }, [period, selectedYear, statsDateRangeKey]);
 
+  useEffect(() => {
+    const settings = parseFixedOverheadSettings(
+      localStorage.getItem(STATISTICS_FIXED_OVERHEAD_STORAGE_KEY)
+    );
+    setMonthlyTaxesInput(String(settings.monthlyTaxesUah));
+    setMonthlyElectricityInput(String(settings.monthlyElectricityUah));
+    setFixedOverheadSettingsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!fixedOverheadSettingsLoaded) return;
+
+    localStorage.setItem(
+      STATISTICS_FIXED_OVERHEAD_STORAGE_KEY,
+      serializeFixedOverheadSettings({
+        monthlyTaxesUah: parseMonthlyOverheadInput(monthlyTaxesInput),
+        monthlyElectricityUah: parseMonthlyOverheadInput(monthlyElectricityInput),
+      })
+    );
+  }, [
+    fixedOverheadSettingsLoaded,
+    monthlyTaxesInput,
+    monthlyElectricityInput,
+  ]);
+
   const neutralPalette = [
     "hsl(215, 32%, 48%)",
     "hsl(180, 28%, 44%)",
@@ -352,6 +394,12 @@ export default function StatisticsPage() {
   }, [statsDateRange, period, selectedYear]);
   const periodStartStr = dateToYYYYMMDD(periodStart);
   const periodEndStr = dateToYYYYMMDD(periodEnd);
+  const monthlyTaxesUah = parseMonthlyOverheadInput(monthlyTaxesInput);
+  const monthlyElectricityUah = parseMonthlyOverheadInput(monthlyElectricityInput);
+  const averageMonthlyProduction = useMemo(
+    () => averageMonthlyProductionBags(shifts, periodEndStr),
+    [shifts, periodEndStr]
+  );
 
   const { totalProduction, productionByCategory } = useMemo(() => {
     const productCategoryById = new Map(
@@ -520,15 +568,6 @@ export default function StatisticsPage() {
       return sum + Number(expense.amount ?? 0);
     }, 0);
 
-  const sumElectricityCostsInRange = (startDay: string, endDay: string) =>
-    expenses.reduce((sum, expense) => {
-      const day = toDayKey(expense.date);
-      if (!isDayInRange(day, startDay, endDay)) return sum;
-      const categoryName = String(expense.category?.name ?? "").trim();
-      if (categoryName !== ELECTRICITY_EXPENSE_CATEGORY_NAME) return sum;
-      return sum + Number(expense.amount ?? 0);
-    }, 0);
-
   const sumProducedQuantityInRange = (startDay: string, endDay: string) =>
     shifts.reduce((sum, shift) => {
       if (shift.status !== "completed") return sum;
@@ -554,15 +593,21 @@ export default function StatisticsPage() {
 
   const computeTotalCostPerBagForRange = (
     startDay: string,
-    endDay: string
+    endDay: string,
+    referenceEndDay: string = endDay
   ): number | null => {
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
-    const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
     const managementSalaryCosts = prorateMonthlyAmountForDateRange(
       managementSalaryMonthlyTotal,
       startDay,
       endDay
+    );
+    const avgProduction = averageMonthlyProductionBags(shifts, referenceEndDay);
+    const taxesPerBag = monthlyOverheadPerBag(monthlyTaxesUah, avgProduction);
+    const electricityPerBag = monthlyOverheadPerBag(
+      monthlyElectricityUah,
+      avgProduction
     );
     const purchaseCostPerBag = getAveragePurchaseCostPerBagInRange(startDay, endDay);
     const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
@@ -570,8 +615,6 @@ export default function StatisticsPage() {
 
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
-    const electricityPerBag =
-      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
     const managementSalaryPerBag =
       producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
     const managementSalaryPerBagInTotal = includeManagementSalaryInCost
@@ -583,6 +626,7 @@ export default function StatisticsPage() {
       tripCostPerBag +
       fixedRewardPerBag +
       hourlyWagePerBag +
+      taxesPerBag +
       electricityPerBag +
       managementSalaryPerBagInTotal +
       latestPackingBagPriceUah
@@ -598,8 +642,17 @@ export default function StatisticsPage() {
     const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
     const tripBags = sumBagsInRange(startDay, endDay);
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
-    const electricityCosts = sumElectricityCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
+    const taxesCosts = prorateMonthlyAmountForDateRange(
+      monthlyTaxesUah,
+      startDay,
+      endDay
+    );
+    const electricityCosts = prorateMonthlyAmountForDateRange(
+      monthlyElectricityUah,
+      startDay,
+      endDay
+    );
     const managementSalaryCosts = prorateMonthlyAmountForDateRange(
       managementSalaryMonthlyTotal,
       startDay,
@@ -609,8 +662,14 @@ export default function StatisticsPage() {
     const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
     const hourlyWagePerBag =
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
-    const electricityPerBag =
-      producedQuantity > 0 ? electricityCosts / producedQuantity : 0;
+    const taxesPerBag = monthlyOverheadPerBag(
+      monthlyTaxesUah,
+      averageMonthlyProduction
+    );
+    const electricityPerBag = monthlyOverheadPerBag(
+      monthlyElectricityUah,
+      averageMonthlyProduction
+    );
     const managementSalaryPerBag =
       producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
     const totalCostPerBag = computeTotalCostPerBagForRange(startDay, endDay);
@@ -622,12 +681,15 @@ export default function StatisticsPage() {
       tripBags,
       producedQuantity,
       hourlyWageCosts,
+      taxesCosts,
       electricityCosts,
       managementSalaryCosts,
+      averageMonthlyProduction,
       purchaseCostPerBag,
       tripCostPerBag,
       fixedRewardPerBag,
       hourlyWagePerBag,
+      taxesPerBag,
       electricityPerBag,
       managementSalaryPerBag,
       packingBagFromLatestTx: latestPackingBagPriceUah,
@@ -640,6 +702,9 @@ export default function StatisticsPage() {
     fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
+    monthlyTaxesUah,
+    monthlyElectricityUah,
+    averageMonthlyProduction,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -659,6 +724,8 @@ export default function StatisticsPage() {
     fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
+    monthlyTaxesUah,
+    monthlyElectricityUah,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -699,6 +766,7 @@ export default function StatisticsPage() {
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
     (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
     (currentPeriodCostMetrics.hourlyWagePerBag ?? 0) +
+    (currentPeriodCostMetrics.taxesPerBag ?? 0) +
     (currentPeriodCostMetrics.electricityPerBag ?? 0) +
     managementSalaryPerBagForStructure +
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
@@ -718,6 +786,10 @@ export default function StatisticsPage() {
     {
       label: "Погодинна З.П. на мішок",
       value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
+    },
+    {
+      label: "Податки на мішок",
+      value: currentPeriodCostMetrics.taxesPerBag ?? 0,
     },
     {
       label: "Електроенергія на мішок",
@@ -846,7 +918,7 @@ export default function StatisticsPage() {
         month: showYearInLabel
           ? `${getMonthName(monthIndex)} ${yearLabel}`
           : getMonthName(monthIndex),
-        costPerBag: computeTotalCostPerBagForRange(start, end),
+        costPerBag: computeTotalCostPerBagForRange(start, end, end),
         monthIndex: index,
       };
     });
@@ -857,6 +929,8 @@ export default function StatisticsPage() {
     fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
+    monthlyTaxesUah,
+    monthlyElectricityUah,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -1908,14 +1982,50 @@ export default function StatisticsPage() {
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
             Середня вартість мішка із закупок за період + середня вартість мішка з поїздок
-            «Сировина» за період + фіксована винагорода + погодинна З.П.
-            на мішок + електроенергія на мішок (категорія «
-            {ELECTRICITY_EXPENSE_CATEGORY_NAME}», сума за період ÷ вироблені мішки) +
-            оклади керівництва (сума за період ÷ вироблені мішки) + ціна «
-            {PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
+            «Сировина» за період + фіксована винагорода + погодинна З.П. на мішок +
+            податки та електроенергія (місячна сума ÷ середньомісячний випуск за останні{" "}
+            {AVERAGE_PRODUCTION_MONTHS_BACK} міс.) + оклади керівництва (за період ÷
+            вироблені мішки) + ціна «{PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-medium">Постійні місячні витрати</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Суми зберігаються у браузері. На мішок діляться через середньомісячний
+                випуск, щоб короткі періоди не спотворювали собівартість.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="statistics-monthly-taxes">Податки (грн/міс)</Label>
+                <Input
+                  id="statistics-monthly-taxes"
+                  type="text"
+                  inputMode="decimal"
+                  value={monthlyTaxesInput}
+                  onChange={(event) =>
+                    setMonthlyTaxesInput(parseNumericInput(event.target.value))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="statistics-monthly-electricity">
+                  Електроенергія (грн/міс)
+                </Label>
+                <Input
+                  id="statistics-monthly-electricity"
+                  type="text"
+                  inputMode="decimal"
+                  value={monthlyElectricityInput}
+                  onChange={(event) =>
+                    setMonthlyElectricityInput(parseNumericInput(event.target.value))
+                  }
+                />
+              </div>
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border bg-muted/40 p-4">
               <p className="text-xs text-muted-foreground mb-1">
@@ -2093,11 +2203,34 @@ export default function StatisticsPage() {
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">
-                К-ть готової продукції (база для З.П., електроенергії та окладів
+                К-ть готової продукції за період (база для погодинної З.П. та окладів
                 керівництва)
               </span>
               <span className="tabular-nums">
                 {formatNumber(currentPeriodCostMetrics.producedQuantity)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">
+                Середньомісячний випуск (база для податків та електроенергії, останні{" "}
+                {AVERAGE_PRODUCTION_MONTHS_BACK} міс.)
+              </span>
+              <span className="tabular-nums">
+                {currentPeriodCostMetrics.averageMonthlyProduction != null
+                  ? formatNumber(currentPeriodCostMetrics.averageMonthlyProduction)
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Податки (за період)</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.taxesCosts, "₴")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">Податки на мішок</span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(currentPeriodCostMetrics.taxesPerBag, "₴")}
               </span>
             </div>
             <div
@@ -2138,9 +2271,7 @@ export default function StatisticsPage() {
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">
-                Електроенергія (сума, {ELECTRICITY_EXPENSE_CATEGORY_NAME})
-              </span>
+              <span className="text-muted-foreground">Електроенергія (за період)</span>
               <span className="tabular-nums">
                 {formatNumberWithUnit(currentPeriodCostMetrics.electricityCosts, "₴")}
               </span>
