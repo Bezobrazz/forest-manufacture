@@ -10,13 +10,33 @@ export type ShippedCardLine = {
 };
 
 export type ShippedCardGroup = {
+  cardKey: string;
   notes: string;
   created_at: string;
   totalQuantity: number;
   rowsCount: number;
   lines: ShippedCardLine[];
+  transactionIds: number[];
   isPartial: boolean | null;
 };
+
+export function buildShippedQueueCardKey(notes: string, createdAt: string): string {
+  const dayKey = createdAt.slice(0, 10);
+  return `${dayKey}|${notes}`;
+}
+
+export function parseShippedQueueCardKey(
+  cardKey: string | null | undefined
+): { dayKey: string; notes: string } | null {
+  if (typeof cardKey !== "string") return null;
+  const trimmed = cardKey.trim();
+  const pipeIdx = trimmed.indexOf("|");
+  if (pipeIdx <= 0) return null;
+  const dayKey = trimmed.slice(0, pipeIdx);
+  const notes = trimmed.slice(pipeIdx + 1);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !notes.trim()) return null;
+  return { dayKey, notes };
+}
 
 type RawShipmentTx = {
   id?: number;
@@ -61,13 +81,31 @@ type OrderItemForPartial = {
 };
 
 const QUEUE_SHIPMENT_PREFIX = /^Відвантаження черги:\s*/i;
+const QUEUE_RANK_SUFFIX = /\s*\[queue_rank:(\d+)\]\s*$/i;
+
+export function stripShipmentQueueNotesMetadata(notes: string): string {
+  return notes.replace(QUEUE_RANK_SUFFIX, "").trim();
+}
+
+export function parseShipmentQueueNotesQueueRank(notes: string): number | null {
+  const m = notes.match(QUEUE_RANK_SUFFIX);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
+}
+
+export function formatQueueShipmentNotes(base: string, queueRank: number): string {
+  const rank = Math.max(0, Math.trunc(queueRank));
+  return `${base} [queue_rank:${rank}]`;
+}
 
 export function stripQueueShipmentNotesPrefix(notes: string): string {
-  return notes.replace(QUEUE_SHIPMENT_PREFIX, "").trim();
+  return stripShipmentQueueNotesMetadata(notes).replace(QUEUE_SHIPMENT_PREFIX, "").trim();
 }
 
 export function parseShipmentQueueNotesRef(notes: string): ShipmentQueueNotesRef | null {
-  const localMatch = notes.match(/\(локальна картка #(\d+)\)/i);
+  const clean = stripShipmentQueueNotesMetadata(notes);
+  const localMatch = clean.match(/\(локальна картка #(\d+)\)/i);
   if (localMatch) {
     const planningOrderId = Number(localMatch[1]);
     if (Number.isFinite(planningOrderId) && planningOrderId > 0) {
@@ -75,7 +113,7 @@ export function parseShipmentQueueNotesRef(notes: string): ShipmentQueueNotesRef
     }
   }
 
-  const crmMatch = notes.match(/,\s*угода\s+(\S+)\s*$/i);
+  const crmMatch = clean.match(/,\s*угода\s+(\S+)\s*$/i);
   if (crmMatch) {
     const crmId = crmMatch[1].trim();
     if (crmId) return { kind: "crm", crmId };
@@ -168,6 +206,10 @@ function mergeLineIntoGroup(
   group: Omit<ShippedCardGroup, "isPartial">,
   row: RawShipmentTx
 ): void {
+  const txId = row.id != null ? Number(row.id) : NaN;
+  if (Number.isFinite(txId) && txId > 0) {
+    group.transactionIds.push(txId);
+  }
   const productId = row.product_id != null ? Number(row.product_id) : null;
   const qty = Math.abs(Number(row.quantity) || 0);
   const balanceRaw = row.balance_after;
@@ -213,11 +255,13 @@ export function groupQueueShipmentTransactions(rows: RawShipmentTx[]): Omit<Ship
     let group = grouped.get(key);
     if (!group) {
       group = {
+        cardKey: key,
         notes,
         created_at: createdAt,
         totalQuantity: 0,
         rowsCount: 0,
         lines: [],
+        transactionIds: [],
       };
       grouped.set(key, group);
     }

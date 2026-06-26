@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { getServerUser } from "@/lib/supabase/server-auth";
-import { syncKeepinOrdersWithSupabase, syncSingleKeepinAgreement } from "@/lib/crm/keepincrm/reconcile";
+import { syncKeepinOrdersWithSupabase, syncSingleKeepinAgreement, restoreCrmAgreementToQueueAtRank } from "@/lib/crm/keepincrm/reconcile";
 import { updateKeepinAgreementStage } from "@/lib/crm/keepincrm/client";
 import {
   getKeepinSyncJob,
@@ -21,6 +21,12 @@ import {
   groupQueueShipmentTransactions,
   loadAllInventoryLedgerRows,
   parseShipmentQueueNotesRef,
+  parseShippedQueueCardKey,
+  buildShippedQueueCardKey,
+  formatQueueShipmentNotes,
+  parseShipmentQueueNotesQueueRank,
+  stripShipmentQueueNotesMetadata,
+  stripQueueShipmentNotesPrefix,
   type InventoryLedgerRow,
 } from "@/lib/shipments/shipped-cards";
 import {
@@ -32,7 +38,7 @@ import {
   parseLocalShipmentOrderId,
   type ShipmentPlanningOrderDb,
 } from "@/lib/shipments/local-shipment";
-import { allocateQueueRankForNewLocalCard } from "@/lib/shipments/queue-priority";
+import { allocateQueueRankForNewLocalCard, restoreLocalShipmentCardToQueue } from "@/lib/shipments/queue-priority";
 
 async function compactGlobalShipmentQueueRanks(
   supabase: SupabaseClient
@@ -229,6 +235,82 @@ async function rollbackAppliedShipmentSteps(
   }
 }
 
+type InventoryRestoreStep = {
+  productId: number;
+  previousInventoryQty: number;
+};
+
+async function rollbackInventoryRestoreSteps(
+  supabase: SupabaseClient,
+  steps: InventoryRestoreStep[]
+): Promise<void> {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    await supabase
+      .from("inventory")
+      .update({
+        quantity: s.previousInventoryQty,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("product_id", s.productId);
+  }
+}
+
+function utcDayRangeFromDayKey(dayKey: string): { from: string; to: string } | { error: string } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+    return { error: "Некоректна дата відвантаження" };
+  }
+  const from = `${dayKey}T00:00:00.000Z`;
+  const next = new Date(`${dayKey}T12:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const to = `${next.toISOString().slice(0, 10)}T00:00:00.000Z`;
+  return { from, to };
+}
+
+function aggregateShipmentTxLinesByProduct(
+  txs: { product_id: number | null; quantity: number | string }[]
+): { product_id: number; quantity: number }[] {
+  const map = new Map<number, number>();
+  for (const tx of txs) {
+    const pid = tx.product_id != null ? Number(tx.product_id) : NaN;
+    const qty = Math.abs(Number(tx.quantity));
+    if (!Number.isFinite(pid) || pid <= 0 || qty <= 0) continue;
+    map.set(pid, (map.get(pid) ?? 0) + qty);
+  }
+  return [...map.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+}
+
+function localCardTitleFromShipmentNotes(notes: string): string {
+  const stripped = stripQueueShipmentNotesPrefix(stripShipmentQueueNotesMetadata(notes));
+  const title = stripped.replace(/\s*\(локальна картка #\d+\)\s*$/i, "").trim();
+  return title || "Локальна картка";
+}
+
+async function restoreShippedCardToQueue(
+  supabase: SupabaseClient,
+  notes: string,
+  txs: { product_id: number | null; quantity: number | string }[]
+): Promise<{ error?: string }> {
+  const metadataNotes = stripShipmentQueueNotesMetadata(notes);
+  const ref = parseShipmentQueueNotesRef(metadataNotes);
+  const queueRank = parseShipmentQueueNotesQueueRank(notes);
+  const lines = aggregateShipmentTxLinesByProduct(txs);
+
+  if (ref?.kind === "local") {
+    return restoreLocalShipmentCardToQueue(supabase, {
+      title: localCardTitleFromShipmentNotes(notes),
+      lines,
+      queueRank: queueRank ?? 0,
+    });
+  }
+
+  if (ref?.kind === "crm") {
+    return restoreCrmAgreementToQueueAtRank(supabase, ref.crmId, queueRank);
+  }
+
+  return { error: "Не вдалося визначити тип картки для відновлення в чергу" };
+}
+
 export type QueueFulfillmentLine = { itemId: number; quantity: number };
 
 export async function fulfillQueueShipmentAction(
@@ -273,7 +355,7 @@ export async function fulfillQueueShipmentAction(
 
       const { data: orderRow, error: oErr } = await supabase
         .from("shipment_planning_orders")
-        .select("id, title")
+        .select("id, title, queue_rank")
         .eq("id", planId)
         .maybeSingle();
       if (oErr || !orderRow) {
@@ -281,6 +363,8 @@ export async function fulfillQueueShipmentAction(
       }
 
       const customerLabel = String(orderRow.title ?? "Локальна картка");
+      const localQueueRank = Math.max(0, Math.trunc(Number(orderRow.queue_rank) || 0));
+      const shipmentNotesBase = `Відвантаження черги: ${customerLabel} (локальна картка #${planId})`;
 
       for (const line of filtered) {
         const { data: itemRow, error: iErr } = await supabase
@@ -307,7 +391,7 @@ export async function fulfillQueueShipmentAction(
           return { success: false, error: `Кількість більша за замовлення (макс. ${maxLine})` };
         }
 
-        const notes = `Відвантаження черги: ${customerLabel} (локальна картка #${planId})`;
+        const notes = formatQueueShipmentNotes(shipmentNotesBase, localQueueRank);
         const res = await deductInventoryForQueueShipment(supabase, {
           productId: pid,
           quantity: line.quantity,
@@ -324,7 +408,7 @@ export async function fulfillQueueShipmentAction(
     } else {
       const { data: ord, error: ordErr } = await supabase
         .from("crm_orders")
-        .select("id, crm_id, customer_id")
+        .select("id, crm_id, customer_id, queue_rank")
         .eq("crm_id", crmKey)
         .maybeSingle();
 
@@ -333,6 +417,7 @@ export async function fulfillQueueShipmentAction(
       }
 
       const orderId = Number(ord.id);
+      const crmQueueRank = Math.max(0, Math.trunc(Number(ord.queue_rank) || 0));
       const { data: custRow } = await supabase
         .from("crm_customers")
         .select("name")
@@ -365,7 +450,10 @@ export async function fulfillQueueShipmentAction(
           return { success: false, error: `Кількість більша за в угоді (макс. ${maxLine})` };
         }
 
-        const notes = `Відвантаження черги: ${customerName || "клієнт"}, угода ${crmKey}`;
+        const notes = formatQueueShipmentNotes(
+          `Відвантаження черги: ${customerName || "клієнт"}, угода ${crmKey}`,
+          crmQueueRank
+        );
         const res = await deductInventoryForQueueShipment(supabase, {
           productId: pid,
           quantity: line.quantity,
@@ -648,11 +736,13 @@ export type ShippedQueueCardLine = {
 };
 
 export type ShippedQueueCard = {
+  cardKey: string;
   notes: string;
   created_at: string;
   totalQuantity: number;
   rowsCount: number;
   lines: ShippedQueueCardLine[];
+  transactionIds: number[];
   /** null — невідомо (немає прив’язки до угоди або мапінгу) */
   isPartial: boolean | null;
 };
@@ -767,8 +857,133 @@ export async function getShippedQueueCardsAction(): Promise<ShippedQueueCard[]> 
       );
     }
 
-    return { ...card, isPartial };
+    return {
+      ...card,
+      cardKey: card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at),
+      transactionIds: card.transactionIds ?? [],
+      isPartial,
+    };
   });
+}
+
+export async function deleteShippedQueueCardAction(
+  cardKey: string | null | undefined
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  if (typeof cardKey !== "string" || !cardKey.trim()) {
+    return { success: false, error: "Некоректний ідентифікатор відвантаження" };
+  }
+
+  const parsed = parseShippedQueueCardKey(cardKey);
+  if (!parsed) {
+    return { success: false, error: "Некоректний ідентифікатор відвантаження" };
+  }
+
+  const dayRange = utcDayRangeFromDayKey(parsed.dayKey);
+  if ("error" in dayRange) {
+    return { success: false, error: dayRange.error };
+  }
+
+  const supabase = await createServerClient();
+
+  const { data: txs, error: fetchErr } = await supabase
+    .from("inventory_transactions")
+    .select("id, product_id, quantity, notes, created_at, transaction_type")
+    .eq("transaction_type", "shipment")
+    .eq("notes", parsed.notes)
+    .gte("created_at", dayRange.from)
+    .lt("created_at", dayRange.to)
+    .order("id", { ascending: true });
+
+  if (fetchErr) {
+    return { success: false, error: fetchErr.message };
+  }
+
+  if (!txs?.length) {
+    return { success: false, error: "Відвантаження не знайдено" };
+  }
+
+  const invalid = txs.find(
+    (tx) =>
+      typeof tx.notes !== "string" ||
+      !tx.notes.trim().toLowerCase().startsWith("відвантаження черги:")
+  );
+  if (invalid) {
+    return { success: false, error: "Операцію не можна скасувати" };
+  }
+
+  const restored: InventoryRestoreStep[] = [];
+  const transactionIds: number[] = [];
+
+  try {
+    for (const tx of txs) {
+      const productId = tx.product_id != null ? Number(tx.product_id) : NaN;
+      const returnQty = Math.abs(Number(tx.quantity));
+      if (!Number.isFinite(productId) || productId <= 0 || returnQty <= 0) {
+        await rollbackInventoryRestoreSteps(supabase, restored);
+        return { success: false, error: "Некоректна операція списання" };
+      }
+
+      const { data: currentRow, error: gErr } = await supabase
+        .from("inventory")
+        .select("quantity")
+        .eq("product_id", productId)
+        .maybeSingle();
+      if (gErr) {
+        await rollbackInventoryRestoreSteps(supabase, restored);
+        return { success: false, error: gErr.message };
+      }
+
+      const previousInventoryQty = Number(currentRow?.quantity ?? 0);
+      const newQty = previousInventoryQty + returnQty;
+
+      const { error: uErr } = await supabase
+        .from("inventory")
+        .update({
+          quantity: newQty,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("product_id", productId);
+      if (uErr) {
+        await rollbackInventoryRestoreSteps(supabase, restored);
+        return { success: false, error: uErr.message };
+      }
+
+      restored.push({ productId, previousInventoryQty });
+      transactionIds.push(Number(tx.id));
+    }
+
+    const shipmentNotes =
+      typeof txs[0]?.notes === "string" ? txs[0].notes.trim() : "";
+    if (shipmentNotes) {
+      const queueRestore = await restoreShippedCardToQueue(supabase, shipmentNotes, txs);
+      if (queueRestore.error) {
+        await rollbackInventoryRestoreSteps(supabase, restored);
+        return { success: false, error: queueRestore.error };
+      }
+    }
+
+    for (const txId of transactionIds) {
+      const { error: dErr } = await supabase
+        .from("inventory_transactions")
+        .delete()
+        .eq("id", txId);
+      if (dErr) {
+        await rollbackInventoryRestoreSteps(supabase, restored);
+        return { success: false, error: dErr.message };
+      }
+    }
+
+    revalidatePath("/shipments");
+    revalidatePath("/inventory");
+    return { success: true };
+  } catch (e) {
+    await rollbackInventoryRestoreSteps(supabase, restored);
+    const msg = e instanceof Error ? e.message : "Помилка скасування відвантаження";
+    return { success: false, error: msg };
+  }
 }
 
 export async function reorderShipmentQueueAction(

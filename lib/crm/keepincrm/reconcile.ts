@@ -9,7 +9,7 @@ import {
   isAgreementInActiveStages,
   type ParsedKeepinAgreement,
 } from "@/lib/crm/keepincrm/mapper";
-import { allocateQueueRankForNewCrmOrder } from "@/lib/shipments/queue-priority";
+import { allocateQueueRankForNewCrmOrder, bumpShipmentQueueRanksFrom } from "@/lib/shipments/queue-priority";
 
 async function loadProductLookup(
   supabase: SupabaseClient
@@ -89,7 +89,8 @@ async function upsertParsedAgreement(
   supabase: SupabaseClient,
   parsed: ParsedKeepinAgreement,
   products: { exact: Map<string, number>; rows: { id: number; name: string; description: string | null }[] },
-  crmMappings: Map<string, number>
+  crmMappings: Map<string, number>,
+  forcedQueueRank?: number
 ): Promise<void> {
   const now = new Date().toISOString();
 
@@ -121,7 +122,9 @@ async function upsertParsedAgreement(
     .maybeSingle();
 
   let queue_rank = existingOrder?.queue_rank;
-  if (typeof queue_rank !== "number" || !Number.isFinite(queue_rank)) {
+  if (forcedQueueRank != null && Number.isFinite(forcedQueueRank)) {
+    queue_rank = Math.max(0, Math.trunc(forcedQueueRank));
+  } else if (typeof queue_rank !== "number" || !Number.isFinite(queue_rank)) {
     const allocated = await allocateQueueRankForNewCrmOrder(supabase, parsed.crm_created_at_iso);
     if (allocated.error) {
       throw new Error(allocated.error);
@@ -179,6 +182,63 @@ export async function removeCrmOrderByCrmId(
   crmId: string
 ): Promise<void> {
   await supabase.from("crm_orders").delete().eq("crm_id", crmId);
+}
+
+/** Повертає CRM-угоду в локальну чергу без зміни етапу в KeepinCRM. */
+export async function restoreCrmAgreementToQueueAtRank(
+  supabase: SupabaseClient,
+  crmId: string,
+  queueRank: number | null
+): Promise<{ error?: string }> {
+  const key = crmId.trim();
+  if (!key) return { error: "Некоректний ідентифікатор угоди" };
+
+  const { data: existing } = await supabase
+    .from("crm_orders")
+    .select("crm_id, queue_rank")
+    .eq("crm_id", key)
+    .maybeSingle();
+
+  if (existing) {
+    if (queueRank == null) return {};
+    const targetRank = Math.max(0, Math.trunc(queueRank));
+    const currentRank = Number(existing.queue_rank);
+    if (currentRank === targetRank) return {};
+    const bump = await bumpShipmentQueueRanksFrom(supabase, targetRank);
+    if (bump.error) return { error: bump.error };
+    const { error } = await supabase
+      .from("crm_orders")
+      .update({ queue_rank: targetRank })
+      .eq("crm_id", key);
+    if (error) return { error: error.message };
+    return {};
+  }
+
+  const raw = await fetchKeepinAgreementRaw(key);
+  if (!raw) return { error: "Угоду не знайдено в CRM" };
+  const parsed = parseKeepinAgreement(raw);
+  if (!parsed) return { error: "Не вдалося розібрати угоду з CRM" };
+
+  let targetRank = queueRank;
+  if (targetRank == null) {
+    const allocated = await allocateQueueRankForNewCrmOrder(supabase, parsed.crm_created_at_iso);
+    if (allocated.error) return { error: allocated.error };
+    targetRank = allocated.rank;
+  } else {
+    targetRank = Math.max(0, Math.trunc(targetRank));
+    const bump = await bumpShipmentQueueRanksFrom(supabase, targetRank);
+    if (bump.error) return { error: bump.error };
+  }
+
+  try {
+    const products = await loadProductLookup(supabase);
+    const crmMappings = await loadCrmMappings(supabase);
+    await upsertParsedAgreement(supabase, parsed, products, crmMappings, targetRank);
+    return {};
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Не вдалося відновити угоду в черзі";
+    return { error: msg };
+  }
 }
 
 export async function syncKeepinOrdersWithSupabase(

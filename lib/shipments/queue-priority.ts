@@ -154,3 +154,54 @@ export async function allocateQueueRankForNewLocalCard(
 ): Promise<{ error?: string }> {
   return bumpShipmentQueueRanksFrom(supabase, 0);
 }
+
+export async function restoreLocalShipmentCardToQueue(
+  supabase: SupabaseClient,
+  args: {
+    title: string;
+    lines: { product_id: number; quantity: number }[];
+    queueRank: number;
+  }
+): Promise<{ error?: string }> {
+  const rank = Math.max(0, Math.trunc(args.queueRank));
+  const cleanLines = args.lines.filter(
+    (l) =>
+      Number.isFinite(l.product_id) &&
+      l.product_id > 0 &&
+      Number.isFinite(l.quantity) &&
+      l.quantity > 0
+  );
+  if (cleanLines.length === 0) {
+    return { error: "Немає позицій для відновлення картки" };
+  }
+
+  const bump = await bumpShipmentQueueRanksFrom(supabase, rank);
+  if (bump.error) return bump;
+
+  const now = new Date().toISOString();
+  const title = args.title.trim() || "Локальна картка";
+  const { data: inserted, error: insErr } = await supabase
+    .from("shipment_planning_orders")
+    .insert({ title, queue_rank: rank, updated_at: now })
+    .select("id")
+    .single();
+
+  if (insErr || !inserted?.id) {
+    return { error: insErr?.message ?? "Не вдалося відновити локальну картку" };
+  }
+
+  const orderId = Number(inserted.id);
+  const itemRows = cleanLines.map((l) => ({
+    order_id: orderId,
+    product_id: l.product_id,
+    quantity: l.quantity,
+  }));
+
+  const { error: itemsErr } = await supabase.from("shipment_planning_order_items").insert(itemRows);
+  if (itemsErr) {
+    await supabase.from("shipment_planning_orders").delete().eq("id", orderId);
+    return { error: itemsErr.message };
+  }
+
+  return {};
+}

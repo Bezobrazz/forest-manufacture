@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
-import { Calendar as CalendarIcon, GripVertical, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, GripVertical, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   createLocalShipmentCardAction,
   deleteLocalShipmentCardAction,
+  deleteShippedQueueCardAction,
   fulfillQueueShipmentAction,
   getShippedQueueCardsAction,
   getKeepinSyncJobStatusAction,
@@ -29,6 +30,16 @@ import { DatabaseError } from "@/components/database-error";
 import { Button } from "@/components/ui/button";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -62,7 +73,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "@/lib/types";
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
-import { stripQueueShipmentNotesPrefix, parseShipmentQueueNotesRef } from "@/lib/shipments/shipped-cards";
+import { stripQueueShipmentNotesPrefix, parseShipmentQueueNotesRef, buildShippedQueueCardKey } from "@/lib/shipments/shipped-cards";
 import { cn, dateToYYYYMMDD, formatDate, formatNumber } from "@/lib/utils";
 import type { CalendarProps } from "@/components/ui/calendar";
 
@@ -668,8 +679,15 @@ export default function ShipmentsPage() {
                     : "За обраний період відвантажень немає."}
                 </p>
               ) : (
-                filteredShippedCards.map((card, idx) => (
-                  <ShippedQueueCardRow key={`${card.created_at}-${idx}`} card={card} />
+                filteredShippedCards.map((card) => (
+                  <ShippedQueueCardRow
+                    key={card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at)}
+                    card={card}
+                    onDeleted={async () => {
+                      ignoreRealtimeUntilRef.current = Date.now() + 2000;
+                      await loadPage();
+                    }}
+                  />
                 ))
               )}
             </CardContent>
@@ -1433,10 +1451,34 @@ function ShippedFulfillmentBadge({ isPartial, isFull }: { isPartial: boolean; is
   return null;
 }
 
-function ShippedQueueCardRow({ card }: { card: ShippedQueueCard }) {
+function ShippedQueueCardRow({
+  card,
+  onDeleted,
+}: {
+  card: ShippedQueueCard;
+  onDeleted: () => Promise<void>;
+}) {
   const { customer, dealLabel, isLocal } = shippedCardHeaderMeta(card.notes);
   const isPartial = card.isPartial === true;
   const isFull = card.isPartial === false;
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    const cardKey = card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at);
+    setIsDeleting(true);
+    const res = await deleteShippedQueueCardAction(cardKey);
+    setIsDeleting(false);
+    if (!res.success) {
+      toast.error("Не вдалося видалити відвантаження", { description: res.error });
+      return;
+    }
+    toast.success("Відвантаження скасовано", {
+      description: "Товар повернуто на склад, картку додано в чергу",
+    });
+    setDeleteOpen(false);
+    await onDeleted();
+  };
 
   return (
     <div className="rounded-lg border border-dashed bg-muted/20 p-4 font-sans shadow-sm">
@@ -1498,11 +1540,56 @@ function ShippedQueueCardRow({ card }: { card: ShippedQueueCard }) {
         </div>
       ) : null}
 
-      <div className="mt-3 pt-3 border-t border-dashed text-xs text-muted-foreground font-mono">
-        <span>
+      <div className="mt-3 pt-3 border-t border-dashed flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground font-mono">
           {card.lines.length || card.rowsCount}{" "}
           {(card.lines.length || card.rowsCount) === 1 ? "позиція" : "позиції"} у відвантаженні
         </span>
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 text-muted-foreground hover:text-destructive"
+              disabled={isDeleting}
+              aria-label="Видалити відвантаження"
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Видалити
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Скасувати відвантаження?</AlertDialogTitle>
+              <AlertDialogDescription>
+                    Буде видалено запис про відвантаження для «{customer}» (
+                    {formatDate(card.created_at)}). Усі списані позиції ({formatNumber(card.totalQuantity)}{" "}
+                    шт) будуть повернуті на склад, а картка знову з’явиться в черзі. Цю дію неможливо
+                    скасувати.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Скасувати</AlertDialogCancel>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isDeleting}
+                aria-busy={isDeleting}
+                onClick={() => void handleDelete()}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Видалення…
+                  </>
+                ) : (
+                  "Видалити відвантаження"
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
