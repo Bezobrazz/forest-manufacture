@@ -130,6 +130,13 @@ export async function updateInventoryQuantity(
     `Початок оновлення інвентаря для продукту ${productId}, нова кількість: ${quantity}`
   );
   try {
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      return {
+        success: false,
+        error: "Кількість повинна бути невід'ємним числом",
+      };
+    }
+
     const supabase = await createServerClient();
 
     const { data: currentInventory, error: getError } = await supabase
@@ -148,19 +155,17 @@ export async function updateInventoryQuantity(
 
     console.log(`Поточні дані інвентаря:`, currentInventory);
 
-    let adjustment = 0;
-    if (currentInventory) {
-      adjustment = quantity - currentInventory.quantity;
-      console.log(
-        `Зміна кількості: ${adjustment} (${currentInventory.quantity} -> ${quantity})`
-      );
-    } else {
-      adjustment = quantity;
-      console.log(`Новий продукт, початкова кількість: ${quantity}`);
-    }
+    const previousQuantity = currentInventory?.quantity ?? null;
+    const adjustment =
+      previousQuantity == null ? quantity : quantity - previousQuantity;
 
-    // Якщо немає змін, повертаємо успіх
-    if (adjustment === 0 && currentInventory) {
+    console.log(
+      previousQuantity == null
+        ? `Новий продукт, початкова кількість: ${quantity}`
+        : `Зміна кількості: ${adjustment} (${previousQuantity} -> ${quantity})`
+    );
+
+    if (previousQuantity != null && Math.abs(adjustment) < 1e-9) {
       console.log(`Кількість не змінилася, пропускаємо оновлення`);
       return { success: true };
     }
@@ -196,22 +201,37 @@ export async function updateInventoryQuantity(
       console.error("Error fetching main warehouse:", warehouseError);
     }
 
-    const transactionData: any = {
+    if (!mainWarehouse?.id) {
+      if (previousQuantity != null) {
+        await supabase
+          .from("inventory")
+          .update({
+            quantity: previousQuantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("product_id", productId);
+      } else {
+        await supabase.from("inventory").delete().eq("product_id", productId);
+      }
+      return {
+        success: false,
+        error: "Не знайдено головний склад для запису операції",
+      };
+    }
+
+    const transactionData: Record<string, unknown> = {
       product_id: productId,
       quantity: adjustment,
       transaction_type: "adjustment",
       notes: notes || "Ручне коригування кількості",
       balance_after: quantity,
+      warehouse_id: mainWarehouse.id,
     };
 
     if (adjustmentDate && adjustmentDate.trim().length >= 10) {
       transactionData.created_at = new Date(
         `${adjustmentDate.trim().slice(0, 10)}T12:00:00.000Z`
       ).toISOString();
-    }
-
-    if (mainWarehouse?.id) {
-      transactionData.warehouse_id = mainWarehouse.id;
     }
 
     console.log(`Дані транзакції:`, transactionData);
@@ -226,6 +246,17 @@ export async function updateInventoryQuantity(
         `Помилка створення транзакції інвентаря:`,
         transactionError
       );
+      if (previousQuantity != null) {
+        await supabase
+          .from("inventory")
+          .update({
+            quantity: previousQuantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("product_id", productId);
+      } else {
+        await supabase.from("inventory").delete().eq("product_id", productId);
+      }
       return { success: false, error: transactionError.message };
     }
 

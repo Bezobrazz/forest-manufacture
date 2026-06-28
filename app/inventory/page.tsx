@@ -35,6 +35,11 @@ import {
   formatNumberWithUnit,
 } from "@/lib/utils";
 import { computeBalanceAfterByTransactionIdFromInventory } from "@/lib/shipments/shipped-cards";
+import {
+  formatAdjustmentDelta,
+  getAdjustmentDisplayValues,
+  getTransactionBalanceAfter,
+} from "@/lib/inventory/adjustmentDisplay";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
 import { useEffect, useMemo, useState } from "react";
@@ -93,53 +98,6 @@ function getTransactionOperationLabel(
   transaction: InventoryTransaction
 ): string {
   return TRANSACTION_OPERATION_LABELS[transaction.transaction_type];
-}
-
-function getTransactionBalanceAfter(
-  transaction: InventoryTransaction,
-  balanceByTxId: Map<number, number>
-): number | null {
-  if (
-    transaction.balance_after != null &&
-    Number.isFinite(Number(transaction.balance_after))
-  ) {
-    return Number(transaction.balance_after);
-  }
-  return balanceByTxId.get(transaction.id) ?? null;
-}
-
-function getAdjustmentDisplayValues(
-  transaction: InventoryTransaction,
-  balanceByTxId: Map<number, number>
-): {
-  before: number | null;
-  entered: number | null;
-  after: number | null;
-  delta: number | null;
-} {
-  const after = getTransactionBalanceAfter(transaction, balanceByTxId);
-  const delta = Number(transaction.quantity);
-
-  if (after == null || !Number.isFinite(delta)) {
-    return { before: null, entered: after, after, delta: Number.isFinite(delta) ? delta : null };
-  }
-
-  return {
-    before: after - delta,
-    entered: after,
-    after,
-    delta,
-  };
-}
-
-function formatAdjustmentDelta(delta: number): string {
-  if (delta > 0) {
-    return `Додано: +${formatNumber(delta)} шт`;
-  }
-  if (delta < 0) {
-    return `Віднято: ${formatNumber(Math.abs(delta))} шт`;
-  }
-  return "Без змін: 0 шт";
 }
 
 function TransactionHistoryFilters({
@@ -1069,7 +1027,17 @@ export default function InventoryPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <InventoryAdjustForm products={products} />
+                <InventoryAdjustForm
+                  products={products}
+                  onInventoryUpdated={async () => {
+                    const [newInventory, newTransactions] = await Promise.all([
+                      getInventory(),
+                      getInventoryTransactions(),
+                    ]);
+                    setInventory(newInventory);
+                    setTransactions(newTransactions);
+                  }}
+                />
               </CardContent>
             </Card>
           </div>

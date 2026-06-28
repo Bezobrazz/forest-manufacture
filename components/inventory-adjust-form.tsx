@@ -48,7 +48,13 @@ function LoadingSkeleton() {
   );
 }
 
-export function InventoryAdjustForm({ products }: { products: Product[] }) {
+export function InventoryAdjustForm({
+  products,
+  onInventoryUpdated,
+}: {
+  products: Product[];
+  onInventoryUpdated?: () => Promise<void>;
+}) {
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
@@ -113,12 +119,20 @@ export function InventoryAdjustForm({ products }: { products: Product[] }) {
           description: "Кількість на складі успішно оновлено",
         });
 
-        // Очищаємо форму
         setSelectedProduct("");
         setQuantity("");
         setNotes("");
         setAdjustmentDate(new Date());
-        router.refresh();
+
+        if (onInventoryUpdated) {
+          try {
+            await onInventoryUpdated();
+          } catch (refreshError) {
+            console.error("Помилка при оновленні інвентарю:", refreshError);
+          }
+        } else {
+          router.refresh();
+        }
       } else {
         toast.error("Помилка", {
           description: result.error || "Не вдалося оновити кількість на складі",
