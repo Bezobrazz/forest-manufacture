@@ -201,6 +201,7 @@ export async function updateInventoryQuantity(
       quantity: adjustment,
       transaction_type: "adjustment",
       notes: notes || "Ручне коригування кількості",
+      balance_after: quantity,
     };
 
     if (adjustmentDate && adjustmentDate.trim().length >= 10) {

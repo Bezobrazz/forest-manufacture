@@ -95,6 +95,53 @@ function getTransactionOperationLabel(
   return TRANSACTION_OPERATION_LABELS[transaction.transaction_type];
 }
 
+function getTransactionBalanceAfter(
+  transaction: InventoryTransaction,
+  balanceByTxId: Map<number, number>
+): number | null {
+  if (
+    transaction.balance_after != null &&
+    Number.isFinite(Number(transaction.balance_after))
+  ) {
+    return Number(transaction.balance_after);
+  }
+  return balanceByTxId.get(transaction.id) ?? null;
+}
+
+function getAdjustmentDisplayValues(
+  transaction: InventoryTransaction,
+  balanceByTxId: Map<number, number>
+): {
+  before: number | null;
+  entered: number | null;
+  after: number | null;
+  delta: number | null;
+} {
+  const after = getTransactionBalanceAfter(transaction, balanceByTxId);
+  const delta = Number(transaction.quantity);
+
+  if (after == null || !Number.isFinite(delta)) {
+    return { before: null, entered: after, after, delta: Number.isFinite(delta) ? delta : null };
+  }
+
+  return {
+    before: after - delta,
+    entered: after,
+    after,
+    delta,
+  };
+}
+
+function formatAdjustmentDelta(delta: number): string {
+  if (delta > 0) {
+    return `Додано: +${formatNumber(delta)} шт`;
+  }
+  if (delta < 0) {
+    return `Віднято: ${formatNumber(Math.abs(delta))} шт`;
+  }
+  return "Без змін: 0 шт";
+}
+
 function TransactionHistoryFilters({
   mode,
   onModeChange,
@@ -863,12 +910,19 @@ export default function InventoryPage() {
               ) : (
                 <div className="space-y-4">
                   {filteredTransactions.map((transaction) => {
-                    const shipmentBalanceAfter =
+                    const balanceAfter =
                       transaction.transaction_type === "shipment"
-                        ? transaction.balance_after != null &&
-                          Number.isFinite(Number(transaction.balance_after))
-                          ? Number(transaction.balance_after)
-                          : (shipmentBalanceByTxId.get(transaction.id) ?? null)
+                        ? getTransactionBalanceAfter(
+                            transaction,
+                            shipmentBalanceByTxId
+                          )
+                        : null;
+                    const adjustmentDisplay =
+                      transaction.transaction_type === "adjustment"
+                        ? getAdjustmentDisplayValues(
+                            transaction,
+                            shipmentBalanceByTxId
+                          )
                         : null;
 
                     return (
@@ -911,23 +965,64 @@ export default function InventoryPage() {
                           </div>
                         </div>
                         <div className="ml-2 flex flex-col items-end gap-1 shrink-0">
-                          <Badge
-                            variant={
-                              transaction.quantity > 0 ? "default" : "destructive"
-                            }
-                            className="whitespace-nowrap"
-                          >
-                            {transaction.quantity > 0 ? "+" : ""}
-                            {formatNumberWithUnit(transaction.quantity, "шт")}
-                          </Badge>
-                          {transaction.transaction_type === "shipment" ? (
-                            <span className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
-                              Залишок:{" "}
-                              {shipmentBalanceAfter != null
-                                ? `${formatNumber(shipmentBalanceAfter)} шт`
-                                : "—"}
-                            </span>
-                          ) : null}
+                          {transaction.transaction_type === "adjustment" ? (
+                            <>
+                              <span className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                                Залишок до:{" "}
+                                {adjustmentDisplay?.before != null
+                                  ? `${formatNumber(adjustmentDisplay.before)} шт`
+                                  : "—"}
+                              </span>
+                              {adjustmentDisplay?.delta != null ? (
+                                <span
+                                  className={cn(
+                                    "text-sm font-medium font-mono tabular-nums whitespace-nowrap",
+                                    adjustmentDisplay.delta > 0
+                                      ? "text-green-600"
+                                      : adjustmentDisplay.delta < 0
+                                        ? "text-red-600"
+                                        : "text-muted-foreground"
+                                  )}
+                                >
+                                  {formatAdjustmentDelta(adjustmentDisplay.delta)}
+                                </span>
+                              ) : null}
+                              <span className="text-sm font-medium font-mono tabular-nums whitespace-nowrap">
+                                Внесено:{" "}
+                                {adjustmentDisplay?.entered != null
+                                  ? `${formatNumber(adjustmentDisplay.entered)} шт`
+                                  : "—"}
+                              </span>
+                              <span className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                                Залишок після:{" "}
+                                {adjustmentDisplay?.after != null
+                                  ? `${formatNumber(adjustmentDisplay.after)} шт`
+                                  : "—"}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Badge
+                                variant={
+                                  transaction.quantity > 0
+                                    ? "default"
+                                    : "destructive"
+                                }
+                                className="whitespace-nowrap"
+                              >
+                                {transaction.quantity > 0 ? "+" : ""}
+                                {formatNumberWithUnit(transaction.quantity, "шт")}
+                              </Badge>
+                              {transaction.transaction_type === "shipment" ? (
+                                <span className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                                  Залишок:{" "}
+                                  {balanceAfter != null
+                                    ? `${formatNumber(balanceAfter)} шт`
+                                    : "—"}
+                                </span>
+                              ) : null}
+                            </>
+                          )}
                         </div>
                       </div>
                     );
