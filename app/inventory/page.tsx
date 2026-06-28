@@ -1029,6 +1029,7 @@ export default function InventoryPage() {
               <CardContent>
                 <InventoryAdjustForm
                   products={products}
+                  inventory={finishedProducts}
                   onInventoryUpdated={async () => {
                     const [newInventory, newTransactions] = await Promise.all([
                       getInventory(),

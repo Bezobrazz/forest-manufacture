@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { updateInventoryQuantity } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -22,9 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Product } from "@/lib/types";
+import type { Inventory, Product } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
+import { cn, dateToYYYYMMDD, formatDate, formatNumber } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 
 function LoadingSkeleton() {
@@ -50,28 +50,44 @@ function LoadingSkeleton() {
 
 export function InventoryAdjustForm({
   products,
+  inventory,
   onInventoryUpdated,
 }: {
   products: Product[];
+  inventory: Inventory[];
   onInventoryUpdated?: () => Promise<void>;
 }) {
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
-  const [quantity, setQuantity] = useState<string>("");
+  const [newQuantity, setNewQuantity] = useState<string>("");
+  const [quantityDelta, setQuantityDelta] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [adjustmentDate, setAdjustmentDate] = useState<Date>(new Date());
   const router = useRouter();
 
+  const quantityByProductId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const item of inventory) {
+      if (item.product_id != null) {
+        map.set(item.product_id, item.quantity ?? 0);
+      }
+    }
+    return map;
+  }, [inventory]);
+
+  const selectedStock =
+    selectedProduct !== ""
+      ? (quantityByProductId.get(Number.parseInt(selectedProduct, 10)) ?? 0)
+      : null;
+
   useEffect(() => {
-    // Імітуємо завантаження даних
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // Групуємо продукти за категоріями для зручності вибору
   const productsByCategory: Record<string, Product[]> = {};
 
   products.forEach((product) => {
@@ -82,29 +98,92 @@ export function InventoryAdjustForm({
     productsByCategory[categoryName].push(product);
   });
 
-  // Сортуємо категорії за алфавітом
   const sortedCategories = Object.keys(productsByCategory).sort();
+
+  function handleProductChange(productId: string) {
+    setSelectedProduct(productId);
+    setNewQuantity("");
+    setQuantityDelta("");
+  }
+
+  function handleDeltaChange(value: string) {
+    setQuantityDelta(value);
+    if (selectedStock == null || value.trim() === "") {
+      setNewQuantity("");
+      return;
+    }
+    const delta = Number.parseFloat(value);
+    if (Number.isFinite(delta)) {
+      setNewQuantity(String(selectedStock + delta));
+    }
+  }
+
+  function handleNewQuantityChange(value: string) {
+    setNewQuantity(value);
+    if (selectedStock == null || value.trim() === "") {
+      setQuantityDelta("");
+      return;
+    }
+    const next = Number.parseFloat(value);
+    if (Number.isFinite(next)) {
+      setQuantityDelta(String(next - selectedStock));
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsPending(true);
 
     try {
-      if (!selectedProduct || !quantity) {
+      if (!selectedProduct) {
         toast.error("Помилка", {
-          description: "Виберіть продукт та вкажіть кількість",
+          description: "Виберіть продукт",
         });
         return;
       }
 
-      const productId = Number.parseInt(selectedProduct);
-      const quantityValue = Number.parseFloat(quantity);
+      const hasNewQuantity = newQuantity.trim() !== "";
+      const hasDelta = quantityDelta.trim() !== "";
 
-      if (isNaN(quantityValue)) {
+      if (!hasNewQuantity && !hasDelta) {
+        toast.error("Помилка", {
+          description: "Вкажіть зміну кількості або новий залишок",
+        });
+        return;
+      }
+
+      const productId = Number.parseInt(selectedProduct, 10);
+      let quantityValue: number;
+
+      if (hasNewQuantity) {
+        quantityValue = Number.parseFloat(newQuantity);
+      } else {
+        const delta = Number.parseFloat(quantityDelta);
+        quantityValue = (selectedStock ?? 0) + delta;
+      }
+
+      if (!Number.isFinite(quantityValue)) {
         toast.error("Помилка", {
           description: "Кількість повинна бути числом",
         });
         return;
+      }
+
+      if (quantityValue < 0) {
+        toast.error("Помилка", {
+          description: "Залишок на складі не може бути від'ємним",
+        });
+        return;
+      }
+
+      if (hasDelta && !hasNewQuantity) {
+        const delta = Number.parseFloat(quantityDelta);
+        if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9) {
+          toast.error("Помилка", {
+            description: "Вкажіть ненульову зміну кількості",
+          });
+          return;
+        }
       }
 
       const result = await updateInventoryQuantity(
@@ -120,7 +199,8 @@ export function InventoryAdjustForm({
         });
 
         setSelectedProduct("");
-        setQuantity("");
+        setNewQuantity("");
+        setQuantityDelta("");
         setNotes("");
         setAdjustmentDate(new Date());
 
@@ -155,7 +235,7 @@ export function InventoryAdjustForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="product">Продукт</Label>
-        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+        <Select value={selectedProduct} onValueChange={handleProductChange}>
           <SelectTrigger id="product">
             <SelectValue placeholder="Виберіть продукт" />
           </SelectTrigger>
@@ -165,15 +245,38 @@ export function InventoryAdjustForm({
                 <div className="px-2 py-1.5 text-sm font-semibold">
                   {category}
                 </div>
-                {productsByCategory[category].map((product) => (
-                  <SelectItem key={product.id} value={product.id.toString()}>
-                    {product.name}
-                  </SelectItem>
-                ))}
+                {productsByCategory[category].map((product) => {
+                  const stock = quantityByProductId.get(product.id) ?? 0;
+                  return (
+                    <SelectItem key={product.id} value={product.id.toString()}>
+                      {product.name} ({formatNumber(stock)} шт)
+                    </SelectItem>
+                  );
+                })}
               </div>
             ))}
           </SelectContent>
         </Select>
+        {selectedStock != null ? (
+          <p className="text-xs text-muted-foreground">
+            Поточний залишок: {formatNumber(selectedStock)} шт
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="quantity-delta">Додати або відняти</Label>
+        <Input
+          id="quantity-delta"
+          type="number"
+          step="0.01"
+          value={quantityDelta}
+          onChange={(e) => handleDeltaChange(e.target.value)}
+          placeholder="Напр. 50 або -20"
+          disabled={!selectedProduct}
+        />
+        <p className="text-xs text-muted-foreground">
+          Додатне число — додати до залишку, від&apos;ємне — відняти від залишку
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="quantity">Нова кількість</Label>
@@ -182,12 +285,14 @@ export function InventoryAdjustForm({
           type="number"
           step="0.01"
           min="0"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          placeholder="Введіть нову кількість"
+          value={newQuantity}
+          onChange={(e) => handleNewQuantityChange(e.target.value)}
+          placeholder="Або вкажіть новий залишок"
+          disabled={!selectedProduct}
         />
         <p className="text-xs text-muted-foreground">
-          Вкажіть загальну кількість продукції, яка повинна бути на складі
+          Загальна кількість на складі після коригування (синхронізується з полем
+          вище)
         </p>
       </div>
       <div className="space-y-2">
@@ -234,8 +339,15 @@ export function InventoryAdjustForm({
           rows={3}
         />
       </div>
-      <Button type="submit" disabled={isPending}>
-        {isPending ? "Оновлення..." : "Оновити кількість"}
+      <Button type="submit" disabled={isPending || !selectedProduct} aria-busy={isPending}>
+        {isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Оновлення…
+          </>
+        ) : (
+          "Оновити кількість"
+        )}
       </Button>
     </form>
   );
