@@ -82,3 +82,7 @@ export function suggestedSellingPriceUah(
 export function convertUahToEur(uah: number, eurUahRate: number): number {
   return uah / eurUahRate;
 }
+
+export function convertEurToUah(eur: number, eurUahRate: number): number {
+  return eur * eurUahRate;
+}

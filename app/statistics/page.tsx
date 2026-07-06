@@ -106,6 +106,7 @@ import {
 import {
   SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
+  convertEurToUah,
   suggestedSellingPriceUah,
 } from "@/lib/exchange/nbu-rates";
 
@@ -174,6 +175,10 @@ export default function StatisticsPage() {
   const [nbuExchangeDate, setNbuExchangeDate] = useState<string | null>(null);
   const [nbuRatesLoading, setNbuRatesLoading] = useState(true);
   const [nbuRatesError, setNbuRatesError] = useState<string | null>(null);
+  const [customSellingPriceUahInput, setCustomSellingPriceUahInput] =
+    useState("");
+  const [customSellingPriceEurInput, setCustomSellingPriceEurInput] =
+    useState("");
 
   const statsDateRange = useMemo((): StatisticsDateRange | null => {
     if (filterDateRange.from && filterDateRange.to) {
@@ -750,6 +755,32 @@ export default function StatisticsPage() {
   const suggestedSellingPriceEur =
     suggestedSellingPrice != null && eurUahRate != null
       ? convertUahToEur(suggestedSellingPrice, eurUahRate)
+      : null;
+
+  const customSellingPriceUah = useMemo(() => {
+    const normalized = customSellingPriceUahInput
+      .replace(/\s/g, "")
+      .replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [customSellingPriceUahInput]);
+
+  const customSellingPriceEurFromUah =
+    customSellingPriceUah != null && eurUahRate != null
+      ? convertUahToEur(customSellingPriceUah, eurUahRate)
+      : null;
+
+  const customSellingPriceEur = useMemo(() => {
+    const normalized = customSellingPriceEurInput
+      .replace(/\s/g, "")
+      .replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [customSellingPriceEurInput]);
+
+  const customSellingPriceUahFromEur =
+    customSellingPriceEur != null && eurUahRate != null
+      ? convertEurToUah(customSellingPriceEur, eurUahRate)
       : null;
 
   const totalCostPerBagEur =
@@ -2101,6 +2132,68 @@ export default function StatisticsPage() {
                       ? `+${SUGGESTED_PRICE_MARKUP_PERCENT}% до собівартості, округлення вгору · курс НБУ ${formatNumberWithUnit(eurUahRate, "₴/€")}${nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""}`
                       : `+${SUGGESTED_PRICE_MARKUP_PERCENT}% до собівартості, округлення вгору`}
               </p>
+              <div className="mt-3 pt-3 border-t border-primary/20 space-y-2">
+                <Label
+                  htmlFor="statistics-custom-selling-price-uah"
+                  className="text-xs font-normal text-muted-foreground"
+                >
+                  Ціна в грн
+                </Label>
+                <Input
+                  id="statistics-custom-selling-price-uah"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={customSellingPriceUahInput}
+                  onChange={(event) =>
+                    setCustomSellingPriceUahInput(
+                      parseNumericInput(event.target.value)
+                    )
+                  }
+                  className="h-8 bg-background text-sm"
+                />
+                {customSellingPriceUah != null ? (
+                  nbuRatesLoading ? (
+                    <Skeleton className="h-5 w-20" />
+                  ) : customSellingPriceEurFromUah != null ? (
+                    <p className="text-sm font-medium tabular-nums text-primary/80">
+                      ≈ {formatNumberWithUnit(customSellingPriceEurFromUah, "€")}
+                    </p>
+                  ) : nbuRatesError ? (
+                    <p className="text-xs text-muted-foreground">{nbuRatesError}</p>
+                  ) : null
+                ) : null}
+                <Label
+                  htmlFor="statistics-custom-selling-price-eur"
+                  className="text-xs font-normal text-muted-foreground pt-1"
+                >
+                  Ціна в євро
+                </Label>
+                <Input
+                  id="statistics-custom-selling-price-eur"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={customSellingPriceEurInput}
+                  onChange={(event) =>
+                    setCustomSellingPriceEurInput(
+                      parseNumericInput(event.target.value)
+                    )
+                  }
+                  className="h-8 bg-background text-sm"
+                />
+                {customSellingPriceEur != null ? (
+                  nbuRatesLoading ? (
+                    <Skeleton className="h-5 w-20" />
+                  ) : customSellingPriceUahFromEur != null ? (
+                    <p className="text-sm font-medium tabular-nums text-primary/80">
+                      ≈ {formatNumberWithUnit(customSellingPriceUahFromEur, "₴")}
+                    </p>
+                  ) : nbuRatesError ? (
+                    <p className="text-xs text-muted-foreground">{nbuRatesError}</p>
+                  ) : null
+                ) : null}
+              </div>
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
+  convertEurToUah,
   parseNbuRate,
   suggestedSellingPriceUah,
 } from "./nbu-rates";
@@ -31,4 +32,8 @@ test("suggestedSellingPriceUah adds markup and rounds up", () => {
 
 test("convertUahToEur divides by EUR/UAH rate", () => {
   assert.equal(convertUahToEur(107, 52.1), 107 / 52.1);
+});
+
+test("convertEurToUah multiplies by EUR/UAH rate", () => {
+  assert.equal(convertEurToUah(10, 52.1), 10 * 52.1);
 });
