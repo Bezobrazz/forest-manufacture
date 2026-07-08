@@ -2,6 +2,7 @@ const nbuCurrencyUrl = (currencyCode: string) =>
   `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&json`;
 
 export const SUGGESTED_PRICE_MARKUP_PERCENT = 45;
+export const SUGGESTED_EUR_PER_BAG = 3;
 
 type NbuRateRow = {
   cc?: string;
@@ -77,6 +78,14 @@ export function suggestedSellingPriceUah(
   markupPercent: number = SUGGESTED_PRICE_MARKUP_PERCENT
 ): number {
   return Math.ceil(costPerBagUah * (1 + markupPercent / 100));
+}
+
+export function suggestedSellingPriceFromEurPerBag(
+  costPerBagUah: number,
+  eurMarkupPerBag: number,
+  eurUahRate: number
+): number {
+  return Math.ceil(costPerBagUah + convertEurToUah(eurMarkupPerBag, eurUahRate));
 }
 
 export function convertUahToEur(uah: number, eurUahRate: number): number {

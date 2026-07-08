@@ -5,6 +5,7 @@ import {
   convertUahToEur,
   convertEurToUah,
   parseNbuRate,
+  suggestedSellingPriceFromEurPerBag,
   suggestedSellingPriceUah,
 } from "./nbu-rates";
 
@@ -28,6 +29,11 @@ test("suggestedSellingPriceUah adds markup and rounds up", () => {
   assert.equal(suggestedSellingPriceUah(85.42, SUGGESTED_PRICE_MARKUP_PERCENT), 124);
   assert.equal(suggestedSellingPriceUah(100, SUGGESTED_PRICE_MARKUP_PERCENT), 145);
   assert.equal(suggestedSellingPriceUah(100.01, SUGGESTED_PRICE_MARKUP_PERCENT), 146);
+});
+
+test("suggestedSellingPriceFromEurPerBag adds EUR markup to cost and rounds up", () => {
+  assert.equal(suggestedSellingPriceFromEurPerBag(100, 3, 52.1), 257);
+  assert.equal(suggestedSellingPriceFromEurPerBag(100, 2.5, 40), 200);
 });
 
 test("convertUahToEur divides by EUR/UAH rate", () => {
