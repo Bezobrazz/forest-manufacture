@@ -44,6 +44,7 @@ export async function proxy(request: NextRequest) {
     // Адмін роути - тільки для owner та admin
     "/dashboard/users": ["owner", "admin"],
     "/api/admin": ["owner", "admin"],
+    "/api/ai": ["owner", "admin"],
 
     // Роути для всіх авторизованих користувачів
     "/dashboard": ["owner", "admin", "worker"],
@@ -101,6 +102,9 @@ export async function proxy(request: NextRequest) {
 
   // Якщо користувач не авторизований і намагається зайти на захищений маршрут
   if (!user) {
+    if (currentPath.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth/login";
     redirectUrl.searchParams.set("redirectedFrom", currentPath);
@@ -164,6 +168,9 @@ export async function proxy(request: NextRequest) {
 
     // Перевіряємо, чи користувач має дозволену роль
     if (userRole && !allowedRoles.includes(userRole)) {
+      if (currentPath.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
       redirectUrl.searchParams.set("error", "access_denied");

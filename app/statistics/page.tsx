@@ -98,6 +98,7 @@ import {
 } from "recharts";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { ProductionAiPanel } from "@/components/ai/production-ai-panel";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -1627,6 +1628,19 @@ export default function StatisticsPage() {
           </Popover>
         </div>
       </div>
+
+      <ProductionAiPanel
+        ready={!isLoading}
+        context={{
+          periodStart: periodStartStr,
+          periodEnd: periodEndStr,
+          periodLabel,
+          monthlyTaxesUah,
+          monthlyElectricityUah,
+          includeManagementSalaryInCost,
+          latestPackingBagPriceUah,
+        }}
+      />
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mb-8">
         <Card>
