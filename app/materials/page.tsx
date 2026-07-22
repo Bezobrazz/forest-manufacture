@@ -21,10 +21,14 @@ import { Box } from "lucide-react";
 import type { Product, ProductCategory } from "@/lib/types";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const MATERIALS_PAGE_TABS = ["materials", "categories"] as const;
 
 export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [activeTab, setActiveTab] = useQueryTab(MATERIALS_PAGE_TABS, "materials");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
@@ -102,7 +106,13 @@ export default function MaterialsPage() {
           <p>Завантаження даних...</p>
         </div>
       ) : (
-        <Tabs defaultValue="materials" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as (typeof MATERIALS_PAGE_TABS)[number])
+          }
+          className="space-y-6"
+        >
           <TabsList>
             <TabsTrigger value="materials">Матеріали</TabsTrigger>
             <TabsTrigger value="categories">Категорії</TabsTrigger>

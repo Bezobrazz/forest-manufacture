@@ -30,6 +30,7 @@ import { QuickActionsButton } from "@/components/quick-actions-button";
 import { DatabaseError } from "@/components/database-error";
 import { Button } from "@/components/ui/button";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { useQueryTab } from "@/hooks/use-query-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -114,6 +115,8 @@ const shipmentMonthCalendarClassNames: NonNullable<CalendarProps["classNames"]> 
   ),
 };
 
+const SHIPMENTS_PAGE_TABS = ["month", "week", "list"] as const;
+
 function LoadingSkeleton() {
   return (
     <div className="container py-6 space-y-6">
@@ -129,6 +132,7 @@ export default function ShipmentsPage() {
   const [queue, setQueue] = useState<CrmOrderWithDetails[]>([]);
   const [avgDaily, setAvgDaily] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useQueryTab(SHIPMENTS_PAGE_TABS, "month");
   const [isSavingMapping, setIsSavingMapping] = useState(false);
   const [databaseError, setDatabaseError] = useState(false);
   const [unmappedRefs, setUnmappedRefs] = useState<{ crm_product_ref: string; count: number }[]>(
@@ -591,7 +595,13 @@ export default function ShipmentsPage() {
         </Card>
       ) : null}
 
-      <Tabs defaultValue="month" className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as (typeof SHIPMENTS_PAGE_TABS)[number])
+        }
+        className="space-y-4"
+      >
         <TabsList className="grid h-auto w-full grid-cols-3 sm:max-w-md">
           <TabsTrigger value="month">Місяць</TabsTrigger>
           <TabsTrigger value="week">Тиждень</TabsTrigger>

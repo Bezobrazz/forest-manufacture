@@ -13,6 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, User } from "lucide-react";
 import type { Employee } from "@/lib/types";
 import { formatNumberWithUnit } from "@/lib/utils";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const EMPLOYEES_PAGE_TABS = ["workers", "managers"] as const;
 
 type EmployeesPageContentProps = {
   employees: Employee[];
@@ -70,9 +73,16 @@ function EmployeeList({
 export function EmployeesPageContent({ employees }: EmployeesPageContentProps) {
   const workers = employees.filter((employee) => !employee.is_manager);
   const managers = employees.filter((employee) => employee.is_manager);
+  const [activeTab, setActiveTab] = useQueryTab(EMPLOYEES_PAGE_TABS, "workers");
 
   return (
-    <Tabs defaultValue="workers" className="space-y-6">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) =>
+        setActiveTab(value as (typeof EMPLOYEES_PAGE_TABS)[number])
+      }
+      className="space-y-6"
+    >
       <TabsList className="grid w-full max-w-md grid-cols-2 bg-muted p-1 rounded-lg">
         <TabsTrigger value="workers" className="text-sm">
           Працівники

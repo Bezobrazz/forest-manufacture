@@ -95,10 +95,13 @@ import { formatUah, formatKm, formatPercent } from "@/lib/format";
 import { dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { useQueryTab } from "@/hooks/use-query-tab";
 
 type StatusFilter = "" | "profit" | "breakeven" | "loss";
 type PeriodFilter = "all" | "year" | "month" | "week";
 type RepaymentPeriodFilter = "all" | "year";
+
+const TRIPS_PAGE_TABS = ["commerce", "raw"] as const;
 
 function formatDate(s: string) {
   const d = new Date(s + "Z");
@@ -177,7 +180,7 @@ export default function TripsPage() {
   const [repaymentPageSize, setRepaymentPageSize] = useState(5);
   const [repaymentPage, setRepaymentPage] = useState(1);
   const [exportingType, setExportingType] = useState<TripType | null>(null);
-  const [tripsTab, setTripsTab] = useState<"commerce" | "raw">("commerce");
+  const [tripsTab, setTripsTab] = useQueryTab(TRIPS_PAGE_TABS, "commerce");
 
   const repaymentsSum = useMemo(
     () => repaymentsList.reduce((s, r) => s + r.amount, 0),
@@ -736,7 +739,7 @@ export default function TripsPage() {
               <Tabs
                 value={tripsTab}
                 onValueChange={(v) =>
-                  v && setTripsTab(v as "commerce" | "raw")
+                  v && setTripsTab(v as (typeof TRIPS_PAGE_TABS)[number])
                 }
                 className="w-full"
               >

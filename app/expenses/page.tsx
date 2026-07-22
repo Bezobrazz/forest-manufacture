@@ -67,8 +67,11 @@ import { PreviousPageButton } from "@/components/previous-page-button";
 import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
 import { DebtsSection } from "@/components/debts/debts-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQueryTab } from "@/hooks/use-query-tab";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
+
+const EXPENSES_PAGE_TABS = ["expenses", "transfers", "debts"] as const;
 
 const FILTER_PURCHASE = -1;
 const FILTER_WAGES = -2;
@@ -173,10 +176,10 @@ function LoadingSkeleton() {
   );
 }
 
-type ExpensesPageTab = "expenses" | "transfers" | "debts";
+type ExpensesPageTab = (typeof EXPENSES_PAGE_TABS)[number];
 
 export default function ExpensesPage() {
-  const [activeTab, setActiveTab] = useState<ExpensesPageTab>("expenses");
+  const [activeTab, setActiveTab] = useQueryTab(EXPENSES_PAGE_TABS, "expenses");
   const [period, setPeriod] = useState<PeriodFilter>("week");
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);

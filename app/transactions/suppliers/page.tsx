@@ -101,6 +101,9 @@ import { PackingBagForm } from "@/components/packing-bag-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const SUPPLIER_TRANSACTIONS_TABS = ["transactions", "packing-bags"] as const;
 
 function LoadingSkeleton() {
   return (
@@ -164,6 +167,10 @@ export default function SupplierTransactionsPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [packingBagPurchases, setPackingBagPurchases] = useState<PackingBagPurchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useQueryTab(
+    SUPPLIER_TRANSACTIONS_TABS,
+    "transactions"
+  );
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -679,7 +686,13 @@ export default function SupplierTransactionsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="transactions" className="space-y-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as (typeof SUPPLIER_TRANSACTIONS_TABS)[number])
+        }
+        className="space-y-6"
+      >
         <TabsList>
           <TabsTrigger value="transactions">Транзакції</TabsTrigger>
           <TabsTrigger value="packing-bags">Мішки (кора)</TabsTrigger>

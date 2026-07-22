@@ -1,17 +1,5 @@
 import Link from "next/link";
-import {
-  Package,
-  Users,
-  BarChart,
-  CalendarDays,
-  Boxes,
-  CheckSquare,
-  DollarSign,
-  Truck,
-  ShoppingCart,
-  Car,
-  MapPin,
-} from "lucide-react";
+import { FOOTER_NAV_SECTIONS } from "@/lib/navigation/footer-nav";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -20,7 +8,6 @@ export function Footer() {
     <footer className="border-t bg-muted/40 mt-auto">
       <div className="container py-8 md:py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          {/* Про систему */}
           <div className="space-y-3">
             <h3 className="font-semibold text-lg">Облік виробництва</h3>
             <p className="text-sm text-muted-foreground">
@@ -29,146 +16,45 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Швидкі посилання */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Швидкі посилання</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link
-                  href="/shifts"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <BarChart className="h-4 w-4" />
-                  Зміни
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/employees"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Users className="h-4 w-4" />
-                  Працівники
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/products"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Package className="h-4 w-4" />
-                  Продукція
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/materials"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Package className="h-4 w-4" />
-                  Матеріали
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Управління */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Управління</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link
-                  href="/inventory"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Boxes className="h-4 w-4" />
-                  Склад
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/shipments"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <CalendarDays className="h-4 w-4" />
-                  Відвантаження
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/tasks"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  Задачі
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/expenses"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <DollarSign className="h-4 w-4" />
-                  Витрати
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/suppliers"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Truck className="h-4 w-4" />
-                  Постачальники
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/vehicles"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <Car className="h-4 w-4" />
-                  Транспорт
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/trips"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <MapPin className="h-4 w-4" />
-                  Поїздки
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/transactions/suppliers"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <ShoppingCart className="h-4 w-4" />
-                  Закупка
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Статистика */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">Аналітика</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link
-                  href="/statistics"
-                  className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  <BarChart className="h-4 w-4" />
-                  Статистика виробництва
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {FOOTER_NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="space-y-4">
+              <h3 className="font-semibold text-lg">{section.title}</h3>
+              <ul className="space-y-3 text-sm">
+                {section.groups.map((group) => (
+                  <li key={group.label}>
+                    {group.items && group.items.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <p className="font-medium text-foreground">
+                          {group.label}
+                        </p>
+                        <ul className="space-y-1.5 border-l pl-3">
+                          {group.items.map((item) => (
+                            <li key={item.href}>
+                              <Link
+                                href={item.href}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                {item.label}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : group.href ? (
+                      <Link
+                        href={group.href}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {group.label}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        {/* Нижня частина */}
         <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
             © {currentYear} Форест Україна. Всі права захищені.

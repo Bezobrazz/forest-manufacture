@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getEmployees } from "@/app/actions";
 import { EmployeesPageContent } from "@/components/employees-page-content";
 import { requireRole } from "@/lib/auth/require-role";
@@ -16,7 +17,9 @@ export default async function EmployeesPage() {
         <QuickActionsButton />
       </div>
 
-      <EmployeesPageContent employees={employees} />
+      <Suspense fallback={null}>
+        <EmployeesPageContent employees={employees} />
+      </Suspense>
     </div>
   );
 }

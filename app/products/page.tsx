@@ -24,10 +24,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Product, ProductCategory } from "@/lib/types";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { useQueryTab } from "@/hooks/use-query-tab";
+
+const PRODUCTS_PAGE_TABS = ["products", "categories"] as const;
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [activeTab, setActiveTab] = useQueryTab(PRODUCTS_PAGE_TABS, "products");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [databaseError, setDatabaseError] = useState(false);
@@ -105,7 +109,13 @@ export default function ProductsPage() {
           <p>Завантаження даних...</p>
         </div>
       ) : (
-        <Tabs defaultValue="products" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as (typeof PRODUCTS_PAGE_TABS)[number])
+          }
+          className="space-y-6"
+        >
           <TabsList>
             <TabsTrigger value="products">Продукція</TabsTrigger>
             <TabsTrigger value="categories">Категорії</TabsTrigger>

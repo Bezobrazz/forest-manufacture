@@ -62,8 +62,11 @@ import type { Inventory, InventoryTransaction, Product } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { useQueryTab } from "@/hooks/use-query-tab";
 
 const WEEK_STARTS_SAT = 6;
+
+const INVENTORY_PRODUCT_TABS = ["finished", "materials"] as const;
 
 type TransactionFilterMode = "month" | "year" | "range";
 
@@ -399,7 +402,8 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [materials, setMaterials] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [productType, setProductType] = useState<"finished" | "materials">(
+  const [productType, setProductType] = useQueryTab(
+    INVENTORY_PRODUCT_TABS,
     "finished"
   );
   const now = new Date();
@@ -673,7 +677,7 @@ export default function InventoryPage() {
         <Tabs
           value={productType}
           onValueChange={(value) =>
-            setProductType(value as "finished" | "materials")
+            setProductType(value as (typeof INVENTORY_PRODUCT_TABS)[number])
           }
           className="mb-6"
         >
