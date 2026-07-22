@@ -22,6 +22,7 @@ import {
   startKeepinSyncJobAction,
   type ShippedQueueCard,
   updateLocalShipmentCardAction,
+  updateShippedQueueCardAction,
 } from "@/app/actions/shipments";
 import { getInventory } from "@/app/actions";
 import { PreviousPageButton } from "@/components/previous-page-button";
@@ -683,6 +684,12 @@ export default function ShipmentsPage() {
                   <ShippedQueueCardRow
                     key={card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at)}
                     card={card}
+                    products={products}
+                    inventoryMap={inventoryMap}
+                    onUpdated={async () => {
+                      ignoreRealtimeUntilRef.current = Date.now() + 2000;
+                      await loadPage();
+                    }}
                     onDeleted={async () => {
                       ignoreRealtimeUntilRef.current = Date.now() + 2000;
                       await loadPage();
@@ -1453,9 +1460,15 @@ function ShippedFulfillmentBadge({ isPartial, isFull }: { isPartial: boolean; is
 
 function ShippedQueueCardRow({
   card,
+  products,
+  inventoryMap,
+  onUpdated,
   onDeleted,
 }: {
   card: ShippedQueueCard;
+  products: Pick<Product, "id" | "name" | "description">[];
+  inventoryMap: Record<number, number>;
+  onUpdated: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }) {
   const { customer, dealLabel, isLocal } = shippedCardHeaderMeta(card.notes);
@@ -1463,6 +1476,33 @@ function ShippedQueueCardRow({
   const isFull = card.isPartial === false;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDate, setEditDate] = useState<Date>(() => startOfDay(new Date()));
+  const [editDatePopoverOpen, setEditDatePopoverOpen] = useState(false);
+  const [editLines, setEditLines] = useState<{ productId: string; quantity: string }[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const oldQtyByProduct = useMemo(() => {
+    const m: Record<number, number> = {};
+    for (const line of card.lines) {
+      m[line.productId] = line.quantity;
+    }
+    return m;
+  }, [card.lines]);
+
+  const openEditDialog = () => {
+    const dayPart = card.created_at.slice(0, 10);
+    setEditDate(startOfDay(parseISO(`${dayPart}T12:00:00`)));
+    setEditLines(
+      card.lines.length > 0
+        ? card.lines.map((line) => ({
+            productId: String(line.productId),
+            quantity: String(line.quantity),
+          }))
+        : [{ productId: "", quantity: "" }]
+    );
+    setEditOpen(true);
+  };
 
   const handleDelete = async () => {
     const cardKey = card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at);
@@ -1545,14 +1585,27 @@ function ShippedQueueCardRow({
           {card.lines.length || card.rowsCount}{" "}
           {(card.lines.length || card.rowsCount) === 1 ? "позиція" : "позиції"} у відвантаженні
         </span>
-        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <div className="flex flex-wrap items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 text-muted-foreground"
+            disabled={isDeleting || isSavingEdit}
+            aria-label="Редагувати відвантаження"
+            onClick={openEditDialog}
+          >
+            <Pencil className="h-4 w-4 mr-1" />
+            Редагувати
+          </Button>
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <AlertDialogTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-8 shrink-0 text-muted-foreground hover:text-destructive"
-              disabled={isDeleting}
+              disabled={isDeleting || isSavingEdit}
               aria-label="Видалити відвантаження"
             >
               <Trash2 className="h-4 w-4 mr-1" />
@@ -1590,7 +1643,207 @@ function ShippedQueueCardRow({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Редагування відвантаження</DialogTitle>
+            <DialogDescription>
+              Змініть дату або кількості. Склад оновиться автоматично; картка не повернеться в чергу.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="text-sm font-medium">{customer}</div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-shipment-date-${card.cardKey}`}>Дата відвантаження</Label>
+              <Popover open={editDatePopoverOpen} onOpenChange={setEditDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id={`edit-shipment-date-${card.cardKey}`}
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    {formatDate(editDate.toISOString())}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={editDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setEditDate(startOfDay(date));
+                        setEditDatePopoverOpen(false);
+                      }
+                    }}
+                    locale={uk}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Позиції</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() =>
+                    setEditLines((prev) => [...prev, { productId: "", quantity: "" }])
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Рядок
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {editLines.map((line, idx) => {
+                  const pid = Number(line.productId);
+                  const stock = Number.isFinite(pid) && pid > 0 ? inventoryMap[pid] ?? 0 : 0;
+                  const oldShipped =
+                    Number.isFinite(pid) && pid > 0 ? oldQtyByProduct[pid] ?? 0 : 0;
+                  const available = stock + oldShipped;
+                  return (
+                    <div
+                      key={`edit-line-${idx}`}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_100px_auto] gap-2 items-end"
+                    >
+                      <div className="space-y-1">
+                        <Select
+                          value={line.productId}
+                          onValueChange={(v) =>
+                            setEditLines((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, productId: v } : r))
+                            )
+                          }
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Товар…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {line.productId ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            Доступно: {formatNumber(available)} шт
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">К-сть</Label>
+                        <Input
+                          inputMode="decimal"
+                          className="h-9"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            setEditLines((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r))
+                            )
+                          }
+                          placeholder="0"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        disabled={editLines.length <= 1}
+                        onClick={() =>
+                          setEditLines((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        aria-label="Прибрати рядок"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              disabled={isSavingEdit}
+            >
+              Скасувати
+            </Button>
+            <Button
+              type="button"
+              disabled={isSavingEdit}
+              aria-busy={isSavingEdit}
+              onClick={async () => {
+                const lines = editLines
+                  .map((l) => ({
+                    product_id: Number(l.productId),
+                    quantity: Number(l.quantity.replace(",", ".")),
+                  }))
+                  .filter(
+                    (l) =>
+                      Number.isFinite(l.product_id) &&
+                      l.product_id > 0 &&
+                      Number.isFinite(l.quantity) &&
+                      l.quantity > 0
+                  );
+                if (!lines.length) {
+                  toast.error("Додайте хоча б одну позицію з кількістю");
+                  return;
+                }
+                for (const l of lines) {
+                  const stock = inventoryMap[l.product_id] ?? 0;
+                  const oldShipped = oldQtyByProduct[l.product_id] ?? 0;
+                  const available = stock + oldShipped;
+                  if (l.quantity > available) {
+                    toast.error("Перевірте кількість", {
+                      description: `Не більше ${formatNumber(available)} шт на складі.`,
+                    });
+                    return;
+                  }
+                }
+                const cardKey =
+                  card.cardKey ?? buildShippedQueueCardKey(card.notes, card.created_at);
+                setIsSavingEdit(true);
+                const res = await updateShippedQueueCardAction(
+                  cardKey,
+                  lines,
+                  dateToYYYYMMDD(editDate)
+                );
+                setIsSavingEdit(false);
+                if (!res.success) {
+                  toast.error("Не вдалося зберегти", { description: res.error });
+                  return;
+                }
+                toast.success("Відвантаження оновлено");
+                setEditOpen(false);
+                await onUpdated();
+              }}
+            >
+              {isSavingEdit ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Збереження…
+                </>
+              ) : (
+                "Зберегти"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

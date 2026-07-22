@@ -986,6 +986,318 @@ export async function deleteShippedQueueCardAction(
   }
 }
 
+export type ShippedQueueCardUpdateLine = { product_id: number; quantity: number };
+
+type ShippedTxSnapshot = {
+  id: number;
+  product_id: number;
+  quantity: number;
+  notes: string;
+  created_at: string;
+  balance_after: number | null;
+  warehouse_id: number | null;
+};
+
+function aggregateLinesByProduct(
+  lines: { product_id: number; quantity: number }[]
+): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const line of lines) {
+    map.set(line.product_id, (map.get(line.product_id) ?? 0) + line.quantity);
+  }
+  return map;
+}
+
+async function rollbackShippedCardUpdate(
+  supabase: SupabaseClient,
+  args: {
+    inventorySteps: InventoryRestoreStep[];
+    insertedTxIds: number[];
+    deletedOldTxSnapshots: ShippedTxSnapshot[];
+  }
+): Promise<void> {
+  for (const txId of args.insertedTxIds) {
+    await supabase.from("inventory_transactions").delete().eq("id", txId);
+  }
+  await rollbackInventoryRestoreSteps(supabase, args.inventorySteps);
+  if (args.deletedOldTxSnapshots.length > 0) {
+    await supabase.from("inventory_transactions").insert(
+      args.deletedOldTxSnapshots.map((tx) => ({
+        product_id: tx.product_id,
+        quantity: tx.quantity,
+        transaction_type: "shipment" as const,
+        notes: tx.notes,
+        created_at: tx.created_at,
+        balance_after: tx.balance_after,
+        warehouse_id: tx.warehouse_id,
+      }))
+    );
+  }
+}
+
+export async function updateShippedQueueCardAction(
+  cardKey: string | null | undefined,
+  lines: ShippedQueueCardUpdateLine[],
+  shipmentDate: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getServerUser();
+  if (!user) return { success: false, error: "Потрібна авторизація" };
+
+  if (typeof cardKey !== "string" || !cardKey.trim()) {
+    return { success: false, error: "Некоректний ідентифікатор відвантаження" };
+  }
+
+  const parsed = parseShippedQueueCardKey(cardKey);
+  if (!parsed) {
+    return { success: false, error: "Некоректний ідентифікатор відвантаження" };
+  }
+
+  const dayRange = utcDayRangeFromDayKey(parsed.dayKey);
+  if ("error" in dayRange) {
+    return { success: false, error: dayRange.error };
+  }
+
+  const dateRes = shipmentDateToCreatedAtIso(shipmentDate);
+  if ("error" in dateRes) {
+    return { success: false, error: dateRes.error };
+  }
+
+  const cleanLines = lines
+    .map((l) => ({
+      product_id: Number(l.product_id),
+      quantity: Number(l.quantity),
+    }))
+    .filter(
+      (l) =>
+        Number.isFinite(l.product_id) &&
+        l.product_id > 0 &&
+        Number.isFinite(l.quantity) &&
+        l.quantity > 0
+    );
+
+  if (cleanLines.length === 0) {
+    return { success: false, error: "Додайте хоча б одну позицію з кількістю" };
+  }
+
+  const supabase = await createServerClient();
+
+  const { data: txs, error: fetchErr } = await supabase
+    .from("inventory_transactions")
+    .select("id, product_id, quantity, notes, created_at, balance_after, warehouse_id, transaction_type")
+    .eq("transaction_type", "shipment")
+    .eq("notes", parsed.notes)
+    .gte("created_at", dayRange.from)
+    .lt("created_at", dayRange.to)
+    .order("id", { ascending: true });
+
+  if (fetchErr) {
+    return { success: false, error: fetchErr.message };
+  }
+
+  if (!txs?.length) {
+    return { success: false, error: "Відвантаження не знайдено" };
+  }
+
+  const invalid = txs.find(
+    (tx) =>
+      typeof tx.notes !== "string" ||
+      !tx.notes.trim().toLowerCase().startsWith("відвантаження черги:")
+  );
+  if (invalid) {
+    return { success: false, error: "Операцію не можна змінити" };
+  }
+
+  const notesStr = typeof txs[0]?.notes === "string" ? txs[0].notes.trim() : "";
+  if (!notesStr) {
+    return { success: false, error: "Некоректні дані відвантаження" };
+  }
+
+  const oldByProduct = aggregateLinesByProduct(aggregateShipmentTxLinesByProduct(txs));
+  const newByProduct = aggregateLinesByProduct(cleanLines);
+
+  const ref = parseShipmentQueueNotesRef(stripShipmentQueueNotesMetadata(notesStr));
+  if (ref?.kind === "crm") {
+    const { data: ord, error: ordErr } = await supabase
+      .from("crm_orders")
+      .select("items:crm_order_items(product_id, quantity)")
+      .eq("crm_id", ref.crmId)
+      .maybeSingle();
+
+    if (ordErr) {
+      return { success: false, error: ordErr.message };
+    }
+
+    // Після відвантаження угода може зникнути з локального дзеркала CRM,
+    // тому обмеження за її позиціями застосовуємо лише коли вона ще доступна.
+    if (ord) {
+      const maxByProduct = new Map<number, number>();
+      for (const item of ord.items ?? []) {
+        const pid = item.product_id != null ? Number(item.product_id) : NaN;
+        if (!Number.isFinite(pid) || pid <= 0) continue;
+        maxByProduct.set(pid, (maxByProduct.get(pid) ?? 0) + Number(item.quantity));
+      }
+
+      for (const [pid, qty] of newByProduct) {
+        const max = maxByProduct.get(pid);
+        if (max == null) {
+          return { success: false, error: "Товар не входить до позицій угоди CRM" };
+        }
+        if (qty > max) {
+          return { success: false, error: `Кількість більша за в угоді (макс. ${max})` };
+        }
+      }
+    }
+  }
+
+  const allProductIds = new Set([...oldByProduct.keys(), ...newByProduct.keys()]);
+  const inventorySteps: InventoryRestoreStep[] = [];
+  const oldTxSnapshots: ShippedTxSnapshot[] = txs.map((tx) => ({
+    id: Number(tx.id),
+    product_id: Number(tx.product_id),
+    quantity: Number(tx.quantity),
+    notes: notesStr,
+    created_at: typeof tx.created_at === "string" ? tx.created_at : dateRes.iso,
+    balance_after:
+      tx.balance_after != null && Number.isFinite(Number(tx.balance_after))
+        ? Number(tx.balance_after)
+        : null,
+    warehouse_id: tx.warehouse_id != null ? Number(tx.warehouse_id) : null,
+  }));
+  const insertedTxIds: number[] = [];
+  const deletedOldTxSnapshots: ShippedTxSnapshot[] = [];
+  const warehouseId =
+    txs.find((tx) => tx.warehouse_id != null)?.warehouse_id != null
+      ? Number(txs.find((tx) => tx.warehouse_id != null)!.warehouse_id)
+      : await getMainWarehouseId(supabase);
+
+  try {
+    for (const productId of allProductIds) {
+      const oldQty = oldByProduct.get(productId) ?? 0;
+      const newQty = newByProduct.get(productId) ?? 0;
+      const delta = newQty - oldQty;
+      if (delta === 0) continue;
+
+      const { data: currentRow, error: gErr } = await supabase
+        .from("inventory")
+        .select("quantity")
+        .eq("product_id", productId)
+        .maybeSingle();
+      if (gErr) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return { success: false, error: gErr.message };
+      }
+
+      const currentQty = Number(currentRow?.quantity ?? 0);
+      if (delta > 0 && currentQty < delta) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return {
+          success: false,
+          error: `Недостатньо на складі. Потрібно ${delta}, доступно ${currentQty}`,
+        };
+      }
+
+      const newInventoryQty = currentQty - delta;
+      const { error: uErr } = await supabase
+        .from("inventory")
+        .update({
+          quantity: newInventoryQty,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("product_id", productId);
+      if (uErr) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return { success: false, error: uErr.message };
+      }
+
+      inventorySteps.push({ productId, previousInventoryQty: currentQty });
+    }
+
+    for (const tx of txs) {
+      const txId = Number(tx.id);
+      const snapshot = oldTxSnapshots.find((s) => s.id === txId);
+      const { error: dErr } = await supabase.from("inventory_transactions").delete().eq("id", txId);
+      if (dErr) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return { success: false, error: dErr.message };
+      }
+      if (snapshot) deletedOldTxSnapshots.push(snapshot);
+    }
+
+    const sortedNewLines = [...newByProduct.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [productId, quantity] of sortedNewLines) {
+      const { data: invRow, error: invErr } = await supabase
+        .from("inventory")
+        .select("quantity")
+        .eq("product_id", productId)
+        .maybeSingle();
+      if (invErr) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return { success: false, error: invErr.message };
+      }
+
+      const balanceAfter = Number(invRow?.quantity ?? 0);
+      const txPayload: Record<string, unknown> = {
+        product_id: productId,
+        quantity: -quantity,
+        transaction_type: "shipment",
+        notes: notesStr,
+        created_at: dateRes.iso,
+        balance_after: balanceAfter,
+      };
+      if (warehouseId != null) {
+        txPayload.warehouse_id = warehouseId;
+      }
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("inventory_transactions")
+        .insert(txPayload)
+        .select("id")
+        .single();
+      if (insErr || inserted?.id == null) {
+        await rollbackShippedCardUpdate(supabase, {
+          inventorySteps,
+          insertedTxIds,
+          deletedOldTxSnapshots,
+        });
+        return { success: false, error: insErr?.message ?? "Не вдалося записати операцію" };
+      }
+      insertedTxIds.push(Number(inserted.id));
+    }
+
+    revalidatePath("/shipments");
+    revalidatePath("/inventory");
+    return { success: true };
+  } catch (e) {
+    await rollbackShippedCardUpdate(supabase, {
+      inventorySteps,
+      insertedTxIds,
+      deletedOldTxSnapshots,
+    });
+    const msg = e instanceof Error ? e.message : "Помилка оновлення відвантаження";
+    return { success: false, error: msg };
+  }
+}
+
 export async function reorderShipmentQueueAction(
   crmIdsInOrder: string[]
 ): Promise<{ success: boolean; error?: string }> {

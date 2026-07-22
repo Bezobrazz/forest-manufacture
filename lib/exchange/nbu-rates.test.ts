@@ -26,9 +26,9 @@ test("parseNbuRate extracts currency row", () => {
 });
 
 test("suggestedSellingPriceUah adds markup and rounds up", () => {
-  assert.equal(suggestedSellingPriceUah(85.42, SUGGESTED_PRICE_MARKUP_PERCENT), 124);
-  assert.equal(suggestedSellingPriceUah(100, SUGGESTED_PRICE_MARKUP_PERCENT), 145);
-  assert.equal(suggestedSellingPriceUah(100.01, SUGGESTED_PRICE_MARKUP_PERCENT), 146);
+  assert.equal(suggestedSellingPriceUah(85.42, SUGGESTED_PRICE_MARKUP_PERCENT), 116);
+  assert.equal(suggestedSellingPriceUah(100, SUGGESTED_PRICE_MARKUP_PERCENT), 135);
+  assert.equal(suggestedSellingPriceUah(100.01, SUGGESTED_PRICE_MARKUP_PERCENT), 136);
 });
 
 test("suggestedSellingPriceFromEurPerBag adds EUR markup to cost and rounds up", () => {

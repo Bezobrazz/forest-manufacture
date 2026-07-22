@@ -1,8 +1,8 @@
 const nbuCurrencyUrl = (currencyCode: string) =>
   `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&json`;
 
-export const SUGGESTED_PRICE_MARKUP_PERCENT = 45;
-export const SUGGESTED_EUR_PER_BAG = 3;
+export const SUGGESTED_PRICE_MARKUP_PERCENT = 35;
+export const SUGGESTED_EUR_PER_BAG = 0.6;
 
 type NbuRateRow = {
   cc?: string;
