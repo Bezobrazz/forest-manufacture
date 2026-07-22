@@ -1,0 +1,20 @@
+---
+description: Нові вкладки сторінок обов’язково додавати в футер
+globs: app/**/page.tsx,components/**/*page*.tsx,lib/navigation/footer-nav.ts,hooks/use-query-tab.ts,components/footer.tsx
+alwaysApply: false
+---
+
+# Page Tabs → Footer
+
+Кожна нова page-level вкладка (`Tabs` на сторінці) **має** з’явитися в футері.
+
+## Checklist
+
+1. Синхронізація з URL: `useQueryTab` з `@/hooks/use-query-tab` (`?tab=...`).
+2. Запис у `FOOTER_NAV_SECTIONS` (`lib/navigation/footer-nav.ts`) — група сторінки + `items` з `href`/`label`.
+3. `href` відкриває саме цю вкладку (напр. `/inventory?tab=materials`).
+
+## Не додавати в футер
+
+- Вкладки всередині діалогів
+- Локальні фільтри / перемикачі режиму (не секції сторінки)
