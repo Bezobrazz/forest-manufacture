@@ -98,7 +98,14 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
   {
     title: "Аналітика",
     groups: [
-      { label: "Статистика виробництва", href: "/statistics" },
+      {
+        label: "Статистика",
+        items: [
+          { href: "/statistics?tab=cost", label: "Собівартість" },
+          { href: "/statistics", label: "Виробництво" },
+          { href: "/statistics?tab=ai", label: "ШІ аналіз" },
+        ],
+      },
     ],
   },
 ];

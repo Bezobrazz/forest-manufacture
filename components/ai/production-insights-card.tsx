@@ -109,7 +109,7 @@ export function ProductionInsightsCard({
   if (!enabled) return null;
 
   return (
-    <Card className="mb-6 border-dashed">
+    <Card className="border-dashed">
       <CardHeader className="pb-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">

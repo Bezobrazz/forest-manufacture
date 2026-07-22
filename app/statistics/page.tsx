@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import {
   getBarkShipmentsTotal,
@@ -23,6 +23,7 @@ import {
   Calendar as CalendarIcon,
   Package,
   PieChart,
+  Sparkles,
   Truck,
   TrendingUp,
 } from "lucide-react";
@@ -60,7 +61,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQueryTab } from "@/hooks/use-query-tab";
 import {
   Dialog,
   DialogContent,
@@ -99,6 +101,8 @@ import {
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { ProductionAiPanel } from "@/components/ai/production-ai-panel";
+import { canUseAiAssistant } from "@/lib/ai/access";
+import type { UserRole } from "@/lib/auth/roles";
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -113,6 +117,9 @@ import {
   suggestedSellingPriceFromEurPerBag,
   suggestedSellingPriceUah,
 } from "@/lib/exchange/nbu-rates";
+
+const STATISTICS_PAGE_TABS = ["cost", "production", "ai"] as const;
+type StatisticsPageTab = (typeof STATISTICS_PAGE_TABS)[number];
 
 type SuggestedPriceMode = "markup_percent" | "eur_per_bag";
 
@@ -140,7 +147,56 @@ type TripLike = {
   trip_date: string;
 };
 
+function StatisticsLoadingFallback() {
+  return (
+    <div className="container py-6">
+      <div className="mb-6">
+        <Skeleton className="h-4 w-12" />
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Skeleton className="h-10 w-[120px]" />
+          <Skeleton className="h-9 w-14" />
+          <Skeleton className="h-9 w-16" />
+          <Skeleton className="h-9 w-20" />
+        </div>
+      </div>
+      <Skeleton className="h-10 w-80 mb-6" />
+      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mb-8">
+        {[1, 2, 3, 4].map((i) => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-5 w-40 mb-2" />
+              <Skeleton className="h-4 w-56" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-10 w-24" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StatisticsPage() {
+  return (
+    <Suspense fallback={<StatisticsLoadingFallback />}>
+      <StatisticsPageContent />
+    </Suspense>
+  );
+}
+
+function StatisticsPageContent() {
+  const [activeTab, setActiveTab] = useQueryTab(
+    STATISTICS_PAGE_TABS,
+    "production"
+  );
+  const [canUseAi, setCanUseAi] = useState(false);
   const [period, setPeriod] = useState<PeriodFilter>("month");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
@@ -288,6 +344,32 @@ export default function StatisticsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/user/role");
+        const data = (await response.json().catch(() => ({}))) as {
+          role?: UserRole | null;
+        };
+        if (!cancelled) {
+          setCanUseAi(canUseAiAssistant(data.role ?? null));
+        }
+      } catch {
+        if (!cancelled) setCanUseAi(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!canUseAi && activeTab === "ai") {
+      setActiveTab("production");
+    }
+  }, [canUseAi, activeTab, setActiveTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1629,444 +1711,24 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      <ProductionAiPanel
-        ready={!isLoading}
-        context={{
-          periodStart: periodStartStr,
-          periodEnd: periodEndStr,
-          periodLabel,
-          monthlyTaxesUah,
-          monthlyElectricityUah,
-          includeManagementSalaryInCost,
-          latestPackingBagPriceUah,
-        }}
-      />
-
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <span>Загальне виробництво</span>
-            </CardTitle>
-            <CardDescription>
-              Загальна кількість виробленої продукції
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold mb-4">
-              {formatNumberWithUnit(totalProduction, "шт")}
-            </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setMonthlyProductionChartOpen(true)}
-            >
-              Детальніше
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <BarChart className="h-5 w-5 text-primary" />
-              <span>Завершені зміни</span>
-            </CardTitle>
-            <CardDescription>
-              Кількість завершених змін з виробництвом
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">
-              {formatNumber(shiftsWithProduction)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <span>Середнє виробництво</span>
-            </CardTitle>
-            <CardDescription>
-              Середня кількість продукції на зміну
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold mb-4">
-              {formatNumberWithUnit(averageProductionPerShift, "шт", {
-                maximumFractionDigits: 1,
-              })}
-            </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setAverageProductionChartOpen(true)}
-            >
-              Детальніше
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-primary" />
-              <span>Відвантажено кори</span>
-            </CardTitle>
-            <CardDescription>
-              Готова продукція з назвою «кора» (без мішків), за датою
-              відвантаження зі складу
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold mb-4">
-              {formatNumberWithUnit(barkShipmentsTotal, "шт")}
-            </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setBarkShipmentsBreakdown(null);
-                setBarkShipmentsDetailOpen(true);
-              }}
-            >
-              Детальніше
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Dialog
-        open={barkShipmentsDetailOpen}
-        onOpenChange={setBarkShipmentsDetailOpen}
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as StatisticsPageTab)}
+        className="space-y-6"
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Відвантаження кори</DialogTitle>
-            <DialogDescription>
-              Деталізація за обраний період: {periodLabel}
-            </DialogDescription>
-          </DialogHeader>
+        <TabsList>
+          <TabsTrigger value="cost">Собівартість</TabsTrigger>
+          <TabsTrigger value="production">Виробництво</TabsTrigger>
+          {canUseAi ? (
+            <TabsTrigger value="ai" className="gap-1.5">
+              <Sparkles className="h-4 w-4" />
+              ШІ аналіз
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
 
-          {barkShipmentsDetailLoading ? (
-            <div className="space-y-4 py-2">
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-[280px] w-full" />
-            </div>
-          ) : (
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-sm font-medium mb-3">По фракціях</h3>
-                {!barkShipmentsBreakdown?.byProduct.length ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    Немає відвантажень кори за цей період
-                  </p>
-                ) : (
-                  <div className="rounded-md border">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left font-medium p-3">
-                            Фракція (продукт)
-                          </th>
-                          <th className="text-right font-medium p-3 w-[120px]">
-                            Кількість
-                          </th>
-                          <th className="text-right font-medium p-3 w-[100px]">
-                            Частка
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const totalQty =
-                            barkShipmentsBreakdown.byProduct.reduce(
-                              (s, r) => s + r.quantity,
-                              0
-                            );
-                          return barkShipmentsBreakdown.byProduct.map(
-                            (row) => {
-                              const pct =
-                                totalQty > 0
-                                  ? (row.quantity / totalQty) * 100
-                                  : 0;
-                              return (
-                                <tr
-                                  key={row.productName}
-                                  className="border-b last:border-0"
-                                >
-                                  <td className="p-3">{row.productName}</td>
-                                  <td className="p-3 text-right tabular-nums">
-                                    {formatNumberWithUnit(row.quantity, "шт")}
-                                  </td>
-                                  <td className="p-3 text-right tabular-nums text-muted-foreground">
-                                    {formatPercentage(pct, 1)}
-                                  </td>
-                                </tr>
-                              );
-                            }
-                          );
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium mb-1">
-                  {barkShipmentsBreakdown?.usesMonthlyTimeBuckets
-                    ? "Помісячний графік"
-                    : "Графік по днях"}
-                </h3>
-                {barkShipmentsBreakdown?.chartCaption ? (
-                  <p className="text-xs text-muted-foreground mb-3">
-                    {barkShipmentsBreakdown.chartCaption}
-                  </p>
-                ) : null}
-                {!barkShipmentsBreakdown?.timeSeries.length ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    Немає даних для графіка
-                  </p>
-                ) : barkShipmentsBreakdown.timeSeries.every(
-                    (p) => p.quantity === 0
-                  ) ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    Усі періоди без відвантажень
-                  </p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <RechartsBarChart
-                      data={barkShipmentsBreakdown.timeSeries}
-                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 11 }}
-                        interval={0}
-                        angle={
-                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
-                            ? 0
-                            : -35
-                        }
-                        textAnchor={
-                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
-                            ? "middle"
-                            : "end"
-                        }
-                        height={
-                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
-                            ? 32
-                            : 56
-                        }
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12 }}
-                        label={{
-                          value: "Шт.",
-                          angle: -90,
-                          position: "insideLeft",
-                        }}
-                      />
-                      <Tooltip
-                        formatter={(value: number) =>
-                          formatNumberWithUnit(value, "шт")
-                        }
-                        labelStyle={{ color: "hsl(var(--foreground))" }}
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "6px",
-                        }}
-                      />
-                      <Bar
-                        dataKey="quantity"
-                        fill="hsl(var(--primary))"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={
-                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
-                            ? 48
-                            : 28
-                        }
-                      />
-                    </RechartsBarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={monthlyProductionChartOpen}
-        onOpenChange={setMonthlyProductionChartOpen}
-      >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {productionChartUsesMonthlyBuckets
-                ? "Помісячний графік виробництва"
-                : "Виробництво по днях"}
-            </DialogTitle>
-            <DialogDescription>
-              {statsDateRange ? (
-                productionChartUsesMonthlyBuckets ? (
-                  <>
-                    Динаміка виробленої продукції по місяцях за період{" "}
-                    {periodLabel}
-                  </>
-                ) : (
-                  <>
-                    Динаміка виробленої продукції по днях за період{" "}
-                    {periodLabel}
-                  </>
-                )
-              ) : (
-                <>
-                  Динаміка виробленої продукції по місяцях {selectedYear} року
-                  (період на сторінці: {periodLabel})
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {monthlyProductionData.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Немає даних про виробництво
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthlyProductionData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
-                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
-                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
-                  interval={0}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  label={{
-                    value: "Кількість (шт)",
-                    angle: -90,
-                    position: "insideLeft",
-                  }}
-                />
-                <Tooltip
-                  formatter={(value: number) =>
-                    formatNumberWithUnit(value, "шт")
-                  }
-                  labelStyle={{ color: "hsl(var(--foreground))" }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--background))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "6px",
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="production"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={averageProductionChartOpen}
-        onOpenChange={setAverageProductionChartOpen}
-      >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {productionChartUsesMonthlyBuckets
-                ? "Помісячний графік середнього виробництва"
-                : "Середнє виробництво по днях"}
-            </DialogTitle>
-            <DialogDescription>
-              {statsDateRange ? (
-                productionChartUsesMonthlyBuckets ? (
-                  <>
-                    Динаміка середньої кількості на зміну по місяцях за період{" "}
-                    {periodLabel}
-                  </>
-                ) : (
-                  <>
-                    Динаміка середньої кількості на зміну по днях за період{" "}
-                    {periodLabel}
-                  </>
-                )
-              ) : (
-                <>
-                  Динаміка середньої кількості продукції на зміну по місяцях{" "}
-                  {selectedYear} року (період на сторінці: {periodLabel})
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {monthlyAverageProductionData.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Немає даних про виробництво
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthlyAverageProductionData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
-                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
-                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
-                  interval={0}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  label={{
-                    value: "Середнє (шт/зміну)",
-                    angle: -90,
-                    position: "insideLeft",
-                  }}
-                />
-                <Tooltip
-                  formatter={(value: number) =>
-                    formatNumberWithUnit(value, "шт", {
-                      maximumFractionDigits: 1,
-                    })
-                  }
-                  labelStyle={{ color: "hsl(var(--foreground))" }}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--background))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "6px",
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="average"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Card className="mb-8">
+        <TabsContent value="cost" className="mt-0">
+      <Card>
         <CardHeader>
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
@@ -2607,7 +2269,109 @@ export default function StatisticsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 mb-8">
+
+        </TabsContent>
+
+        <TabsContent value="production" className="space-y-8 mt-0">
+      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              <span>Загальне виробництво</span>
+            </CardTitle>
+            <CardDescription>
+              Загальна кількість виробленої продукції
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold mb-4">
+              {formatNumberWithUnit(totalProduction, "шт")}
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setMonthlyProductionChartOpen(true)}
+            >
+              Детальніше
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <BarChart className="h-5 w-5 text-primary" />
+              <span>Завершені зміни</span>
+            </CardTitle>
+            <CardDescription>
+              Кількість завершених змін з виробництвом
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold">
+              {formatNumber(shiftsWithProduction)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <span>Середнє виробництво</span>
+            </CardTitle>
+            <CardDescription>
+              Середня кількість продукції на зміну
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold mb-4">
+              {formatNumberWithUnit(averageProductionPerShift, "шт", {
+                maximumFractionDigits: 1,
+              })}
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setAverageProductionChartOpen(true)}
+            >
+              Детальніше
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-primary" />
+              <span>Відвантажено кори</span>
+            </CardTitle>
+            <CardDescription>
+              Готова продукція з назвою «кора» (без мішків), за датою
+              відвантаження зі складу
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-bold mb-4">
+              {formatNumberWithUnit(barkShipmentsTotal, "шт")}
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setBarkShipmentsBreakdown(null);
+                setBarkShipmentsDetailOpen(true);
+              }}
+            >
+              Детальніше
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+
+      <div className="grid gap-6 md:grid-cols-2">
         <Card className="md:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2849,7 +2613,7 @@ export default function StatisticsPage() {
         </CardContent>
       </Card>
 
-      <Card className="mt-8">
+      <Card className="">
         <CardHeader>
           <CardTitle>Динаміка кори по фракціях</CardTitle>
           <CardDescription>
@@ -2988,6 +2752,354 @@ export default function StatisticsPage() {
           )}
         </CardContent>
       </Card>
+
+        </TabsContent>
+
+        {canUseAi ? (
+          <TabsContent value="ai" className="mt-0">
+            <ProductionAiPanel
+              ready={!isLoading}
+              context={{
+                periodStart: periodStartStr,
+                periodEnd: periodEndStr,
+                periodLabel,
+                monthlyTaxesUah,
+                monthlyElectricityUah,
+                includeManagementSalaryInCost,
+                latestPackingBagPriceUah,
+              }}
+            />
+          </TabsContent>
+        ) : null}
+      </Tabs>
+
+      <Dialog
+        open={barkShipmentsDetailOpen}
+        onOpenChange={setBarkShipmentsDetailOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Відвантаження кори</DialogTitle>
+            <DialogDescription>
+              Деталізація за обраний період: {periodLabel}
+            </DialogDescription>
+          </DialogHeader>
+
+          {barkShipmentsDetailLoading ? (
+            <div className="space-y-4 py-2">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-[280px] w-full" />
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-sm font-medium mb-3">По фракціях</h3>
+                {!barkShipmentsBreakdown?.byProduct.length ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Немає відвантажень кори за цей період
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left font-medium p-3">
+                            Фракція (продукт)
+                          </th>
+                          <th className="text-right font-medium p-3 w-[120px]">
+                            Кількість
+                          </th>
+                          <th className="text-right font-medium p-3 w-[100px]">
+                            Частка
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const totalQty =
+                            barkShipmentsBreakdown.byProduct.reduce(
+                              (s, r) => s + r.quantity,
+                              0
+                            );
+                          return barkShipmentsBreakdown.byProduct.map(
+                            (row) => {
+                              const pct =
+                                totalQty > 0
+                                  ? (row.quantity / totalQty) * 100
+                                  : 0;
+                              return (
+                                <tr
+                                  key={row.productName}
+                                  className="border-b last:border-0"
+                                >
+                                  <td className="p-3">{row.productName}</td>
+                                  <td className="p-3 text-right tabular-nums">
+                                    {formatNumberWithUnit(row.quantity, "шт")}
+                                  </td>
+                                  <td className="p-3 text-right tabular-nums text-muted-foreground">
+                                    {formatPercentage(pct, 1)}
+                                  </td>
+                                </tr>
+                              );
+                            }
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-1">
+                  {barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                    ? "Помісячний графік"
+                    : "Графік по днях"}
+                </h3>
+                {barkShipmentsBreakdown?.chartCaption ? (
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {barkShipmentsBreakdown.chartCaption}
+                  </p>
+                ) : null}
+                {!barkShipmentsBreakdown?.timeSeries.length ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Немає даних для графіка
+                  </p>
+                ) : barkShipmentsBreakdown.timeSeries.every(
+                    (p) => p.quantity === 0
+                  ) ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Усі періоди без відвантажень
+                  </p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <RechartsBarChart
+                      data={barkShipmentsBreakdown.timeSeries}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11 }}
+                        interval={0}
+                        angle={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 0
+                            : -35
+                        }
+                        textAnchor={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? "middle"
+                            : "end"
+                        }
+                        height={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 32
+                            : 56
+                        }
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12 }}
+                        label={{
+                          value: "Шт.",
+                          angle: -90,
+                          position: "insideLeft",
+                        }}
+                      />
+                      <Tooltip
+                        formatter={(value: number) =>
+                          formatNumberWithUnit(value, "шт")
+                        }
+                        labelStyle={{ color: "hsl(var(--foreground))" }}
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "6px",
+                        }}
+                      />
+                      <Bar
+                        dataKey="quantity"
+                        fill="hsl(var(--primary))"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={
+                          barkShipmentsBreakdown?.usesMonthlyTimeBuckets
+                            ? 48
+                            : 28
+                        }
+                      />
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={monthlyProductionChartOpen}
+        onOpenChange={setMonthlyProductionChartOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {productionChartUsesMonthlyBuckets
+                ? "Помісячний графік виробництва"
+                : "Виробництво по днях"}
+            </DialogTitle>
+            <DialogDescription>
+              {statsDateRange ? (
+                productionChartUsesMonthlyBuckets ? (
+                  <>
+                    Динаміка виробленої продукції по місяцях за період{" "}
+                    {periodLabel}
+                  </>
+                ) : (
+                  <>
+                    Динаміка виробленої продукції по днях за період{" "}
+                    {periodLabel}
+                  </>
+                )
+              ) : (
+                <>
+                  Динаміка виробленої продукції по місяцях {selectedYear} року
+                  (період на сторінці: {periodLabel})
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {monthlyProductionData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Немає даних про виробництво
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyProductionData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 12 }}
+                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
+                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
+                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  label={{
+                    value: "Кількість (шт)",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                />
+                <Tooltip
+                  formatter={(value: number) =>
+                    formatNumberWithUnit(value, "шт")
+                  }
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "6px",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="production"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={averageProductionChartOpen}
+        onOpenChange={setAverageProductionChartOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {productionChartUsesMonthlyBuckets
+                ? "Помісячний графік середнього виробництва"
+                : "Середнє виробництво по днях"}
+            </DialogTitle>
+            <DialogDescription>
+              {statsDateRange ? (
+                productionChartUsesMonthlyBuckets ? (
+                  <>
+                    Динаміка середньої кількості на зміну по місяцях за період{" "}
+                    {periodLabel}
+                  </>
+                ) : (
+                  <>
+                    Динаміка середньої кількості на зміну по днях за період{" "}
+                    {periodLabel}
+                  </>
+                )
+              ) : (
+                <>
+                  Динаміка середньої кількості продукції на зміну по місяцях{" "}
+                  {selectedYear} року (період на сторінці: {periodLabel})
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {monthlyAverageProductionData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Немає даних про виробництво
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyAverageProductionData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 12 }}
+                  angle={productionChartUsesMonthlyBuckets ? 0 : -35}
+                  textAnchor={productionChartUsesMonthlyBuckets ? "middle" : "end"}
+                  height={productionChartUsesMonthlyBuckets ? 40 : 64}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  label={{
+                    value: "Середнє (шт/зміну)",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                />
+                <Tooltip
+                  formatter={(value: number) =>
+                    formatNumberWithUnit(value, "шт", {
+                      maximumFractionDigits: 1,
+                    })
+                  }
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "6px",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="average"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
