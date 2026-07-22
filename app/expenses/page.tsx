@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -179,6 +179,14 @@ function LoadingSkeleton() {
 type ExpensesPageTab = (typeof EXPENSES_PAGE_TABS)[number];
 
 export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ExpensesPageContent />
+    </Suspense>
+  );
+}
+
+function ExpensesPageContent() {
   const [activeTab, setActiveTab] = useQueryTab(EXPENSES_PAGE_TABS, "expenses");
   const [period, setPeriod] = useState<PeriodFilter>("week");
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);

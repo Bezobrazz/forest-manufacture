@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import {
   getSupplierDeliveries,
   getSupplierAdvanceTransactions,
@@ -155,6 +155,14 @@ type SupplierTransactionItem =
   | { type: "advance"; data: SupplierAdvanceTransaction };
 
 export default function SupplierTransactionsPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <SupplierTransactionsPageContent />
+    </Suspense>
+  );
+}
+
+function SupplierTransactionsPageContent() {
   const [deliveries, setDeliveries] = useState<SupplierDelivery[]>([]);
   const [advanceTransactions, setAdvanceTransactions] = useState<
     SupplierAdvanceTransaction[]

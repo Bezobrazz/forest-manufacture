@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { getProducts, getProductCategories } from "@/app/actions";
 import { ProductForm } from "@/components/product-form";
 import {
@@ -29,6 +29,21 @@ import { useQueryTab } from "@/hooks/use-query-tab";
 const PRODUCTS_PAGE_TABS = ["products", "categories"] as const;
 
 export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-6 text-center">
+          <div className="inline-block animate-spin h-8 w-8 border-4 border-current border-t-transparent rounded-full mb-4" />
+          <p>Завантаження…</p>
+        </div>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
+  );
+}
+
+function ProductsPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [activeTab, setActiveTab] = useQueryTab(PRODUCTS_PAGE_TABS, "products");

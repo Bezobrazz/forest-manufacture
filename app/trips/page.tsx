@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import {
   createRawCostRepayment,
   deleteExpense,
@@ -147,6 +147,22 @@ function tripStatus(profit: number | null): { icon: string; label: string } {
 }
 
 export default function TripsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-6 space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
+      <TripsPageContent />
+    </Suspense>
+  );
+}
+
+function TripsPageContent() {
   const router = useRouter();
   const [trips, setTrips] = useState<TripListItem[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);

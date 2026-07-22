@@ -42,7 +42,7 @@ import {
 } from "@/lib/inventory/adjustmentDisplay";
 import { InventoryAdjustForm } from "@/components/inventory-adjust-form";
 import { InventoryShipForm } from "@/components/inventory-ship-form";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -397,6 +397,14 @@ function LoadingSkeleton() {
 }
 
 export default function InventoryPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <InventoryPageContent />
+    </Suspense>
+  );
+}
+
+function InventoryPageContent() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);

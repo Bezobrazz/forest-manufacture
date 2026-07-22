@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, Suspense } from "react";
 import { addDays, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { uk } from "date-fns/locale";
 import { Calendar as CalendarIcon, GripVertical, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
@@ -128,6 +128,14 @@ function LoadingSkeleton() {
 }
 
 export default function ShipmentsPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <ShipmentsPageContent />
+    </Suspense>
+  );
+}
+
+function ShipmentsPageContent() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [queue, setQueue] = useState<CrmOrderWithDetails[]>([]);
   const [avgDaily, setAvgDaily] = useState<Record<number, number>>({});

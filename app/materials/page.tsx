@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { getMaterials, getProductCategories } from "@/app/actions";
 import { MaterialForm } from "@/components/material-form";
 import {
@@ -26,6 +26,21 @@ import { useQueryTab } from "@/hooks/use-query-tab";
 const MATERIALS_PAGE_TABS = ["materials", "categories"] as const;
 
 export default function MaterialsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-6 text-center">
+          <div className="inline-block animate-spin h-8 w-8 border-4 border-current border-t-transparent rounded-full mb-4" />
+          <p>Завантаження…</p>
+        </div>
+      }
+    >
+      <MaterialsPageContent />
+    </Suspense>
+  );
+}
+
+function MaterialsPageContent() {
   const [materials, setMaterials] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [activeTab, setActiveTab] = useQueryTab(MATERIALS_PAGE_TABS, "materials");
