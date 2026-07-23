@@ -5,7 +5,7 @@ export type FooterNavLink = {
 
 export type FooterNavGroup = {
   label: string;
-  /** Базовий шлях сторінки (для сторінок без вкладок — єдине посилання) */
+  /** Базовий шлях сторінки; з items — посилання в заголовку групи */
   href?: string;
   /** Вкладки / підрозділи сторінки */
   items?: FooterNavLink[];
@@ -23,6 +23,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       { label: "Зміни", href: "/shifts" },
       {
         label: "Працівники",
+        href: "/employees",
         items: [
           { href: "/employees?tab=workers", label: "Працівники" },
           { href: "/employees?tab=managers", label: "Керівники" },
@@ -30,6 +31,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       },
       {
         label: "Продукція",
+        href: "/products",
         items: [
           { href: "/products?tab=products", label: "Продукція" },
           { href: "/products?tab=categories", label: "Категорії" },
@@ -37,6 +39,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       },
       {
         label: "Матеріали",
+        href: "/materials",
         items: [
           { href: "/materials?tab=materials", label: "Матеріали" },
           { href: "/materials?tab=categories", label: "Категорії" },
@@ -49,6 +52,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
     groups: [
       {
         label: "Склад",
+        href: "/inventory",
         items: [
           { href: "/inventory?tab=finished", label: "Готова продукція" },
           { href: "/inventory?tab=materials", label: "Виробничі матеріали" },
@@ -56,6 +60,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       },
       {
         label: "Відвантаження",
+        href: "/shipments",
         items: [
           { href: "/shipments?tab=month", label: "Місяць" },
           { href: "/shipments?tab=week", label: "Тиждень" },
@@ -65,6 +70,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       { label: "Задачі", href: "/tasks" },
       {
         label: "Витрати",
+        href: "/expenses",
         items: [
           { href: "/expenses?tab=expenses", label: "Витрати" },
           { href: "/expenses?tab=transfers", label: "Переміщення коштів" },
@@ -75,6 +81,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       { label: "Транспорт", href: "/vehicles" },
       {
         label: "Поїздки",
+        href: "/trips",
         items: [
           { href: "/trips?tab=commerce", label: "Комерція" },
           { href: "/trips?tab=raw", label: "Сировина" },
@@ -82,6 +89,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
       },
       {
         label: "Закупка",
+        href: "/transactions/suppliers",
         items: [
           {
             href: "/transactions/suppliers?tab=transactions",
@@ -100,6 +108,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
     groups: [
       {
         label: "Статистика",
+        href: "/statistics",
         items: [
           { href: "/statistics?tab=cost", label: "Собівартість" },
           { href: "/statistics", label: "Виробництво" },

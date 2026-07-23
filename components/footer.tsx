@@ -24,9 +24,18 @@ export function Footer() {
                   <li key={group.label}>
                     {group.items && group.items.length > 0 ? (
                       <div className="space-y-1.5">
-                        <p className="font-medium text-foreground">
-                          {group.label}
-                        </p>
+                        {group.href ? (
+                          <Link
+                            href={group.href}
+                            className="font-medium text-foreground hover:text-foreground/80 transition-colors"
+                          >
+                            {group.label}
+                          </Link>
+                        ) : (
+                          <p className="font-medium text-foreground">
+                            {group.label}
+                          </p>
+                        )}
                         <ul className="space-y-1.5 border-l pl-3">
                           {group.items.map((item) => (
                             <li key={item.href}>
