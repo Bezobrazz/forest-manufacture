@@ -102,6 +102,13 @@ type PeriodFilter = "all" | "year" | "month" | "week";
 type RepaymentPeriodFilter = "all" | "year";
 
 const TRIPS_PAGE_TABS = ["commerce", "raw"] as const;
+const DEFAULT_PERIOD_BY_TAB: Record<
+  (typeof TRIPS_PAGE_TABS)[number],
+  PeriodFilter
+> = {
+  commerce: "year",
+  raw: "month",
+};
 
 function formatDate(s: string) {
   const d = new Date(s + "Z");
@@ -167,7 +174,14 @@ function TripsPageContent() {
   const [trips, setTrips] = useState<TripListItem[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<PeriodFilter>("year");
+  const [tripsTab, setTripsTab] = useQueryTab(TRIPS_PAGE_TABS, "commerce");
+  const [periodByTab, setPeriodByTab] = useState<
+    Record<(typeof TRIPS_PAGE_TABS)[number], PeriodFilter>
+  >(DEFAULT_PERIOD_BY_TAB);
+  const period = periodByTab[tripsTab];
+  const setPeriod = (value: PeriodFilter) => {
+    setPeriodByTab((prev) => ({ ...prev, [tripsTab]: value }));
+  };
   const [selectedYear, setSelectedYear] = useState<number>(
     new Date().getFullYear(),
   );
@@ -196,7 +210,6 @@ function TripsPageContent() {
   const [repaymentPageSize, setRepaymentPageSize] = useState(5);
   const [repaymentPage, setRepaymentPage] = useState(1);
   const [exportingType, setExportingType] = useState<TripType | null>(null);
-  const [tripsTab, setTripsTab] = useQueryTab(TRIPS_PAGE_TABS, "commerce");
 
   const repaymentsSum = useMemo(
     () => repaymentsList.reduce((s, r) => s + r.amount, 0),
