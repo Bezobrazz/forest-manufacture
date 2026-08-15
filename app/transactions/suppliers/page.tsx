@@ -760,7 +760,7 @@ function SupplierTransactionsPageContent() {
               Додайте нову транзакцію закупівлі сировини у постачальника
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="delivery-date">Дата закупівлі</Label>
@@ -983,89 +983,6 @@ function SupplierTransactionsPageContent() {
                   isAdvanceMode && "opacity-50 pointer-events-none",
                 )}
               >
-                <Label htmlFor="material-product">Матеріали</Label>
-                <Popover
-                  open={materialProductPopoverOpen}
-                  onOpenChange={setMaterialProductPopoverOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="material-product"
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
-                      disabled={isAdvanceMode}
-                    >
-                      {selectedMaterialProductId
-                        ? productsMaterialsCategory.find(
-                            (p) => p.id === Number(selectedMaterialProductId),
-                          )?.name || "Оберіть матеріали"
-                        : "Оберіть матеріали"}
-                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0">
-                    <div className="p-2">
-                      <Input
-                        placeholder="Пошук матеріалів..."
-                        value={materialProductSearchQuery}
-                        onChange={(e) =>
-                          setMaterialProductSearchQuery(e.target.value)
-                        }
-                        className="mb-2"
-                      />
-                      <div className="max-h-[200px] overflow-auto">
-                        {filteredMaterialProducts.length === 0 ? (
-                          <div className="p-2 text-sm text-muted-foreground">
-                            Матеріалів не знайдено
-                          </div>
-                        ) : (
-                          filteredMaterialProducts.map((product) => (
-                            <div
-                              key={product.id}
-                              className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
-                              onClick={() => {
-                                setSelectedMaterialProductId(
-                                  product.id.toString(),
-                                );
-                                setMaterialProductSearchQuery("");
-                                setMaterialProductPopoverOpen(false);
-                              }}
-                            >
-                              <Package className="h-4 w-4 text-muted-foreground" />
-                              <div className="flex-1 font-medium">
-                                {product.name}
-                              </div>
-                              {selectedMaterialProductId ===
-                                product.id.toString() && (
-                                <span className="text-primary">✓</span>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                {selectedMaterialProductId && (
-                  <Input
-                    type="number"
-                    placeholder="Кількість матеріалів"
-                    value={materialQuantity}
-                    onChange={(e) => setMaterialQuantity(e.target.value)}
-                    min="0"
-                    step="0.01"
-                    className="mt-2"
-                  />
-                )}
-              </div>
-
-              <div
-                className={cn(
-                  "space-y-2",
-                  isAdvanceMode && "opacity-50 pointer-events-none",
-                )}
-              >
                 <Label htmlFor="quantity">Кількість *</Label>
                 <Input
                   id="quantity"
@@ -1097,43 +1014,152 @@ function SupplierTransactionsPageContent() {
                   disabled={isAdvanceMode}
                 />
               </div>
+            </div>
 
-              <div className="space-y-2 flex flex-col justify-end">
-                <Label>Аванс</Label>
-                <div className="flex items-center gap-3">
-                  <Switch
-                    id="advance-mode"
-                    checked={isAdvanceMode}
-                    onCheckedChange={handleAdvanceModeChange}
+            <div
+              className={cn(
+                "rounded-lg border bg-muted/40 p-4 space-y-4",
+                isAdvanceMode && "opacity-50 pointer-events-none",
+              )}
+            >
+              <div>
+                <p className="text-sm font-medium">Матеріали (передано)</p>
+                <p className="text-xs text-muted-foreground">
+                  Матеріал, який передається постачальнику разом із закупівлею
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="material-product">Матеріал</Label>
+                  <Popover
+                    open={materialProductPopoverOpen}
+                    onOpenChange={setMaterialProductPopoverOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="material-product"
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between bg-background"
+                        disabled={isAdvanceMode}
+                      >
+                        {selectedMaterialProductId
+                          ? productsMaterialsCategory.find(
+                              (p) =>
+                                p.id === Number(selectedMaterialProductId),
+                            )?.name || "Оберіть матеріал"
+                          : "Оберіть матеріал"}
+                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0">
+                      <div className="p-2">
+                        <Input
+                          placeholder="Пошук матеріалів..."
+                          value={materialProductSearchQuery}
+                          onChange={(e) =>
+                            setMaterialProductSearchQuery(e.target.value)
+                          }
+                          className="mb-2"
+                        />
+                        <div className="max-h-[200px] overflow-auto">
+                          {filteredMaterialProducts.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              Матеріалів не знайдено
+                            </div>
+                          ) : (
+                            filteredMaterialProducts.map((product) => (
+                              <div
+                                key={product.id}
+                                className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer rounded-sm"
+                                onClick={() => {
+                                  setSelectedMaterialProductId(
+                                    product.id.toString(),
+                                  );
+                                  setMaterialProductSearchQuery("");
+                                  setMaterialProductPopoverOpen(false);
+                                }}
+                              >
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                                <div className="flex-1 font-medium">
+                                  {product.name}
+                                </div>
+                                {selectedMaterialProductId ===
+                                  product.id.toString() && (
+                                  <span className="text-primary">✓</span>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="material-quantity">Кількість матеріалів</Label>
+                  <Input
+                    id="material-quantity"
+                    type="number"
+                    placeholder="0"
+                    value={materialQuantity}
+                    onChange={(e) => setMaterialQuantity(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    disabled={isAdvanceMode}
+                    className="bg-background"
                   />
-                  <span className="text-sm text-muted-foreground">
-                    {isAdvanceMode ? "Увімкнено" : "Вимкнено"}
-                  </span>
                 </div>
               </div>
+            </div>
 
-              <div
-                className={cn(
-                  "space-y-2",
-                  !isAdvanceMode && "opacity-50 pointer-events-none",
-                )}
-              >
-                <Label htmlFor="advance">Сума авансу (₴) *</Label>
-                <Input
-                  id="advance"
-                  type="number"
-                  placeholder="0.00"
-                  value={advanceAmount}
-                  onChange={(e) => setAdvanceAmount(e.target.value)}
-                  min="0"
-                  step="0.01"
-                  disabled={!isAdvanceMode}
-                />
+            <div className="rounded-lg border bg-muted/40 p-4 space-y-4">
+              <div>
+                <p className="text-sm font-medium">Аванс</p>
+                <p className="text-xs text-muted-foreground">
+                  Передоплата постачальнику замість закупівлі сировини
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="advance-mode">Режим авансу</Label>
+                  <div className="flex h-10 items-center gap-3 rounded-md border bg-background px-3">
+                    <Switch
+                      id="advance-mode"
+                      checked={isAdvanceMode}
+                      onCheckedChange={handleAdvanceModeChange}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {isAdvanceMode ? "Увімкнено" : "Вимкнено"}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "space-y-2",
+                    !isAdvanceMode && "opacity-50 pointer-events-none",
+                  )}
+                >
+                  <Label htmlFor="advance">Сума авансу (₴) *</Label>
+                  <Input
+                    id="advance"
+                    type="number"
+                    placeholder="0.00"
+                    value={advanceAmount}
+                    onChange={(e) => setAdvanceAmount(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    disabled={!isAdvanceMode}
+                    className="bg-background"
+                  />
+                </div>
               </div>
             </div>
 
             {!isAdvanceMode && purchaseTotal > 0 && (
-              <div className="mt-4 p-4 bg-muted rounded-lg">
+              <div className="p-4 bg-muted rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Сума закупівлі:</span>
                   <span className="text-lg font-bold">
@@ -1147,7 +1173,7 @@ function SupplierTransactionsPageContent() {
               </div>
             )}
 
-            <div className="mt-6">
+            <div>
               <Button
                 onClick={handleAddTransaction}
                 disabled={isSubmitting}
