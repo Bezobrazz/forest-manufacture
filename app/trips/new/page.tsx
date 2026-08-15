@@ -32,20 +32,14 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ArrowLeft, Calendar as CalendarIcon, MapPin } from "lucide-react";
+import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
-import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils";
-import { uk } from "date-fns/locale";
+import { dateToYYYYMMDD } from "@/lib/utils";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { TripDateField } from "@/components/trip-date-field";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -110,60 +104,6 @@ function Field({
       </Label>
       {children}
     </div>
-  );
-}
-
-function TripDateField({
-  id,
-  label,
-  date,
-  onSelect,
-  open,
-  onOpenChange,
-  disabled,
-}: {
-  id: string;
-  label: string;
-  date: Date;
-  onSelect: (date: Date) => void;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  disabled?: (date: Date) => boolean;
-}) {
-  return (
-    <Field id={id} label={label}>
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <Button
-            id={id}
-            type="button"
-            variant="outline"
-            className={cn(
-              "w-full min-w-0 justify-start text-left font-normal",
-              !date && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-            {formatDate(date.toISOString())}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <CalendarComponent
-            mode="single"
-            selected={date}
-            onSelect={(nextDate) => {
-              if (nextDate) {
-                onSelect(nextDate);
-                onOpenChange(false);
-              }
-            }}
-            disabled={disabled}
-            locale={uk}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </Field>
   );
 }
 

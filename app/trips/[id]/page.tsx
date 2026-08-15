@@ -36,7 +36,9 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/format";
+import { dateToYYYYMMDD } from "@/lib/utils";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { TripDateField } from "@/components/trip-date-field";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -57,6 +59,14 @@ function parseNum(value: string): number | null {
   if (v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseYmd(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return new Date();
+  }
+  return new Date(year, month - 1, day);
 }
 
 function getMileageFields(
@@ -153,6 +163,8 @@ export default function TripDetailPage() {
   const [name, setName] = useState("");
   const [tripStartDate, setTripStartDate] = useState("");
   const [tripEndDate, setTripEndDate] = useState("");
+  const [tripStartDatePopoverOpen, setTripStartDatePopoverOpen] = useState(false);
+  const [tripEndDatePopoverOpen, setTripEndDatePopoverOpen] = useState(false);
   const [tripType, setTripType] = useState<TripType>("raw");
   const [bagsCount, setBagsCount] = useState("");
   const [vehicleId, setVehicleId] = useState("");
@@ -421,24 +433,35 @@ export default function TripDetailPage() {
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field id="trip_start_date" label="Дата початку поїздки *">
-                <Input
-                  id="trip_start_date"
-                  type="date"
-                  value={tripStartDate}
-                  onChange={(e) => setTripStartDate(e.target.value)}
-                  required
-                />
-              </Field>
-              <Field id="trip_end_date" label="Дата кінця поїздки *">
-                <Input
-                  id="trip_end_date"
-                  type="date"
-                  value={tripEndDate}
-                  onChange={(e) => setTripEndDate(e.target.value)}
-                  required
-                />
-              </Field>
+              <TripDateField
+                id="trip_start_date"
+                label="Дата початку поїздки *"
+                date={parseYmd(tripStartDate)}
+                onSelect={(nextDate) => {
+                  const next = dateToYYYYMMDD(nextDate);
+                  setTripStartDate(next);
+                  if (tripEndDate && next > tripEndDate) {
+                    setTripEndDate(next);
+                  }
+                }}
+                open={tripStartDatePopoverOpen}
+                onOpenChange={setTripStartDatePopoverOpen}
+              />
+              <TripDateField
+                id="trip_end_date"
+                label="Дата кінця поїздки *"
+                date={parseYmd(tripEndDate)}
+                onSelect={(nextDate) => setTripEndDate(dateToYYYYMMDD(nextDate))}
+                open={tripEndDatePopoverOpen}
+                onOpenChange={setTripEndDatePopoverOpen}
+                disabled={(date) => {
+                  const start = parseYmd(tripStartDate);
+                  start.setHours(0, 0, 0, 0);
+                  const candidate = new Date(date);
+                  candidate.setHours(0, 0, 0, 0);
+                  return candidate < start;
+                }}
+              />
             </div>
             <Field id="trip_type" label="Тип поїздки *">
               <ToggleGroup
