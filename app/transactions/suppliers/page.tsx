@@ -105,6 +105,20 @@ import { useQueryTab } from "@/hooks/use-query-tab";
 
 const SUPPLIER_TRANSACTIONS_TABS = ["transactions", "packing-bags"] as const;
 
+const DEFAULT_RAW_MATERIAL_NAME = "Кора Сировина";
+const DEFAULT_PACKING_MATERIAL_NAME = "Мішок для сировини (білий)";
+
+const findProductIdByName = (
+  products: Product[],
+  name: string,
+): string => {
+  const normalized = name.toLowerCase().trim();
+  const found = products.find(
+    (product) => product.name.toLowerCase().trim() === normalized,
+  );
+  return found ? found.id.toString() : "";
+};
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
@@ -247,6 +261,19 @@ function SupplierTransactionsPageContent() {
       setProductsMaterialsCategory(productsMaterialsData);
       setWarehouses(warehousesData);
       setPackingBagPurchases(packingBagPurchasesData);
+
+      const rawMaterials = materialsData.filter(
+        (m) => m.category?.name === "Сировина",
+      );
+      setSelectedMaterialId(
+        findProductIdByName(rawMaterials, DEFAULT_RAW_MATERIAL_NAME),
+      );
+      setSelectedMaterialProductId(
+        findProductIdByName(
+          productsMaterialsData,
+          DEFAULT_PACKING_MATERIAL_NAME,
+        ),
+      );
 
       const mainWarehouse = warehousesData.find((w) =>
         w.name.toLowerCase().includes("main"),
@@ -516,6 +543,21 @@ function SupplierTransactionsPageContent() {
     return qty * price;
   }, [quantity, pricePerUnit]);
 
+  const applyPurchaseProductDefaults = () => {
+    const rawMaterials = materials.filter(
+      (m) => m.category?.name === "Сировина",
+    );
+    setSelectedMaterialId(
+      findProductIdByName(rawMaterials, DEFAULT_RAW_MATERIAL_NAME),
+    );
+    setSelectedMaterialProductId(
+      findProductIdByName(
+        productsMaterialsCategory,
+        DEFAULT_PACKING_MATERIAL_NAME,
+      ),
+    );
+  };
+
   const handleAdvanceModeChange = (checked: boolean) => {
     setIsAdvanceMode(checked);
     if (checked) {
@@ -528,6 +570,7 @@ function SupplierTransactionsPageContent() {
       setMaterialQuantity("");
     } else {
       setAdvanceAmount("");
+      applyPurchaseProductDefaults();
     }
   };
 
@@ -623,11 +666,10 @@ function SupplierTransactionsPageContent() {
 
         setSelectedSupplierId("");
         setSupplierSearchQuery("");
-        setSelectedMaterialId("");
+        applyPurchaseProductDefaults();
         setMaterialSearchQuery("");
         setQuantity("");
         setPricePerUnit("");
-        setSelectedMaterialProductId("");
         setMaterialProductSearchQuery("");
         setMaterialQuantity("");
         setDeliveryDate(new Date());
