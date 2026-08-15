@@ -678,7 +678,6 @@ function SupplierTransactionsPageContent() {
         setMaterialProductSearchQuery("");
         setMaterialQuantity("");
         setActualPaid("");
-        setDeliveryDate(new Date());
       } else {
         toast.error(result.error || "Помилка при створенні транзакції");
       }
