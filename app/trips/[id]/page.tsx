@@ -49,6 +49,9 @@ const tripTypeLabels: Record<TripType, string> = {
   commerce: "Комерція",
 };
 
+const DEFAULT_RAW_DRIVER_PAY_UAH = "1000";
+const DEFAULT_RAW_TRIP_NAME = "Доставка сировини";
+
 function parseNum(value: string): number | null {
   const v = value.trim();
   if (v === "") return null;
@@ -123,7 +126,8 @@ function fillStateFromTrip(
     driverPayMode:
       trip.driver_pay_mode === "per_day"
         ? "per_day"
-        : trip.driver_pay_mode === "percent_of_freight"
+        : trip.driver_pay_mode === "percent_of_freight" &&
+            trip.trip_type === "commerce"
           ? "percent_of_freight"
           : "per_trip",
     driverPayUah: trip.driver_pay_uah != null ? String(trip.driver_pay_uah) : "0",
@@ -225,7 +229,7 @@ export default function TripDetailPage() {
       depreciation_uah_per_km: parseNum(depreciation),
       days_count: parseNum(daysCount) ?? 1,
       daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
-      freight_uah: parseNum(freightUah) ?? 0,
+      freight_uah: tripType === "raw" ? 0 : parseNum(freightUah) ?? 0,
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
@@ -264,7 +268,7 @@ export default function TripDetailPage() {
       depreciation_uah_per_km: parseNum(depreciation),
       days_count: parseNum(daysCount) ?? 1,
       daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
-      freight_uah: parseNum(freightUah) ?? 0,
+      freight_uah: tripType === "raw" ? 0 : parseNum(freightUah) ?? 0,
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
@@ -407,7 +411,11 @@ export default function TripDetailPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Наприклад: Рейс Київ — Львів"
+                  placeholder={
+                    tripType === "raw"
+                      ? DEFAULT_RAW_TRIP_NAME
+                      : "Наприклад: Рейс Київ — Львів"
+                  }
                   required
                 />
               </Field>
@@ -436,7 +444,27 @@ export default function TripDetailPage() {
               <ToggleGroup
                 type="single"
                 value={tripType}
-                onValueChange={(v) => v && setTripType(v as TripType)}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  const next = v as TripType;
+                  setTripType(next);
+                  if (next === "raw") {
+                    setFreightUah("0");
+                    if (driverPayMode === "percent_of_freight") {
+                      setDriverPayMode("per_trip");
+                    }
+                    if (driverPayUah === "" || driverPayUah === "0") {
+                      setDriverPayUah(DEFAULT_RAW_DRIVER_PAY_UAH);
+                    }
+                    if (name.trim() === "") {
+                      setName(DEFAULT_RAW_TRIP_NAME);
+                    }
+                    return;
+                  }
+                  if (name.trim() === DEFAULT_RAW_TRIP_NAME) {
+                    setName("");
+                  }
+                }}
                 className="justify-start"
               >
                 <ToggleGroupItem value="raw" aria-label="Сировина">
@@ -576,9 +604,15 @@ export default function TripDetailPage() {
 
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-                Дні, податки та дохід
+                {tripType === "raw" ? "Дні та податки" : "Дні, податки та дохід"}
               </p>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div
+                className={
+                  tripType === "raw"
+                    ? "grid gap-4 sm:grid-cols-2"
+                    : "grid gap-4 sm:grid-cols-3"
+                }
+              >
                 <Field id="days_count" label="Кількість днів">
                   <Input
                     id="days_count"
@@ -600,15 +634,17 @@ export default function TripDetailPage() {
                     onChange={(e) => setDailyTaxes(parseNumericInput(e.target.value))}
                   />
                 </Field>
-                <Field id="freight_uah" label="Фрахт — дохід (грн)">
-                  <Input
-                    id="freight_uah"
-                    type="text"
-                    inputMode="decimal"
-                    value={freightUah}
-                    onChange={(e) => setFreightUah(parseNumericInput(e.target.value))}
-                  />
-                </Field>
+                {tripType !== "raw" && (
+                  <Field id="freight_uah" label="Фрахт — дохід (грн)">
+                    <Input
+                      id="freight_uah"
+                      type="text"
+                      inputMode="decimal"
+                      value={freightUah}
+                      onChange={(e) => setFreightUah(parseNumericInput(e.target.value))}
+                    />
+                  </Field>
+                )}
               </div>
             </div>
 
@@ -630,7 +666,11 @@ export default function TripDetailPage() {
                     <SelectContent>
                       <SelectItem value="per_trip">{driverPayModeLabels.per_trip}</SelectItem>
                       <SelectItem value="per_day">{driverPayModeLabels.per_day}</SelectItem>
-                      <SelectItem value="percent_of_freight">{driverPayModeLabels.percent_of_freight}</SelectItem>
+                      {tripType !== "raw" && (
+                        <SelectItem value="percent_of_freight">
+                          {driverPayModeLabels.percent_of_freight}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </Field>

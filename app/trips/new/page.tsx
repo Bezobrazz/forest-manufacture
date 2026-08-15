@@ -58,6 +58,9 @@ const tripTypeLabels: Record<TripType, string> = {
   commerce: "Комерція",
 };
 
+const DEFAULT_RAW_DRIVER_PAY_UAH = "1000";
+const DEFAULT_RAW_TRIP_NAME = "Доставка сировини";
+
 function parseNum(value: string): number | null {
   const v = value.trim();
   if (v === "") return null;
@@ -170,7 +173,7 @@ export default function NewTripPage() {
   const [vehiclesLoading, setVehiclesLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
 
-  const [name, setName] = useState("");
+  const [name, setName] = useState(DEFAULT_RAW_TRIP_NAME);
   const [tripStartDate, setTripStartDate] = useState(() => new Date());
   const [tripEndDate, setTripEndDate] = useState(() => new Date());
   const [tripStartDatePopoverOpen, setTripStartDatePopoverOpen] = useState(false);
@@ -189,7 +192,7 @@ export default function NewTripPage() {
   const [dailyTaxes, setDailyTaxes] = useState("150");
   const [freightUah, setFreightUah] = useState("0");
   const [driverPayMode, setDriverPayMode] = useState<DriverPayMode>("per_trip");
-  const [driverPayUah, setDriverPayUah] = useState("0");
+  const [driverPayUah, setDriverPayUah] = useState(DEFAULT_RAW_DRIVER_PAY_UAH);
   const [driverPayUahPerDay, setDriverPayUahPerDay] = useState("0");
   const [driverPayPercentOfFreight, setDriverPayPercentOfFreight] = useState("0");
   const [extraCostsUah, setExtraCostsUah] = useState("0");
@@ -253,7 +256,7 @@ export default function NewTripPage() {
       depreciation_uah_per_km: parseNum(depreciation),
       days_count: parseNum(daysCount) ?? 1,
       daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
-      freight_uah: parseNum(freightUah) ?? 0,
+      freight_uah: tripType === "raw" ? 0 : parseNum(freightUah) ?? 0,
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
@@ -309,7 +312,7 @@ export default function NewTripPage() {
       depreciation_uah_per_km: parseNum(depreciation),
       days_count: parseNum(daysCount) ?? 1,
       daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
-      freight_uah: parseNum(freightUah) ?? 0,
+      freight_uah: tripType === "raw" ? 0 : parseNum(freightUah) ?? 0,
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
@@ -348,7 +351,7 @@ export default function NewTripPage() {
       depreciation_uah_per_km: parseNum(depreciation),
       days_count: parseNum(daysCount) ?? 1,
       daily_taxes_uah: parseNum(dailyTaxes) ?? 150,
-      freight_uah: parseNum(freightUah) ?? 0,
+      freight_uah: tripType === "raw" ? 0 : parseNum(freightUah) ?? 0,
       driver_pay_mode: driverPayMode,
       driver_pay_uah: driverPayMode === "per_trip" ? parseNum(driverPayUah) ?? 0 : 0,
       driver_pay_uah_per_day: driverPayMode === "per_day" ? parseNum(driverPayUahPerDay) ?? 0 : 0,
@@ -501,7 +504,11 @@ export default function NewTripPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Наприклад: Рейс Київ — Львів"
+                  placeholder={
+                    tripType === "raw"
+                      ? DEFAULT_RAW_TRIP_NAME
+                      : "Наприклад: Рейс Київ — Львів"
+                  }
                   required
                 />
               </Field>
@@ -540,7 +547,27 @@ export default function NewTripPage() {
               <ToggleGroup
                 type="single"
                 value={tripType}
-                onValueChange={(v) => v && setTripType(v as TripType)}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  const next = v as TripType;
+                  setTripType(next);
+                  if (next === "raw") {
+                    setFreightUah("0");
+                    if (driverPayMode === "percent_of_freight") {
+                      setDriverPayMode("per_trip");
+                    }
+                    if (driverPayUah === "" || driverPayUah === "0") {
+                      setDriverPayUah(DEFAULT_RAW_DRIVER_PAY_UAH);
+                    }
+                    if (name.trim() === "") {
+                      setName(DEFAULT_RAW_TRIP_NAME);
+                    }
+                    return;
+                  }
+                  if (name.trim() === DEFAULT_RAW_TRIP_NAME) {
+                    setName("");
+                  }
+                }}
                 className="justify-start"
               >
                 <ToggleGroupItem value="raw" aria-label="Сировина">
@@ -693,9 +720,15 @@ export default function NewTripPage() {
             {/* Дні, податки, фрахт */}
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-                Дні, податки та дохід
+                {tripType === "raw" ? "Дні та податки" : "Дні, податки та дохід"}
               </p>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div
+                className={
+                  tripType === "raw"
+                    ? "grid gap-4 sm:grid-cols-2"
+                    : "grid gap-4 sm:grid-cols-3"
+                }
+              >
                 <Field id="days_count" label="Кількість днів">
                   <Input
                     id="days_count"
@@ -719,16 +752,18 @@ export default function NewTripPage() {
                     placeholder="150"
                   />
                 </Field>
-                <Field id="freight_uah" label="Фрахт — дохід (грн)">
-                  <Input
-                    id="freight_uah"
-                    type="text"
-                    inputMode="decimal"
-                    value={freightUah}
-                    onChange={(e) => setFreightUah(parseNumericInput(e.target.value))}
-                    placeholder="0"
-                  />
-                </Field>
+                {tripType !== "raw" && (
+                  <Field id="freight_uah" label="Фрахт — дохід (грн)">
+                    <Input
+                      id="freight_uah"
+                      type="text"
+                      inputMode="decimal"
+                      value={freightUah}
+                      onChange={(e) => setFreightUah(parseNumericInput(e.target.value))}
+                      placeholder="0"
+                    />
+                  </Field>
+                )}
               </div>
             </div>
 
@@ -751,7 +786,11 @@ export default function NewTripPage() {
                     <SelectContent>
                       <SelectItem value="per_trip">{driverPayModeLabels.per_trip}</SelectItem>
                       <SelectItem value="per_day">{driverPayModeLabels.per_day}</SelectItem>
-                      <SelectItem value="percent_of_freight">{driverPayModeLabels.percent_of_freight}</SelectItem>
+                      {tripType !== "raw" && (
+                        <SelectItem value="percent_of_freight">
+                          {driverPayModeLabels.percent_of_freight}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </Field>
@@ -763,7 +802,7 @@ export default function NewTripPage() {
                       inputMode="decimal"
                       value={driverPayUah}
                       onChange={(e) => setDriverPayUah(parseNumericInput(e.target.value))}
-                      placeholder="0"
+                      placeholder={tripType === "raw" ? DEFAULT_RAW_DRIVER_PAY_UAH : "0"}
                     />
                   </Field>
                 ) : driverPayMode === "percent_of_freight" ? (
