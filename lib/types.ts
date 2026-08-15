@@ -113,6 +113,7 @@ export interface SupplierDelivery {
   warehouse_id: number;
   quantity: number;
   price_per_unit: number | null;
+  actual_paid?: number | null;
   material_product_id?: number | null;
   material_quantity?: number | null;
   advance_used?: number;

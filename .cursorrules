@@ -150,3 +150,15 @@ function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel
 3. `href` має відкривати саме цю вкладку (напр. `/expenses?tab=debts`).
 
 Не залишати нову вкладку лише в UI сторінки без пункту у футері.
+
+## 16. Supabase Migrations (remote DB)
+
+Коли фіча потребує зміни схеми БД:
+
+1. Створити SQL-файл у `supabase/migrations/` (timestamp_name.sql).
+2. **Застосувати міграцію до remote Supabase самостійно** через `POSTGRES_URL_NON_POOLING` (або `POSTGRES_URL`) з `.env.local`, без очікування окремого «застосуй міграцію» від користувача.
+3. Не чіпати дані (DELETE/TRUNCATE/масовий UPDATE) без явного запиту; дозволені лише schema changes з файлів міграцій (`ALTER` / `CREATE` / `COMMENT` тощо).
+4. Після застосування перевірити, що колонка/таблиця доступна (напр. REST select або `information_schema`).
+5. Якщо Auto-review просить Approve на schema write — це очікувано; після схвалення користувачем продовжити застосування.
+
+Переважний спосіб: виконати SQL з міграційного файлу через `pg` (з `ssl: { rejectUnauthorized: false }` за потреби) або `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"` лише коли історія міграцій узгоджена; для однієї нової колонки — точковий `ALTER` з файлу міграції безпечніший за повний push усіх pending.

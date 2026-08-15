@@ -64,6 +64,10 @@ export function EditSupplierDeliveryDialog({
             Math.round(Number(delivery.price_per_unit) * 100) / 100
           ).toString()
         : "",
+    actual_paid:
+      delivery.actual_paid != null
+        ? (Math.round(Number(delivery.actual_paid) * 100) / 100).toString()
+        : "",
     material_product_id: delivery.material_product_id?.toString() ?? "",
     material_quantity:
       delivery.material_quantity != null && Number(delivery.material_quantity) > 0
@@ -133,6 +137,10 @@ export function EditSupplierDeliveryDialog({
               Math.round(Number(delivery.price_per_unit) * 100) / 100
             ).toString()
           : "",
+      actual_paid:
+        delivery.actual_paid != null
+          ? (Math.round(Number(delivery.actual_paid) * 100) / 100).toString()
+          : "",
       material_product_id: delivery.material_product_id?.toString() ?? "",
       material_quantity:
         delivery.material_quantity != null && Number(delivery.material_quantity) > 0
@@ -190,6 +198,7 @@ export function EditSupplierDeliveryDialog({
       if (formData.price_per_unit.trim() !== "") {
         submitFormData.append("price_per_unit", formData.price_per_unit);
       }
+      submitFormData.append("actual_paid", formData.actual_paid);
       submitFormData.append(
         "delivery_date",
         dateToYYYYMMDD(formData.delivery_date)
@@ -554,6 +563,24 @@ export function EditSupplierDeliveryDialog({
                   min="0"
                   step="0.01"
                 />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="edit-actual-paid">Фактично сплачено (₴)</Label>
+                <Input
+                  id="edit-actual-paid"
+                  name="actual_paid"
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.actual_paid}
+                  onChange={handleChange}
+                  min="0"
+                  step="0.01"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Якщо заповнено — саме ця сума йде у витрати CRM замість суми
+                  закупівлі
+                </p>
               </div>
 
               <div className="space-y-2">

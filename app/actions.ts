@@ -17,6 +17,10 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
+import {
+  parseOptionalAmount,
+  resolveSupplierDeliveryPayableAmount,
+} from "@/lib/suppliers/delivery-payable-amount";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
@@ -3114,6 +3118,7 @@ export async function createSupplierDelivery(formData: FormData) {
       String(materialQuantityRaw).trim() !== ""
         ? Number(materialQuantityRaw)
         : null;
+    const actualPaid = parseOptionalAmount(formData.get("actual_paid"));
 
     if (!supplierId || !productId || !warehouseId || !quantity) {
       return {
@@ -3145,6 +3150,7 @@ export async function createSupplierDelivery(formData: FormData) {
       warehouse_id: warehouseId,
       quantity: quantity,
       price_per_unit: pricePerUnit,
+      actual_paid: actualPaid,
       created_at: new Date().toISOString(),
     };
     if (deliveryDate) {
@@ -3215,10 +3221,11 @@ export async function createSupplierDelivery(formData: FormData) {
       }
     }
 
-    const purchaseAmount =
-      pricePerUnit != null
-        ? Math.round(Number(quantity) * pricePerUnit * 100) / 100
-        : 0;
+    const purchaseAmount = resolveSupplierDeliveryPayableAmount({
+      quantity: Number(quantity),
+      pricePerUnit,
+      actualPaid,
+    });
     if (purchaseAmount > 0 && data?.id) {
       const deliveryYmd = supplierDeliveryYmdFromFormOrRow(
         deliveryDate,
@@ -3635,6 +3642,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       String(materialQuantityRaw).trim() !== ""
         ? Math.round(Number(materialQuantityRaw) * 100) / 100
         : null;
+    const actualPaid = parseOptionalAmount(formData.get("actual_paid"));
 
     if (!deliveryId || !supplierId || !productId || !warehouseId || !quantity) {
       return {
@@ -3685,6 +3693,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       warehouse_id: warehouseId,
       quantity: quantity,
       price_per_unit: resolvedPricePerUnit,
+      actual_paid: actualPaid,
       material_product_id: materialProductId ?? null,
       material_quantity: materialQuantity ?? null,
     };
@@ -3886,10 +3895,11 @@ export async function updateSupplierDelivery(formData: FormData) {
       }
     }
 
-    const newAmount =
-      resolvedPricePerUnit != null
-        ? Math.round(Number(quantity) * resolvedPricePerUnit * 100) / 100
-        : 0;
+    const newAmount = resolveSupplierDeliveryPayableAmount({
+      quantity: Number(quantity),
+      pricePerUnit: resolvedPricePerUnit,
+      actualPaid,
+    });
     const oldAdvanceUsed = Number((currentDelivery as { advance_used?: number }).advance_used ?? 0);
     const oldSupplierIdFromRow = Number(
       (currentDelivery as { supplier_id: number }).supplier_id,
@@ -3950,10 +3960,7 @@ export async function updateSupplierDelivery(formData: FormData) {
       }
     }
 
-    const newAmountForCrm =
-      resolvedPricePerUnit != null
-        ? Math.round(Number(quantity) * resolvedPricePerUnit * 100) / 100
-        : 0;
+    const newAmountForCrm = newAmount;
 
     if (
       data?.id &&

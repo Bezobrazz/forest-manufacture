@@ -230,6 +230,7 @@ function SupplierTransactionsPageContent() {
   const [addSupplierDialogOpen, setAddSupplierDialogOpen] = useState(false);
   const [isAdvanceMode, setIsAdvanceMode] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState<string>("");
+  const [actualPaid, setActualPaid] = useState<string>("");
 
   const loadData = async () => {
     setIsLoading(true);
@@ -568,6 +569,7 @@ function SupplierTransactionsPageContent() {
       setSelectedMaterialProductId("");
       setMaterialProductSearchQuery("");
       setMaterialQuantity("");
+      setActualPaid("");
     } else {
       setAdvanceAmount("");
       applyPurchaseProductDefaults();
@@ -647,6 +649,9 @@ function SupplierTransactionsPageContent() {
       if (pricePerUnit) {
         formData.append("price_per_unit", pricePerUnit);
       }
+      if (actualPaid.trim() !== "") {
+        formData.append("actual_paid", actualPaid);
+      }
       if (deliveryDate) {
         formData.append("delivery_date", dateToYYYYMMDD(deliveryDate));
       }
@@ -672,6 +677,7 @@ function SupplierTransactionsPageContent() {
         setPricePerUnit("");
         setMaterialProductSearchQuery("");
         setMaterialQuantity("");
+        setActualPaid("");
         setDeliveryDate(new Date());
       } else {
         toast.error(result.error || "Помилка при створенні транзакції");
@@ -1159,16 +1165,37 @@ function SupplierTransactionsPageContent() {
             </div>
 
             {!isAdvanceMode && purchaseTotal > 0 && (
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Сума закупівлі:</span>
-                  <span className="text-lg font-bold">
-                    {formatNumber(purchaseTotal, {
+              <div className="space-y-3">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Сума закупівлі:</span>
+                    <span className="text-lg font-bold">
+                      {formatNumber(purchaseTotal, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      ₴
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="actual-paid">Фактично сплачено (₴)</Label>
+                  <Input
+                    id="actual-paid"
+                    type="number"
+                    placeholder={formatNumber(purchaseTotal, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
-                    })}{" "}
-                    ₴
-                  </span>
+                    })}
+                    value={actualPaid}
+                    onChange={(e) => setActualPaid(e.target.value)}
+                    min="0"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Якщо заповнено — саме ця сума йде у витрати CRM замість суми
+                    закупівлі
+                  </p>
                 </div>
               </div>
             )}

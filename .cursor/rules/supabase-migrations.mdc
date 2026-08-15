@@ -1,0 +1,14 @@
+---
+description: Apply Supabase schema migrations to remote DB when features need them
+alwaysApply: true
+---
+
+# Supabase remote migrations
+
+When a feature needs a DB schema change:
+
+1. Add SQL under `supabase/migrations/`.
+2. Apply it to remote Supabase using `POSTGRES_URL_NON_POOLING` (or `POSTGRES_URL`) from `.env.local` — do not wait for a separate “apply migration” ask.
+3. Schema-only from migration files (`CREATE` / `ALTER` / `COMMENT`). No destructive data ops unless the user explicitly asks.
+4. Prefer running the new migration SQL directly (safer than `db push` of all pending migrations).
+5. If Auto-review requests Approve for the DB write, continue after the user approves.
