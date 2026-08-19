@@ -61,6 +61,7 @@ import {
 } from "@/components/hourly-wage-form";
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { LeaveActiveShiftGuard } from "@/components/leave-active-shift-guard";
 import { getUserWithRole } from "@/lib/auth/get-user-role";
 import type { ShiftWithDetails } from "@/lib/types";
 
@@ -175,6 +176,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   };
 
   return (
+    <LeaveActiveShiftGuard enabled={shift.status === "active"}>
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between gap-4">
         <PreviousPageButton fallbackHref="/" />
@@ -607,5 +609,6 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
         </div>
       </div>
     </div>
+    </LeaveActiveShiftGuard>
   );
 }
