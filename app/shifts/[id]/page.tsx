@@ -45,6 +45,7 @@ import {
   Plus,
   ShoppingCart,
   Truck,
+  User,
   Users,
   Package,
   Boxes,
