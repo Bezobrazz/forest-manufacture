@@ -3,13 +3,12 @@
 import { useState } from "react"
 import { useFormStatus } from "react-dom"
 import { useRouter } from "next/navigation"
-import { createShift, createShiftWithEmployees } from "@/app/actions"
+import { createShift } from "@/app/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import {
@@ -17,13 +16,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { ShiftEmployeeCountField } from "@/components/shift-employee-count-field"
+import { parseShiftEmployeeCount } from "@/lib/shifts/employee-count"
 import { cn, dateToYYYYMMDD, formatDate } from "@/lib/utils"
 import { uk } from "date-fns/locale"
-import type { Employee } from "@/lib/types"
-
-interface CreateShiftFormProps {
-  employees: Employee[]
-}
 
 function CreateShiftFormActions({ onCancel }: { onCancel: () => void }) {
   const { pending } = useFormStatus()
@@ -47,31 +43,20 @@ function CreateShiftFormActions({ onCancel }: { onCancel: () => void }) {
   )
 }
 
-export function CreateShiftForm({ employees }: CreateShiftFormProps) {
+export function CreateShiftForm() {
   const router = useRouter()
-  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
   const [shiftDate, setShiftDate] = useState<Date>(new Date())
   const [shiftDatePopoverOpen, setShiftDatePopoverOpen] = useState(false)
-
-  function handleEmployeeToggle(employeeId: number) {
-    setSelectedEmployees((prev) => {
-      if (prev.includes(employeeId)) {
-        return prev.filter((id) => id !== employeeId)
-      } else {
-        return [...prev, employeeId]
-      }
-    })
-  }
+  const [employeeCount, setEmployeeCount] = useState<number | null>(null)
 
   async function handleSubmit(formData: FormData) {
-    try {
-      let result
+    if (!parseShiftEmployeeCount(employeeCount)) {
+      toast.error("Оберіть кількість працівників")
+      return
+    }
 
-      if (selectedEmployees.length > 0) {
-        result = await createShiftWithEmployees(formData, selectedEmployees)
-      } else {
-        result = await createShift(formData)
-      }
+    try {
+      const result = await createShift(formData)
 
       if (result.success) {
         toast.success("Зміну створено", {
@@ -98,6 +83,9 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   return (
     <form action={handleSubmit} className="min-w-0">
       <input type="hidden" name="shift_date" value={dateToYYYYMMDD(shiftDate)} />
+      {employeeCount ? (
+        <input type="hidden" name="employee_count" value={String(employeeCount)} />
+      ) : null}
 
       <Card className="mb-6">
         <CardHeader>
@@ -155,45 +143,13 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Працівники на зміні</CardTitle>
-          <CardDescription>Виберіть працівників, які будуть працювати на цій зміні</CardDescription>
+          <CardDescription>Оберіть кількість працівників на цій зміні</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
-          {employees.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Немає доступних працівників</div>
-          ) : (
-            <div className="flex flex-col gap-2 md:grid md:grid-cols-2">
-              {employees.map((employee) => {
-                const isSelected = selectedEmployees.includes(employee.id)
-                return (
-                  <label
-                    key={employee.id}
-                    htmlFor={`employee-${employee.id}`}
-                    className={cn(
-                      "flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition-colors active:bg-accent md:min-h-12",
-                      isSelected
-                        ? "border-primary bg-primary/5"
-                        : "border-input hover:bg-muted/50"
-                    )}
-                  >
-                    <Checkbox
-                      id={`employee-${employee.id}`}
-                      checked={isSelected}
-                      onCheckedChange={() => handleEmployeeToggle(employee.id)}
-                      className="h-5 w-5 shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 text-base leading-snug">
-                      {employee.name}
-                      {employee.position && (
-                        <span className="mt-0.5 block text-sm text-muted-foreground md:inline md:mt-0 md:ml-1">
-                          {employee.position}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          )}
+          <ShiftEmployeeCountField
+            value={employeeCount}
+            onChange={setEmployeeCount}
+          />
         </CardContent>
       </Card>
 

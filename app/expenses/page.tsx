@@ -31,6 +31,7 @@ import {
   formatNumberWithUnit,
   dateToYYYYMMDD,
 } from "@/lib/utils";
+import { getShiftEmployeeCount } from "@/lib/shifts/employee-count";
 import { DatabaseError } from "@/components/database-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -941,10 +942,10 @@ function ExpensesPageContent() {
               >
                 Зміна {formatDate(item.shift.shift_date)}
               </Link>
-              {item.shift.employees?.length > 0 && (
+              {getShiftEmployeeCount(item.shift) > 0 && (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {item.shift.employees.length} прац.
+                  · {getShiftEmployeeCount(item.shift)} прац.
                 </span>
               )}
             </p>
@@ -1037,10 +1038,10 @@ function ExpensesPageContent() {
             >
               Зміна {formatDate(item.shift.shift_date)}
             </Link>
-            {item.shift.employees?.length > 0 && (
+            {getShiftEmployeeCount(item.shift) > 0 && (
               <span className="text-muted-foreground">
                 {" "}
-                · {item.shift.employees.length} прац.
+                · {getShiftEmployeeCount(item.shift)} прац.
               </span>
             )}
           </p>

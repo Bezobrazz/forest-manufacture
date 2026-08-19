@@ -25,6 +25,7 @@ import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
+import { parseShiftEmployeeCount } from "@/lib/shifts/employee-count";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
 
@@ -1277,15 +1278,21 @@ export async function createShift(formData: FormData) {
 
     const shift_date = formData.get("shift_date");
     const notes = formData.get("notes");
+    const employeeCount = parseShiftEmployeeCount(formData.get("employee_count"));
 
     if (!shift_date) {
       return { success: false, error: "Необхідно вказати дату зміни" };
+    }
+
+    if (!employeeCount) {
+      return { success: false, error: "Оберіть кількість працівників від 1 до 5" };
     }
 
     const insertData = {
       shift_date: shift_date as string,
       notes: (notes as string) || null,
       opened_at: shiftDateToOpenedAt(shift_date as string),
+      employee_count: employeeCount,
     };
 
     try {
@@ -1346,6 +1353,7 @@ export async function createShiftWithEmployees(
         shift_date: shift_date as string,
         notes: (notes as string) || null,
         opened_at: shiftDateToOpenedAt(shift_date as string),
+        employee_count: parseShiftEmployeeCount(employeeIds.length) ?? 5,
       };
 
       // Створюємо зміну
@@ -1451,6 +1459,64 @@ export async function updateShiftOpenedAt(formData: FormData) {
     return {
       success: false,
       error: "Сталася непередбачена помилка при оновленні дати відкриття",
+    };
+  }
+}
+
+export async function updateShiftEmployeeCount(
+  shiftId: number,
+  employeeCount: number
+) {
+  try {
+    const parsedCount = parseShiftEmployeeCount(employeeCount);
+    if (!shiftId || !parsedCount) {
+      return {
+        success: false,
+        error: "Оберіть кількість працівників від 1 до 5",
+      };
+    }
+
+    const supabase = await createServerClient();
+    const { data: shift, error: shiftError } = await supabase
+      .from("shifts")
+      .select("id, status")
+      .eq("id", shiftId)
+      .maybeSingle();
+
+    if (shiftError) {
+      return { success: false, error: shiftError.message };
+    }
+    if (!shift) {
+      return { success: false, error: "Зміну не знайдено" };
+    }
+    if (shift.status !== "active") {
+      return {
+        success: false,
+        error: "Кількість працівників можна змінювати лише для активної зміни",
+      };
+    }
+
+    const { error } = await supabase
+      .from("shifts")
+      .update({ employee_count: parsedCount })
+      .eq("id", shiftId);
+
+    if (error) {
+      console.error("Error updating shift employee_count:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidateTag("shifts");
+    revalidatePath(`/shifts/${shiftId}`);
+    revalidatePath("/shifts");
+    revalidatePath("/");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error in updateShiftEmployeeCount:", error);
+    return {
+      success: false,
+      error: "Сталася непередбачена помилка при оновленні кількості працівників",
     };
   }
 }

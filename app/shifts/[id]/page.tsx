@@ -6,13 +6,11 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  getEmployees,
   getHourlyWageExpensesForShift,
   getProducts,
   getShiftDetails,
   updateShiftProductionReward,
 } from "@/app/actions";
-import { AddEmployeeToShift } from "@/components/add-employee-to-shift";
 import { CompleteShiftButton } from "@/components/complete-shift-button";
 import { DeleteShiftButton } from "@/components/delete-shift-button";
 import { Badge } from "@/components/ui/badge";
@@ -47,12 +45,10 @@ import {
   Plus,
   ShoppingCart,
   Truck,
-  User,
   Users,
   Package,
   Boxes,
 } from "lucide-react";
-import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
 import {
   HourlyWageForm,
@@ -62,8 +58,9 @@ import {
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { LeaveActiveShiftGuard } from "@/components/leave-active-shift-guard";
+import { ShiftEmployeeCountEditor } from "@/components/shift-employee-count-editor";
 import { getUserWithRole } from "@/lib/auth/get-user-role";
-import type { ShiftWithDetails } from "@/lib/types";
+import { getShiftEmployeeCount, shiftEmployeeCountLabel } from "@/lib/shifts/employee-count";
 
 interface ShiftPageProps {
   params: Promise<{
@@ -97,19 +94,13 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
       status: shift.status,
       created_at: shift.created_at,
       completed_at: shift.completed_at,
-      employees_count: shift.employees?.length || 0,
+      employees_count: getShiftEmployeeCount(shift),
       production_count: shift.production?.length || 0,
     })
   );
 
-  const employees = (await getEmployees()).filter(
-    (employee) => !employee.is_manager,
-  );
   const products = await getProducts();
   const hourlyWageExpenses = await getHourlyWageExpensesForShift(shift.id);
-
-  // Отримуємо ID працівників, які вже додані до зміни
-  const existingEmployeeIds = shift.employees.map((e) => e.employee_id);
 
   // Підрахунок загальної кількості виробленої продукції по категоріям
   const productionByCategory: Record<string, number> = {};
@@ -169,7 +160,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   // Сортуємо за загальною сумою винагороди (від більшої до меншої)
   wagesByProduct.sort((a, b) => b.total - a.total);
 
-  const employeeCount = shift.employees.length;
+  const employeeCount = getShiftEmployeeCount(shift);
   const handleUpdateShiftProductionReward = async (formData: FormData) => {
     "use server";
     await updateShiftProductionReward(formData);
@@ -554,55 +545,21 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">Працівники на зміні</CardTitle>
               <CardDescription>
-                Працівники, які працюють на цій зміні
+                Кількість працівників для розрахунку погодинної роботи
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {shift.employees.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  Немає працівників на цій зміні
-                </div>
+            <CardContent>
+              {shift.status === "active" ? (
+                <ShiftEmployeeCountEditor
+                  shiftId={shift.id}
+                  value={employeeCount}
+                />
               ) : (
-                <div className="space-y-2">
-                  {shift.employees.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between py-2 border-b last:border-0"
-                    >
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span>{item.employee.name}</span>
-                        {item.employee.position && (
-                          <span className="text-sm text-muted-foreground">
-                            ({item.employee.position})
-                          </span>
-                        )}
-                      </div>
-                      {shift.status === "active" && (
-                        <RemoveEmployeeButton
-                          shiftId={shift.id}
-                          employeeId={item.employee_id}
-                        />
-                      )}
-                    </div>
-                  ))}
+                <div className="text-base">
+                  {employeeCount > 0
+                    ? shiftEmployeeCountLabel(employeeCount)
+                    : "Кількість працівників не вказана"}
                 </div>
-              )}
-
-              {shift.status === "active" && (
-                <>
-                  <Separator />
-                  <div className="pt-2">
-                    <h4 className="text-sm font-medium mb-2">
-                      Додати працівника
-                    </h4>
-                    <AddEmployeeToShift
-                      shift={shift}
-                      employees={employees}
-                      existingEmployeeIds={existingEmployeeIds}
-                    />
-                  </div>
-                </>
               )}
             </CardContent>
           </Card>
