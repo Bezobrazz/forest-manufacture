@@ -52,8 +52,8 @@ import {
 } from "lucide-react";
 import { ProductionItemsForm } from "@/components/production-items-form";
 import {
-  HourlyWageForm,
   HourlyWageProvider,
+  HourlyWageSections,
   ShiftWageSummaryCard,
 } from "@/components/hourly-wage-form";
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
@@ -525,20 +525,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              Розрахунок погодинної роботи
-            </CardTitle>
-            <CardDescription>
-              Кількість годин × ставка (грн/год). Результат додається до обліку витрат — З.П. Погодинна
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <HourlyWageForm />
-          </CardContent>
-        </Card>
+        <HourlyWageSections />
         </HourlyWageProvider>
 
         <div className="grid gap-6 md:grid-cols-1">

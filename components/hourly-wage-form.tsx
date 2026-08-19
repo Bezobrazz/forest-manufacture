@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { createHourlyWageExpense } from "@/app/actions";
+import { createHourlyWageExpense, updateHourlyWageExpenseComment } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,14 +20,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Clock, DollarSign, Loader2 } from "lucide-react";
+import { Clock, DollarSign, Loader2, Pencil } from "lucide-react";
+import {
+  buildShiftHourlyWageDescription,
+  parseShiftHourlyWageDescription,
+  type HourlyWageKind,
+} from "@/lib/shifts/hourly-wage-description";
 
 const DEFAULT_RATE = 75;
-const DEFAULT_DESCRIPTION = (shiftId: number) => `Зміна #${shiftId}, погодинна`;
 const DEFAULT_MANUAL_COMMENT = "Вантажні роботи";
-
-const buildShiftExpenseDescription = (shiftId: number, comment: string) =>
-  `Зміна #${shiftId}, ${comment}`;
 
 export type HourlyWageExpenseItem = {
   id: number;
@@ -42,9 +43,12 @@ type HourlyWageContextValue = {
   employeeCount: number;
   expenses: HourlyWageExpenseItem[];
   expensesTotal: number;
-  draftAmount: number;
-  setDraftAmount: (amount: number) => void;
+  draftAccountingAmount: number;
+  draftManualAmount: number;
+  setDraftAccountingAmount: (amount: number) => void;
+  setDraftManualAmount: (amount: number) => void;
   addExpense: (expense: HourlyWageExpenseItem) => void;
+  updateExpense: (expense: HourlyWageExpenseItem) => void;
 };
 
 const HourlyWageContext = createContext<HourlyWageContextValue | null>(null);
@@ -73,7 +77,8 @@ export function HourlyWageProvider({
   children,
 }: HourlyWageProviderProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
-  const [draftAmount, setDraftAmount] = useState(0);
+  const [draftAccountingAmount, setDraftAccountingAmount] = useState(0);
+  const [draftManualAmount, setDraftManualAmount] = useState(0);
 
   useEffect(() => {
     setExpenses(initialExpenses);
@@ -88,7 +93,12 @@ export function HourlyWageProvider({
       }
       return [expense, ...prev];
     });
-    setDraftAmount(0);
+  };
+
+  const updateExpense = (expense: HourlyWageExpenseItem) => {
+    setExpenses((prev) =>
+      prev.map((item) => (item.id === expense.id ? expense : item))
+    );
   };
 
   return (
@@ -99,15 +109,27 @@ export function HourlyWageProvider({
         employeeCount,
         expenses,
         expensesTotal,
-        draftAmount,
-        setDraftAmount,
+        draftAccountingAmount,
+        draftManualAmount,
+        setDraftAccountingAmount,
+        setDraftManualAmount,
         addExpense,
+        updateExpense,
       }}
     >
       {children}
     </HourlyWageContext.Provider>
   );
 }
+
+const expensesOfKind = (
+  expenses: HourlyWageExpenseItem[],
+  shiftId: number,
+  kind: HourlyWageKind
+) =>
+  expenses.filter(
+    (expense) => parseShiftHourlyWageDescription(expense.description, shiftId).kind === kind
+  );
 
 interface ShiftWageSummaryCardProps {
   totalWages: number;
@@ -124,8 +146,21 @@ export function ShiftWageSummaryCard({
   hasProduction,
   children,
 }: ShiftWageSummaryCardProps) {
-  const { expenses, expensesTotal, draftAmount } = useHourlyWage();
-  const hourlyTotal = expensesTotal + draftAmount;
+  const {
+    shiftId,
+    expenses,
+    expensesTotal,
+    draftAccountingAmount,
+    draftManualAmount,
+  } = useHourlyWage();
+  const accountingExpenses = expensesOfKind(expenses, shiftId, "accounting");
+  const manualExpenses = expensesOfKind(expenses, shiftId, "manual");
+  const accountingTotal =
+    accountingExpenses.reduce((sum, item) => sum + item.amount, 0) +
+    draftAccountingAmount;
+  const manualTotal =
+    manualExpenses.reduce((sum, item) => sum + item.amount, 0) + draftManualAmount;
+  const hourlyTotal = expensesTotal + draftAccountingAmount + draftManualAmount;
   const totalCompensation = totalWages + hourlyTotal;
   const totalCompensationPerEmployee =
     employeeCount > 0 ? totalCompensation / employeeCount : 0;
@@ -134,7 +169,8 @@ export function ShiftWageSummaryCard({
     shiftStatus === "active" ||
     hasProduction ||
     expenses.length > 0 ||
-    draftAmount > 0;
+    draftAccountingAmount > 0 ||
+    draftManualAmount > 0;
 
   if (!isVisible) {
     return null;
@@ -166,17 +202,20 @@ export function ShiftWageSummaryCard({
 
             <div className="bg-muted p-4 rounded-lg">
               <div className="text-sm text-muted-foreground mb-1">
-                Додаткові витрати (З.П. Погодинна)
+                Облік витрат (погодинна)
               </div>
               <div className="text-2xl font-bold">
-                {hourlyTotal.toFixed(2)} грн
+                {accountingTotal.toFixed(2)} грн
               </div>
-              {draftAmount > 0 && (
-                <div className="text-xs text-muted-foreground mt-1">
-                  Збережено {expensesTotal.toFixed(2)} грн + поточний розрахунок{" "}
-                  {draftAmount.toFixed(2)} грн
-                </div>
-              )}
+            </div>
+
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="text-sm text-muted-foreground mb-1">
+                Сума витрат
+              </div>
+              <div className="text-2xl font-bold">
+                {manualTotal.toFixed(2)} грн
+              </div>
             </div>
 
             {employeeCount > 0 && (
@@ -202,37 +241,6 @@ export function ShiftWageSummaryCard({
             )}
           </div>
 
-          {(expenses.length > 0 || draftAmount > 0) && (
-            <div className="mt-4">
-              <h4 className="text-sm font-medium mb-2">
-                Додаткові витрати (З.П. Погодинна)
-              </h4>
-              <div className="space-y-2">
-                {expenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="flex items-center justify-between py-2 border-b last:border-0"
-                  >
-                    <div className="text-sm text-muted-foreground">
-                      {expense.description || "Без коментаря"}
-                    </div>
-                    <div className="font-medium">
-                      {expense.amount.toFixed(2)} грн
-                    </div>
-                  </div>
-                ))}
-                {draftAmount > 0 && (
-                  <div className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div className="text-sm text-muted-foreground">
-                      Поточний розрахунок (ще не збережено)
-                    </div>
-                    <div className="font-medium">{draftAmount.toFixed(2)} грн</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {children}
         </div>
       </CardContent>
@@ -240,65 +248,216 @@ export function ShiftWageSummaryCard({
   );
 }
 
-export function HourlyWageForm() {
+function HourlyWageExpenseRow({
+  expense,
+  kind,
+}: {
+  expense: HourlyWageExpenseItem;
+  kind: HourlyWageKind;
+}) {
+  const router = useRouter();
+  const { shiftId, updateExpense } = useHourlyWage();
+  const parsed = parseShiftHourlyWageDescription(expense.description, shiftId);
+  const [isEditing, setIsEditing] = useState(false);
+  const [comment, setComment] = useState(parsed.comment);
+  const [amount, setAmount] = useState(expense.amount.toFixed(2));
+  const [isPending, setIsPending] = useState(false);
+
+  useEffect(() => {
+    const next = parseShiftHourlyWageDescription(expense.description, shiftId);
+    setComment(next.comment);
+    setAmount(expense.amount.toFixed(2));
+  }, [expense.amount, expense.description, shiftId]);
+
+  function resetFields() {
+    const next = parseShiftHourlyWageDescription(expense.description, shiftId);
+    setComment(next.comment);
+    setAmount(expense.amount.toFixed(2));
+    setIsEditing(false);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    const amountValue = Number.parseFloat(amount);
+    if (Number.isNaN(amountValue) || amountValue <= 0) {
+      toast.error("Вкажіть суму більше нуля");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      const result = await updateHourlyWageExpenseComment(
+        expense.id,
+        shiftId,
+        comment,
+        Math.round(amountValue * 100) / 100
+      );
+      if (result.ok) {
+        updateExpense(result.expense);
+        toast.success("Витрату оновлено");
+        setIsEditing(false);
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    } catch {
+      toast.error("Не вдалося оновити витрату");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={handleSave}
+        className="grid gap-2 border-b py-3 last:border-0 sm:grid-cols-[1fr_8rem_auto] sm:items-end"
+      >
+        <div className="space-y-1">
+          <Label htmlFor={`hourly-comment-${expense.id}`}>Коментар</Label>
+          <Input
+            id={`hourly-comment-${expense.id}`}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={kind === "manual" ? "Вантажні роботи" : "погодинна"}
+            disabled={isPending}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`hourly-amount-${expense.id}`}>Сума, грн</Label>
+          <Input
+            id={`hourly-amount-${expense.id}`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            disabled={isPending}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={resetFields}
+            disabled={isPending}
+          >
+            Скасувати
+          </Button>
+          <Button type="submit" size="sm" disabled={isPending} aria-busy={isPending}>
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Збереження…
+              </>
+            ) : (
+              "Зберегти"
+            )}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
+      <div className="min-w-0 text-sm text-muted-foreground">
+        {parsed.comment || "Без коментаря"}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="font-medium">{expense.amount.toFixed(2)} грн</div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          onClick={() => setIsEditing(true)}
+          title="Редагувати витрату"
+        >
+          <Pencil className="h-4 w-4" />
+          <span className="sr-only">Редагувати витрату</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function HourlyWageExpenseList({ kind }: { kind: HourlyWageKind }) {
+  const { shiftId, expenses } = useHourlyWage();
+  const items = expensesOfKind(expenses, shiftId, kind);
+
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {kind === "accounting"
+          ? "Погодинний облік ще не збережено"
+          : "Суму витрат ще не збережено"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {items.map((expense) => (
+        <HourlyWageExpenseRow key={expense.id} expense={expense} kind={kind} />
+      ))}
+    </div>
+  );
+}
+
+function HourlyWageAccountingForm() {
   const router = useRouter();
   const {
     shiftId,
     shiftOpenedAt,
     employeeCount,
-    setDraftAmount,
+    setDraftAccountingAmount,
     addExpense,
   } = useHourlyWage();
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState(String(DEFAULT_RATE));
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [manualAmount, setManualAmount] = useState("");
-  const [manualComment, setManualComment] = useState("");
-  const [isManualSubmitting, setIsManualSubmitting] = useState(false);
 
   const expenseDate = new Date(shiftOpenedAt).toISOString().slice(0, 10);
-
   const hoursNum = Number.parseFloat(hours) || 0;
   const rateNum = Number.parseFloat(rate) || 0;
   const calculatedAmount = hoursNum * rateNum * employeeCount;
-  const manualAmountNum = Number.parseFloat(manualAmount);
-  const hasManualDraft =
-    !Number.isNaN(manualAmountNum) && manualAmountNum > 0;
-  const nextDraftAmount = calculatedAmount > 0 ? calculatedAmount : hasManualDraft ? manualAmountNum : 0;
 
   useEffect(() => {
-    setDraftAmount(nextDraftAmount);
-  }, [nextDraftAmount, setDraftAmount]);
+    setDraftAccountingAmount(calculatedAmount > 0 ? calculatedAmount : 0);
+  }, [calculatedAmount, setDraftAccountingAmount]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (calculatedAmount <= 0) {
       toast.error(
         employeeCount === 0
-          ? "Додайте працівників на зміну"
+          ? "Оберіть кількість працівників на зміні"
           : "Вкажіть кількість годин та ставку"
       );
       return;
     }
-    const roundedAmount = Math.round(calculatedAmount * 100) / 100;
-    const expenseDescription = buildShiftExpenseDescription(
-      shiftId,
-      description.trim() || "погодинна"
-    );
+
     setIsSubmitting(true);
     try {
       const result = await createHourlyWageExpense(
-        roundedAmount,
+        Math.round(calculatedAmount * 100) / 100,
         expenseDate,
-        expenseDescription,
+        buildShiftHourlyWageDescription(
+          shiftId,
+          "accounting",
+          description.trim() || "погодинна"
+        ),
         shiftId
       );
       if (result.ok) {
         addExpense(result.expense);
-        toast.success("Витрату додано до обліку (З.П. Погодинна)");
+        toast.success("Облік витрат збережено");
         setHours("");
         setDescription("");
+        setDraftAccountingAmount(0);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -308,173 +467,212 @@ export function HourlyWageForm() {
     }
   }
 
-  async function handleManualSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountValue = Number.parseFloat(manualAmount);
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="hourly-hours">Кількість годин</Label>
+          <Input
+            id="hourly-hours"
+            type="number"
+            min="0"
+            step="0.5"
+            placeholder="0"
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="hourly-rate">Ставка (грн/год)</Label>
+          <Input
+            id="hourly-rate"
+            type="number"
+            min="0"
+            step="1"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="hourly-description">Коментар</Label>
+          <Input
+            id="hourly-description"
+            type="text"
+            placeholder="погодинна"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+      </div>
+      <div className="bg-muted p-4 rounded-lg space-y-1">
+        <div className="text-sm text-muted-foreground">Поточний розрахунок</div>
+        <div className="text-2xl font-bold">{calculatedAmount.toFixed(2)} грн</div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="h-4 w-4 shrink-0" />
+          <span>
+            {hoursNum} год × {rateNum} грн/год × {employeeCount}{" "}
+            {employeeCount === 1 ? "працівник" : "працівників"}
+          </span>
+        </div>
+      </div>
+      <Button
+        type="submit"
+        disabled={calculatedAmount <= 0 || isSubmitting}
+        aria-busy={isSubmitting}
+        className="w-full sm:w-[340px]"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Збереження…
+          </>
+        ) : (
+          "Зберегти облік витрат"
+        )}
+      </Button>
+    </form>
+  );
+}
 
-    if (Number.isNaN(amountValue) || amountValue <= 0) {
+function HourlyWageManualForm() {
+  const router = useRouter();
+  const { shiftId, shiftOpenedAt, setDraftManualAmount, addExpense } =
+    useHourlyWage();
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualComment, setManualComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const expenseDate = new Date(shiftOpenedAt).toISOString().slice(0, 10);
+  const manualAmountNum = Number.parseFloat(manualAmount);
+  const hasManualDraft = !Number.isNaN(manualAmountNum) && manualAmountNum > 0;
+
+  useEffect(() => {
+    setDraftManualAmount(hasManualDraft ? manualAmountNum : 0);
+  }, [hasManualDraft, manualAmountNum, setDraftManualAmount]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (Number.isNaN(manualAmountNum) || manualAmountNum <= 0) {
       toast.error("Вкажіть суму більше нуля");
       return;
     }
 
-    const roundedAmount = Math.round(amountValue * 100) / 100;
-    const expenseDescription = buildShiftExpenseDescription(
-      shiftId,
-      manualComment.trim() || DEFAULT_MANUAL_COMMENT
-    );
-    setIsManualSubmitting(true);
+    setIsSubmitting(true);
     try {
       const result = await createHourlyWageExpense(
-        roundedAmount,
+        Math.round(manualAmountNum * 100) / 100,
         expenseDate,
-        expenseDescription,
+        buildShiftHourlyWageDescription(
+          shiftId,
+          "manual",
+          manualComment.trim() || DEFAULT_MANUAL_COMMENT
+        ),
         shiftId
       );
-
       if (result.ok) {
         addExpense(result.expense);
-        toast.success("Витрату додано до обліку (З.П. Погодинна)");
+        toast.success("Суму витрат збережено");
         setManualAmount("");
         setManualComment("");
+        setDraftManualAmount(0);
         router.refresh();
       } else {
         toast.error(result.error);
       }
     } finally {
-      setIsManualSubmitting(false);
+      setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="hourly-hours">Кількість годин</Label>
-            <Input
-              id="hourly-hours"
-              type="number"
-              min="0"
-              step="0.5"
-              placeholder="0"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-              disabled={isSubmitting || isManualSubmitting}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hourly-rate">Ставка (грн/год)</Label>
-            <Input
-              id="hourly-rate"
-              type="number"
-              min="0"
-              step="1"
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              disabled={isSubmitting || isManualSubmitting}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-1">
-            <Label htmlFor="hourly-description">Опис</Label>
-            <Input
-              id="hourly-description"
-              type="text"
-              placeholder={DEFAULT_DESCRIPTION(shiftId)}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isSubmitting || isManualSubmitting}
-            />
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="hourly-manual-amount">Сума витрат (грн)</Label>
+          <Input
+            id="hourly-manual-amount"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={manualAmount}
+            onChange={(e) => setManualAmount(e.target.value)}
+            disabled={isSubmitting}
+          />
         </div>
-        <div className="bg-muted p-4 rounded-lg space-y-1">
-          <div className="text-sm text-muted-foreground">Поточний розрахунок</div>
-          <div className="text-2xl font-bold">{calculatedAmount.toFixed(2)} грн</div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span>
-              {hoursNum} год × {rateNum} грн/год × {employeeCount}{" "}
-              {employeeCount === 1 ? "працівник" : "працівників"}
-            </span>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="hourly-manual-comment">Коментар</Label>
+          <Input
+            id="hourly-manual-comment"
+            type="text"
+            placeholder="Вантажні роботи"
+            value={manualComment}
+            onChange={(e) => setManualComment(e.target.value)}
+            disabled={isSubmitting}
+          />
         </div>
-        {employeeCount === 0 && (hoursNum > 0 || rateNum > 0) && (
-          <p className="text-sm text-muted-foreground">
-            Додайте працівників на зміну, щоб розрахувати суму
-          </p>
+      </div>
+      <Button
+        type="submit"
+        disabled={isSubmitting || !hasManualDraft}
+        aria-busy={isSubmitting}
+        className="w-full sm:w-[340px]"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Збереження…
+          </>
+        ) : (
+          "Зберегти суму витрат"
         )}
-        <Button
-          type="submit"
-          disabled={calculatedAmount <= 0 || isSubmitting || isManualSubmitting}
-          aria-busy={isSubmitting}
-          className="w-full sm:w-[340px]"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Збереження…
-            </>
-          ) : (
-            "Додати до обліку витрат (З.П. Погодинна)"
-          )}
-        </Button>
-      </form>
+      </Button>
+    </form>
+  );
+}
 
-      <form onSubmit={handleManualSubmit} className="space-y-4 border-t pt-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="hourly-manual-amount">Сума витрат (грн)</Label>
-            <Input
-              id="hourly-manual-amount"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={manualAmount}
-              onChange={(e) => setManualAmount(e.target.value)}
-              disabled={isSubmitting || isManualSubmitting}
-            />
+export function HourlyWageSections() {
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Облік витрат
+          </CardTitle>
+          <CardDescription>
+            Години × ставка × кількість працівників. Окремий запис у З.П. Погодинна.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <HourlyWageAccountingForm />
+          <div>
+            <h4 className="text-sm font-medium mb-2">Збережений облік</h4>
+            <HourlyWageExpenseList kind="accounting" />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="hourly-manual-comment">Коментар</Label>
-            <Input
-              id="hourly-manual-comment"
-              type="text"
-              placeholder="Вантажні роботи"
-              value={manualComment}
-              onChange={(e) => setManualComment(e.target.value)}
-              disabled={isSubmitting || isManualSubmitting}
-            />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-primary" />
+            Сума витрат
+          </CardTitle>
+          <CardDescription>
+            Окрема сума, наприклад за вантажні роботи. Не змішується з погодинним обліком.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <HourlyWageManualForm />
+          <div>
+            <h4 className="text-sm font-medium mb-2">Збережені суми</h4>
+            <HourlyWageExpenseList kind="manual" />
           </div>
-        </div>
-        {hasManualDraft && calculatedAmount <= 0 && (
-          <div className="text-sm text-muted-foreground">
-            Сума до додавання:{" "}
-            <strong className="text-foreground">
-              {manualAmountNum.toFixed(2)} грн
-            </strong>
-          </div>
-        )}
-        <Button
-          type="submit"
-          disabled={
-            isSubmitting ||
-            isManualSubmitting ||
-            Number.isNaN(manualAmountNum) ||
-            manualAmountNum <= 0
-          }
-          aria-busy={isManualSubmitting}
-          className="w-full sm:w-[340px]"
-        >
-          {isManualSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Збереження…
-            </>
-          ) : (
-            "Додати суму витрат до З.П. Погодинна"
-          )}
-        </Button>
-      </form>
-    </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

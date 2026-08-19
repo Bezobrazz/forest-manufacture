@@ -26,6 +26,11 @@ import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct"
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
 import { parseShiftEmployeeCount } from "@/lib/shifts/employee-count";
+import {
+  buildShiftHourlyWageDescription,
+  isHourlyWageDescriptionForShift,
+  parseShiftHourlyWageDescription,
+} from "@/lib/shifts/hourly-wage-description";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
 
@@ -2477,6 +2482,94 @@ export async function createHourlyWageExpense(
         amount: Number(created.amount ?? amount),
         description: created.description ?? description,
         date: created.date ?? date,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при збереженні";
+    return { ok: false, error: message };
+  }
+}
+
+export async function updateHourlyWageExpenseComment(
+  expenseId: number,
+  shiftId: number,
+  comment: string,
+  amount?: number
+): Promise<
+  | {
+      ok: true;
+      expense: { id: number; amount: number; description: string; date: string };
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    if (!expenseId || !shiftId) {
+      return { ok: false, error: "Некоректні дані витрати" };
+    }
+
+    const supabase = await createServerClient();
+    const categories = await getExpenseCategories();
+    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
+      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
+    );
+    const category = hourlyMatches.length > 0
+      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
+      : null;
+
+    if (!category) {
+      return { ok: false, error: "Категорію З.П. Погодинна не знайдено" };
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from("expenses")
+      .select("id, amount, description, date, category_id")
+      .eq("id", expenseId)
+      .eq("category_id", category.id)
+      .maybeSingle();
+
+    if (existingError) {
+      return { ok: false, error: existingError.message };
+    }
+    if (!existing || !isHourlyWageDescriptionForShift(existing.description ?? "", shiftId)) {
+      return { ok: false, error: "Витрату цієї зміни не знайдено" };
+    }
+
+    const parsed = parseShiftHourlyWageDescription(existing.description ?? "", shiftId);
+    const description = buildShiftHourlyWageDescription(
+      shiftId,
+      parsed.kind,
+      comment
+    );
+    const nextAmount =
+      amount === undefined ? Number(existing.amount ?? 0) : amount;
+
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      return { ok: false, error: "Сума має бути більше нуля" };
+    }
+
+    const { data, error } = await supabase
+      .from("expenses")
+      .update({ description, amount: nextAmount })
+      .eq("id", expenseId)
+      .select("id, amount, description, date")
+      .single();
+
+    if (error || !data) {
+      console.error("Error updating hourly wage comment:", error);
+      return { ok: false, error: error?.message ?? "Не вдалося оновити коментар" };
+    }
+
+    revalidatePath(`/shifts/${shiftId}`);
+    revalidatePath("/shifts");
+    revalidatePath("/expenses");
+
+    return {
+      ok: true,
+      expense: {
+        id: Number(data.id),
+        amount: Number(data.amount ?? existing.amount ?? 0),
+        description: data.description ?? description,
+        date: data.date ?? existing.date,
       },
     };
   } catch (err) {
