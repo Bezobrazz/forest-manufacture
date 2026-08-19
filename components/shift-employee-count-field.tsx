@@ -23,7 +23,7 @@ export function ShiftEmployeeCountField({
 }: ShiftEmployeeCountFieldProps) {
   return (
     <RadioGroup
-      value={value ? String(value) : ""}
+      value={value ? String(value) : undefined}
       onValueChange={(nextValue) => onChange(Number(nextValue))}
       disabled={disabled}
       className="flex flex-col gap-2"
