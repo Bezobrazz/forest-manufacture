@@ -51,9 +51,7 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   const router = useRouter()
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
   const [shiftDate, setShiftDate] = useState<Date>(new Date())
-  const [openedAt, setOpenedAt] = useState<Date | undefined>()
   const [shiftDatePopoverOpen, setShiftDatePopoverOpen] = useState(false)
-  const [openedAtPopoverOpen, setOpenedAtPopoverOpen] = useState(false)
 
   function handleEmployeeToggle(employeeId: number) {
     setSelectedEmployees((prev) => {
@@ -100,9 +98,6 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
   return (
     <form action={handleSubmit} className="min-w-0">
       <input type="hidden" name="shift_date" value={dateToYYYYMMDD(shiftDate)} />
-      {openedAt && (
-        <input type="hidden" name="opened_at" value={dateToYYYYMMDD(openedAt)} />
-      )}
 
       <Card className="mb-6">
         <CardHeader>
@@ -146,43 +141,8 @@ export function CreateShiftForm({ employees }: CreateShiftFormProps) {
                 />
               </PopoverContent>
             </Popover>
-          </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="opened_at">Дата відкриття зміни (опціонально)</Label>
-            <Popover open={openedAtPopoverOpen} onOpenChange={setOpenedAtPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  id="opened_at"
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "w-full min-w-0 justify-start text-left font-normal",
-                    !openedAt && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                  {openedAt ? (
-                    formatDate(openedAt.toISOString())
-                  ) : (
-                    <span>Оберіть дату</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={openedAt}
-                  onSelect={(nextDate) => {
-                    setOpenedAt(nextDate)
-                    if (nextDate) setOpenedAtPopoverOpen(false)
-                  }}
-                  locale={uk}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
             <p className="text-xs text-muted-foreground">
-              Якщо не вказано, буде використано поточну дату
+              Ця дата також є датою відкриття зміни
             </p>
           </div>
           <div className="space-y-2">

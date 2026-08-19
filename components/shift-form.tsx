@@ -50,9 +50,7 @@ export function ShiftForm() {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const [shiftDate, setShiftDate] = useState<Date | undefined>();
-  const [openedAt, setOpenedAt] = useState<Date | undefined>();
   const [shiftDatePopoverOpen, setShiftDatePopoverOpen] = useState(false);
-  const [openedAtPopoverOpen, setOpenedAtPopoverOpen] = useState(false);
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -77,9 +75,6 @@ export function ShiftForm() {
     try {
       const formData = new FormData();
       formData.append("shift_date", dateToYYYYMMDD(shiftDate));
-      if (openedAt) {
-        formData.append("opened_at", dateToYYYYMMDD(openedAt));
-      }
       formData.append("notes", notes || "");
       formData.append("status", "active");
       const result = await createShift(formData);
@@ -89,7 +84,6 @@ export function ShiftForm() {
           description: "Зміну успішно створено",
         });
         setShiftDate(undefined);
-        setOpenedAt(undefined);
         setNotes("");
         setIsOpen(false);
         router.refresh();
@@ -160,44 +154,8 @@ export function ShiftForm() {
                   />
                 </PopoverContent>
               </Popover>
-            </div>
-
-            <div className="min-w-0 space-y-2">
-              <Label htmlFor="openedAt">Дата відкриття зміни (опціонально)</Label>
-              <Popover open={openedAtPopoverOpen} onOpenChange={setOpenedAtPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="openedAt"
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      "w-full min-w-0 justify-start text-left font-normal",
-                      !openedAt && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                    {openedAt ? (
-                      formatDate(openedAt.toISOString())
-                    ) : (
-                      <span>Оберіть дату</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={openedAt}
-                    onSelect={(nextDate) => {
-                      setOpenedAt(nextDate);
-                      if (nextDate) setOpenedAtPopoverOpen(false);
-                    }}
-                    locale={uk}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
               <p className="text-xs text-muted-foreground">
-                Якщо не вказано, буде використано поточну дату
+                Ця дата також є датою відкриття зміни
               </p>
             </div>
 
