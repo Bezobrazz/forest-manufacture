@@ -54,7 +54,11 @@ import {
 } from "lucide-react";
 import { RemoveEmployeeButton } from "@/components/remove-employee-button";
 import { ProductionItemsForm } from "@/components/production-items-form";
-import { HourlyWageForm } from "@/components/hourly-wage-form";
+import {
+  HourlyWageForm,
+  HourlyWageProvider,
+  ShiftWageSummaryCard,
+} from "@/components/hourly-wage-form";
 import { EditShiftOpenedDate } from "@/components/edit-shift-opened-date";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { getUserWithRole } from "@/lib/auth/get-user-role";
@@ -164,15 +168,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   // Сортуємо за загальною сумою винагороди (від більшої до меншої)
   wagesByProduct.sort((a, b) => b.total - a.total);
 
-  // Підрахунок заробітної плати на одного працівника (якщо є працівники)
   const employeeCount = shift.employees.length;
-  const hourlyWageExpensesTotal = hourlyWageExpenses.reduce(
-    (sum, item) => sum + item.amount,
-    0
-  );
-  const totalCompensation = totalWages + hourlyWageExpensesTotal;
-  const totalCompensationPerEmployee =
-    employeeCount > 0 ? totalCompensation / employeeCount : 0;
   const handleUpdateShiftProductionReward = async (formData: FormData) => {
     "use server";
     await updateShiftProductionReward(formData);
@@ -349,161 +345,80 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           </CardContent>
         </Card>
 
-        {/* Розділ для заробітної плати за продукцію */}
-        {(shift.production && shift.production.length > 0) ||
-        hourlyWageExpensesTotal > 0 ? (
-          <Card className="mb-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-primary" />
-                <span>Заробітна плата за зміну</span>
-              </CardTitle>
-              <CardDescription>
-                Розрахунок виплат за продукцію та погодинні витрати
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {wagesByProduct.length === 0 && hourlyWageExpensesTotal === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  Немає даних про нарахування за зміну.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-muted p-4 rounded-lg">
-                      <div className="text-sm text-muted-foreground mb-1">
-                        Винагорода за продукцію
-                      </div>
-                      <div className="text-2xl font-bold">
-                        {totalWages.toFixed(2)} грн
-                      </div>
+        <HourlyWageProvider
+          shiftId={shift.id}
+          shiftOpenedAt={
+            shift.opened_at || shift.created_at || shift.shift_date
+          }
+          employeeCount={employeeCount}
+          initialExpenses={hourlyWageExpenses}
+        >
+        <ShiftWageSummaryCard
+          totalWages={totalWages}
+          employeeCount={employeeCount}
+          shiftStatus={shift.status}
+          hasProduction={(shift.production?.length ?? 0) > 0}
+        >
+          {wagesByProduct.length > 0 ? (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium mb-2">Деталі по продукції</h4>
+              <div className="space-y-2">
+                {wagesByProduct.map((item) => (
+                  <div
+                    key={item.productId}
+                    className="flex items-center justify-between py-2 border-b last:border-0"
+                  >
+                    <div>
+                      <div className="font-medium">{item.productName}</div>
+                      {shift.status === "active" ? (
+                        <form
+                          action={handleUpdateShiftProductionReward}
+                          className="mt-1 flex flex-wrap items-end gap-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="shift_id"
+                            value={shift.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="product_id"
+                            value={item.productId}
+                          />
+                          <div className="text-sm text-muted-foreground">
+                            {item.quantity} шт x
+                          </div>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            name="reward_override"
+                            defaultValue={item.effectiveReward.toFixed(2)}
+                            className="h-8 w-28"
+                          />
+                          <Button size="sm" type="submit">
+                            Зберегти
+                          </Button>
+                          <div className="w-full text-xs text-muted-foreground">
+                            Базовий тариф: {item.reward.toFixed(2)} грн
+                            {item.rewardOverride !== null
+                              ? " (застосовано індивідуальний тариф)"
+                              : ""}
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          {item.quantity} шт × {item.effectiveReward.toFixed(2)} грн
+                        </div>
+                      )}
                     </div>
-
-                    <div className="bg-muted p-4 rounded-lg">
-                      <div className="text-sm text-muted-foreground mb-1">
-                        Додаткові витрати (З.П. Погодинна)
-                      </div>
-                      <div className="text-2xl font-bold">
-                        {hourlyWageExpensesTotal.toFixed(2)} грн
-                      </div>
-                    </div>
-
-                    {employeeCount > 0 && (
-                      <div className="bg-muted p-4 rounded-lg">
-                        <div className="text-sm text-muted-foreground mb-1">
-                          Разом до виплати
-                        </div>
-                        <div className="text-2xl font-bold">
-                          {totalCompensation.toFixed(2)} грн
-                        </div>
-                      </div>
-                    )}
-
-                    {employeeCount > 0 && (
-                      <div className="bg-muted p-4 rounded-lg">
-                        <div className="text-sm text-muted-foreground mb-1">
-                          На одного працівника ({employeeCount} осіб), разом
-                        </div>
-                        <div className="text-2xl font-bold">
-                          {totalCompensationPerEmployee.toFixed(2)} грн
-                        </div>
-                      </div>
-                    )}
+                    <div className="font-medium">{item.total.toFixed(2)} грн</div>
                   </div>
-
-                  {hourlyWageExpenses.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">
-                        Додаткові витрати (З.П. Погодинна)
-                      </h4>
-                      <div className="space-y-2">
-                        {hourlyWageExpenses.map((expense) => (
-                          <div
-                            key={expense.id}
-                            className="flex items-center justify-between py-2 border-b last:border-0"
-                          >
-                            <div className="text-sm text-muted-foreground">
-                              {expense.description || "Без коментаря"}
-                            </div>
-                            <div className="font-medium">
-                              {expense.amount.toFixed(2)} грн
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {wagesByProduct.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">
-                        Деталі по продукції
-                      </h4>
-                      <div className="space-y-2">
-                        {wagesByProduct.map((item) => (
-                          <div
-                            key={item.productId}
-                            className="flex items-center justify-between py-2 border-b last:border-0"
-                          >
-                            <div>
-                              <div className="font-medium">
-                                {item.productName}
-                              </div>
-                              {shift.status === "active" ? (
-                                <form
-                                  action={handleUpdateShiftProductionReward}
-                                  className="mt-1 flex flex-wrap items-end gap-2"
-                                >
-                                  <input
-                                    type="hidden"
-                                    name="shift_id"
-                                    value={shift.id}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="product_id"
-                                    value={item.productId}
-                                  />
-                                  <div className="text-sm text-muted-foreground">
-                                    {item.quantity} шт x
-                                  </div>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    name="reward_override"
-                                    defaultValue={item.effectiveReward.toFixed(2)}
-                                    className="h-8 w-28"
-                                  />
-                                  <Button size="sm" type="submit">
-                                    Зберегти
-                                  </Button>
-                                  <div className="w-full text-xs text-muted-foreground">
-                                    Базовий тариф: {item.reward.toFixed(2)} грн
-                                    {item.rewardOverride !== null
-                                      ? " (застосовано індивідуальний тариф)"
-                                      : ""}
-                                  </div>
-                                </form>
-                              ) : (
-                                <div className="text-sm text-muted-foreground">
-                                  {item.quantity} шт × {item.effectiveReward.toFixed(2)} грн
-                                </div>
-                              )}
-                            </div>
-                            <div className="font-medium">
-                              {item.total.toFixed(2)} грн
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </ShiftWageSummaryCard>
 
         {shift.status === "completed" && shift.production.length > 0 && (
           <Card className="mb-4">
@@ -627,17 +542,10 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <HourlyWageForm
-              shiftId={shift.id}
-              shiftOpenedAt={
-                shift.opened_at ||
-                shift.created_at ||
-                shift.shift_date
-              }
-              employeeCount={shift.employees.length}
-            />
+            <HourlyWageForm />
           </CardContent>
         </Card>
+        </HourlyWageProvider>
 
         <div className="grid gap-6 md:grid-cols-1">
           <Card>
