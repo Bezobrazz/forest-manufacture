@@ -92,7 +92,7 @@ import {
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
-import { dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
+import { cn, dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { useQueryTab } from "@/hooks/use-query-tab";
@@ -442,6 +442,10 @@ function TripsPageContent() {
     const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
     return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
   }, [rawTripsForRepaymentBlock]);
+
+  const remainingRepaymentUah = rawRepaymentTotals
+    ? rawRepaymentTotals.sumTotalCostsUah - repaymentsSum
+    : 0;
 
   const handleExportTrips = async (tripType: TripType) => {
     const count =
@@ -1078,14 +1082,13 @@ function TripsPageContent() {
                             <span className="font-medium">
                               Залишилось погасити
                             </span>
-                            <span className="tabular-nums font-semibold">
-                              {formatUah(
-                                Math.max(
-                                  0,
-                                  rawRepaymentTotals.sumTotalCostsUah -
-                                    repaymentsSum,
-                                ),
+                            <span
+                              className={cn(
+                                "tabular-nums font-semibold",
+                                remainingRepaymentUah < 0 && "text-destructive",
                               )}
+                            >
+                              {formatUah(remainingRepaymentUah)}
                             </span>
                           </div>
                         </div>
