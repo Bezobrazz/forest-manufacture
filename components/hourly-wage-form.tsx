@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Clock, DollarSign, Loader2, Pencil } from "lucide-react";
+import { Clock, DollarSign, Loader2, Minus, Pencil, Plus } from "lucide-react";
 import {
   buildShiftHourlyWageDescription,
   parseShiftHourlyWageDescription,
@@ -406,6 +406,25 @@ function HourlyWageExpenseList({ kind }: { kind: HourlyWageKind }) {
   );
 }
 
+type AccountingRow = {
+  id: number;
+  hours: string;
+  rate: string;
+  description: string;
+};
+
+const createAccountingRow = (id: number): AccountingRow => ({
+  id,
+  hours: "",
+  rate: String(DEFAULT_RATE),
+  description: "",
+});
+
+const rowHours = (row: AccountingRow) => Number.parseFloat(row.hours) || 0;
+const rowRate = (row: AccountingRow) => Number.parseFloat(row.rate) || 0;
+const rowAmount = (row: AccountingRow, employeeCount: number) =>
+  rowHours(row) * rowRate(row) * employeeCount;
+
 function HourlyWageAccountingForm() {
   const router = useRouter();
   const {
@@ -415,23 +434,40 @@ function HourlyWageAccountingForm() {
     setDraftAccountingAmount,
     addExpense,
   } = useHourlyWage();
-  const [hours, setHours] = useState("");
-  const [rate, setRate] = useState(String(DEFAULT_RATE));
-  const [description, setDescription] = useState("");
+  const [rows, setRows] = useState<AccountingRow[]>(() => [createAccountingRow(1)]);
+  const [nextRowId, setNextRowId] = useState(2);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const expenseDate = new Date(shiftOpenedAt).toISOString().slice(0, 10);
-  const hoursNum = Number.parseFloat(hours) || 0;
-  const rateNum = Number.parseFloat(rate) || 0;
-  const calculatedAmount = hoursNum * rateNum * employeeCount;
+  const calculatedRows = rows.map((row) => ({
+    ...row,
+    hoursNum: rowHours(row),
+    rateNum: rowRate(row),
+    amount: rowAmount(row, employeeCount),
+  }));
+  const calculatedAmount = calculatedRows.reduce((sum, row) => sum + row.amount, 0);
+  const rowsToSave = calculatedRows.filter((row) => row.amount > 0);
 
   useEffect(() => {
     setDraftAccountingAmount(calculatedAmount > 0 ? calculatedAmount : 0);
   }, [calculatedAmount, setDraftAccountingAmount]);
 
+  const updateRow = (id: number, patch: Partial<AccountingRow>) => {
+    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+
+  const addRow = () => {
+    setRows((prev) => [...prev, createAccountingRow(nextRowId)]);
+    setNextRowId((id) => id + 1);
+  };
+
+  const removeRow = (id: number) => {
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((row) => row.id !== id)));
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (calculatedAmount <= 0) {
+    if (rowsToSave.length === 0) {
       toast.error(
         employeeCount === 0
           ? "Оберіть кількість працівників на зміні"
@@ -442,25 +478,33 @@ function HourlyWageAccountingForm() {
 
     setIsSubmitting(true);
     try {
-      const result = await createHourlyWageExpense(
-        Math.round(calculatedAmount * 100) / 100,
-        expenseDate,
-        buildShiftHourlyWageDescription(
-          shiftId,
-          "accounting",
-          description.trim() || "погодинна"
-        ),
-        shiftId
-      );
-      if (result.ok) {
-        addExpense(result.expense);
+      let savedCount = 0;
+      for (const row of rowsToSave) {
+        const result = await createHourlyWageExpense(
+          Math.round(row.amount * 100) / 100,
+          expenseDate,
+          buildShiftHourlyWageDescription(
+            shiftId,
+            "accounting",
+            row.description.trim() || "погодинна"
+          ),
+          shiftId
+        );
+        if (result.ok) {
+          addExpense(result.expense);
+          savedCount += 1;
+        } else {
+          toast.error(result.error);
+          break;
+        }
+      }
+
+      if (savedCount > 0) {
         toast.success("Облік витрат збережено");
-        setHours("");
-        setDescription("");
+        setRows([createAccountingRow(nextRowId)]);
+        setNextRowId((id) => id + 1);
         setDraftAccountingAmount(0);
         router.refresh();
-      } else {
-        toast.error(result.error);
       }
     } finally {
       setIsSubmitting(false);
@@ -469,54 +513,99 @@ function HourlyWageAccountingForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="hourly-hours">Кількість годин</Label>
-          <Input
-            id="hourly-hours"
-            type="number"
-            min="0"
-            step="0.5"
-            placeholder="0"
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            disabled={isSubmitting}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="hourly-rate">Ставка (грн/год)</Label>
-          <Input
-            id="hourly-rate"
-            type="number"
-            min="0"
-            step="1"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            disabled={isSubmitting}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="hourly-description">Коментар</Label>
-          <Input
-            id="hourly-description"
-            type="text"
-            placeholder="погодинна"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={isSubmitting}
-          />
-        </div>
+      <div className="space-y-4">
+        {rows.map((row, index) => (
+          <div
+            key={row.id}
+            className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor={`hourly-hours-${row.id}`}>Кількість годин</Label>
+              <Input
+                id={`hourly-hours-${row.id}`}
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="0"
+                value={row.hours}
+                onChange={(e) => updateRow(row.id, { hours: e.target.value })}
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`hourly-rate-${row.id}`}>Ставка (грн/год)</Label>
+              <Input
+                id={`hourly-rate-${row.id}`}
+                type="number"
+                min="0"
+                step="1"
+                value={row.rate}
+                onChange={(e) => updateRow(row.id, { rate: e.target.value })}
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`hourly-description-${row.id}`}>Коментар</Label>
+              <Input
+                id={`hourly-description-${row.id}`}
+                type="text"
+                placeholder="погодинна"
+                value={row.description}
+                onChange={(e) =>
+                  updateRow(row.id, { description: e.target.value })
+                }
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              {rows.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => removeRow(row.id)}
+                  disabled={isSubmitting}
+                  title="Видалити рядок"
+                >
+                  <Minus className="h-4 w-4" />
+                  <span className="sr-only">Видалити рядок</span>
+                </Button>
+              )}
+              {index === rows.length - 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={addRow}
+                  disabled={isSubmitting}
+                  title="Додати ставку"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="sr-only">Додати ставку</span>
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="bg-muted p-4 rounded-lg space-y-1">
+      <div className="bg-muted p-4 rounded-lg space-y-2">
         <div className="text-sm text-muted-foreground">Поточний розрахунок</div>
         <div className="text-2xl font-bold">{calculatedAmount.toFixed(2)} грн</div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4 shrink-0" />
-          <span>
-            {hoursNum} год × {rateNum} грн/год × {employeeCount}{" "}
-            {employeeCount === 1 ? "працівник" : "працівників"}
-          </span>
-        </div>
+        {calculatedRows.map((row) => (
+          <div
+            key={row.id}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <Clock className="h-4 w-4 shrink-0" />
+            <span>
+              {row.hoursNum} год × {row.rateNum} грн/год × {employeeCount}{" "}
+              {employeeCount === 1 ? "працівник" : "працівників"}
+              {rows.length > 1 ? ` = ${row.amount.toFixed(2)} грн` : ""}
+            </span>
+          </div>
+        ))}
       </div>
       <Button
         type="submit"
