@@ -370,6 +370,24 @@ function nextIsoDate(isoDate: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Останній транспорт, який цей користувач використовував у поїздках. */
+export async function getLastUsedVehicleId(): Promise<string | null> {
+  const supabase = await createServerSupabaseClient();
+  const user = await getServerUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("trips")
+    .select("vehicle_id")
+    .eq("user_id", user.id)
+    .order("trip_start_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.vehicle_id) return null;
+  return String(data.vehicle_id);
+}
+
 /** Сума мішків сировини з постачань постачальників за дату (YYYY-MM-DD). */
 export async function getSupplierDeliveryBagsCountForDate(
   date: string

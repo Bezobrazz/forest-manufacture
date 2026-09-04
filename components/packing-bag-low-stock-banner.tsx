@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AlertTriangle, X } from "lucide-react";
 
 import { getPackingBagStockQuantity } from "@/app/packing-bags/actions";
@@ -20,6 +21,7 @@ export function PackingBagLowStockBanner({
   designPreview = false,
   className,
 }: PackingBagLowStockBannerProps) {
+  const pathname = usePathname();
   const [quantity, setQuantity] = useState<number | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -31,12 +33,17 @@ export function PackingBagLowStockBanner({
   }, []);
 
   useEffect(() => {
+    if (pathname?.startsWith("/m")) return;
     void loadQuantity();
-  }, [loadQuantity]);
+  }, [loadQuantity, pathname]);
 
   const isLow =
     quantity != null && quantity <= PACKING_BAG_LOW_STOCK_THRESHOLD;
-  const showBanner = ready && !dismissed && (isLow || designPreview);
+  const showBanner =
+    !pathname?.startsWith("/m") &&
+    ready &&
+    !dismissed &&
+    (isLow || designPreview);
   const displayQuantity =
     designPreview && !isLow ? 2_450 : quantity ?? 0;
   const isMock = designPreview && !isLow;
