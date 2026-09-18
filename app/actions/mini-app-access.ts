@@ -72,6 +72,7 @@ export async function createMiniAppAccess(displayName: string): Promise<
   }
 
   revalidatePath("/mini-app-access");
+  revalidatePath("/user");
   return { ok: true, access: data as MiniAppAccess };
 }
 
@@ -126,6 +127,7 @@ export async function blockMiniAppAccess(
   if (error) return { ok: false, error: error.message };
   await supabase.from("mini_app_invite_codes").delete().eq("access_id", accessId);
   revalidatePath("/mini-app-access");
+  revalidatePath("/user");
   return { ok: true };
 }
 
@@ -152,5 +154,6 @@ export async function unblockMiniAppAccess(
 
   if (error) return { ok: false, error: error.message };
   revalidatePath("/mini-app-access");
+  revalidatePath("/user");
   return { ok: true };
 }

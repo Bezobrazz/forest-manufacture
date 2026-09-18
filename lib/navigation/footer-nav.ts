@@ -87,7 +87,14 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
           { href: "/trips?tab=raw", label: "Сировина" },
         ],
       },
-      { label: "Доступи Mini App", href: "/mini-app-access" },
+      {
+        label: "Профіль",
+        href: "/user",
+        items: [
+          { href: "/user", label: "Профіль" },
+          { href: "/user?tab=mini-app", label: "Доступи Mini App" },
+        ],
+      },
       {
         label: "Закупка",
         href: "/transactions/suppliers",
