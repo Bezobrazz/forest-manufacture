@@ -56,14 +56,17 @@ export default async function MiniAppHomePage() {
         <p className="text-sm text-destructive">
           Немає складу або сировини в довідниках. Зверніться до офісу.
         </p>
+      ) : !defaultPackingProductId ? (
+        <p className="text-sm text-destructive">
+          Немає продукту «Мішок для сировини (білий)». Зверніться до офісу.
+        </p>
       ) : (
         <FieldDeliveryForm
           accessName={bootstrap.accessName}
           suppliers={bootstrap.suppliers}
           warehouseId={warehouseId}
           productId={productId}
-          packingMaterials={bootstrap.packingMaterials}
-          defaultPackingProductId={defaultPackingProductId}
+          packingProductId={defaultPackingProductId}
           vehicles={bootstrap.vehicles}
           lastVehicleId={bootstrap.lastVehicleId}
         />

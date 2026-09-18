@@ -9,17 +9,11 @@ import {
   createFieldSupplier,
 } from "@/app/m/actions";
 import type { Vehicle } from "@/app/vehicles/actions";
-import type { Product, Supplier } from "@/lib/types";
-import { dateToYYYYMMDD } from "@/lib/utils";
+import type { Supplier } from "@/lib/types";
+import { dateToYYYYMMDD, formatNumberWithUnit } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Popover,
   PopoverContent,
@@ -34,13 +28,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const PACKING_BAG_LABEL = "Мішок для сировини (білий)";
+
 type Props = {
   accessName: string;
   suppliers: Supplier[];
   warehouseId: string;
   productId: string;
-  packingMaterials: Product[];
-  defaultPackingProductId: string;
+  packingProductId: string;
   vehicles: Vehicle[];
   lastVehicleId: string | null;
 };
@@ -57,8 +52,7 @@ export function FieldDeliveryForm({
   suppliers: initialSuppliers,
   warehouseId,
   productId,
-  packingMaterials,
-  defaultPackingProductId,
+  packingProductId,
   vehicles,
   lastVehicleId,
 }: Props) {
@@ -71,12 +65,9 @@ export function FieldDeliveryForm({
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
+  const [actualPaid, setActualPaid] = useState("");
   const [eventDate, setEventDate] = useState(() => new Date());
   const [dateOpen, setDateOpen] = useState(false);
-  const [materialsOpen, setMaterialsOpen] = useState(false);
-  const [materialProductId, setMaterialProductId] = useState(
-    defaultPackingProductId
-  );
   const [materialQuantity, setMaterialQuantity] = useState("");
   const [vehicleId, setVehicleId] = useState(
     lastVehicleId && vehicles.some((v) => v.id === lastVehicleId)
@@ -85,8 +76,7 @@ export function FieldDeliveryForm({
   );
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
-  const [extraCosts, setExtraCosts] = useState("");
-  const [notes, setNotes] = useState("");
+  const [fuelPrice, setFuelPrice] = useState("");
   const [pending, setPending] = useState(false);
 
   const filteredSuppliers = useMemo(() => {
@@ -100,6 +90,13 @@ export function FieldDeliveryForm({
   }, [suppliers, supplierSearch]);
 
   const selectedSupplier = suppliers.find((s) => String(s.id) === supplierId);
+
+  const purchaseSum = useMemo(() => {
+    const qty = parseNum(quantity);
+    const unit = parseNum(price);
+    if (qty == null || unit == null || qty <= 0 || unit < 0) return null;
+    return Math.round(qty * unit * 100) / 100;
+  }, [quantity, price]);
 
   async function handleCreateSupplier() {
     const name = newSupplierName.trim();
@@ -127,42 +124,61 @@ export function FieldDeliveryForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!supplierId || !productId || !warehouseId || !quantity) {
+    if (!supplierId || !productId || !warehouseId) {
       toast.error("Заповніть поля закупівлі");
+      return;
+    }
+    const bags = parseNum(quantity);
+    const pricePerUnit = parseNum(price);
+    if (bags == null || bags < 1) {
+      toast.error("Кількість має бути не менше 1");
+      return;
+    }
+    if (pricePerUnit == null || pricePerUnit < 0) {
+      toast.error("Вкажіть ціну за одиницю");
       return;
     }
     if (!vehicleId) {
       toast.error("Оберіть транспорт");
       return;
     }
-    const bags = parseNum(quantity);
-    if (bags == null || bags < 1) {
-      toast.error("Кількість має бути не менше 1");
+    const startKm = parseNum(startOdometer);
+    const endKm = parseNum(endOdometer);
+    const fuelPriceUah = parseNum(fuelPrice);
+    if (startKm == null || endKm == null) {
+      toast.error("Вкажіть одометр початок і кінець");
+      return;
+    }
+    if (endKm < startKm) {
+      toast.error("Кінець одометра не може бути меншим за початок");
+      return;
+    }
+    if (fuelPriceUah == null || fuelPriceUah < 0) {
+      toast.error("Вкажіть вартість пального за літр");
       return;
     }
 
     setPending(true);
     try {
+      const materialQty = parseNum(materialQuantity);
       const result = await createFieldDeliveryAndTrip({
         supplierId: Number(supplierId),
         productId: Number(productId),
         warehouseId: Number(warehouseId),
         quantity: bags,
-        pricePerUnit: parseNum(price),
+        pricePerUnit,
+        actualPaid: parseNum(actualPaid),
         deliveryDate: dateToYYYYMMDD(eventDate),
         materialProductId:
-          materialQuantity.trim() && Number(materialQuantity) > 0
-            ? Number(materialProductId)
+          materialQty != null && materialQty > 0 && packingProductId
+            ? Number(packingProductId)
             : null,
         materialQuantity:
-          materialQuantity.trim() && Number(materialQuantity) > 0
-            ? Number(materialQuantity)
-            : null,
+          materialQty != null && materialQty > 0 ? materialQty : null,
         vehicleId,
-        startOdometerKm: parseNum(startOdometer),
-        endOdometerKm: parseNum(endOdometer),
-        extraCostsUah: parseNum(extraCosts),
-        notes: notes.trim() || null,
+        startOdometerKm: startKm,
+        endOdometerKm: endKm,
+        fuelPriceUahPerL: fuelPriceUah,
       });
       if (!result.ok) {
         toast.error("Помилка", { description: result.error });
@@ -171,11 +187,11 @@ export function FieldDeliveryForm({
       toast.success("Закупівлю і поїздку збережено");
       setQuantity("");
       setPrice("");
+      setActualPaid("");
       setMaterialQuantity("");
       setStartOdometer("");
       setEndOdometer("");
-      setExtraCosts("");
-      setNotes("");
+      setFuelPrice("");
       router.refresh();
     } finally {
       setPending(false);
@@ -193,7 +209,8 @@ export function FieldDeliveryForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <p className="text-sm text-muted-foreground">
-        Ви входите як <span className="font-medium text-foreground">{accessName}</span>
+        Ви входите як{" "}
+        <span className="font-medium text-foreground">{accessName}</span>
       </p>
       <section className="space-y-4">
         <h2 className="text-sm font-medium text-muted-foreground">Закупівля</h2>
@@ -298,57 +315,62 @@ export function FieldDeliveryForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="price">Ціна за одиницю, ₴</Label>
+          <Label htmlFor="price">Ціна за одиницю, ₴ *</Label>
           <Input
             id="price"
             inputMode="decimal"
             className="h-11 text-base"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
+            required
           />
         </div>
 
-        <Collapsible open={materialsOpen} onOpenChange={setMaterialsOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="px-0 text-muted-foreground"
-            >
-              {materialsOpen ? "Сховати матеріали" : "Матеріали (передано)"}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <Label>Матеріал</Label>
-              <Select
-                value={materialProductId}
-                onValueChange={setMaterialProductId}
-              >
-                <SelectTrigger className="h-11 text-base">
-                  <SelectValue placeholder="Оберіть матеріал" />
-                </SelectTrigger>
-                <SelectContent>
-                  {packingMaterials.map((item) => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="material_quantity">Кількість матеріалів</Label>
-              <Input
-                id="material_quantity"
-                inputMode="decimal"
-                className="h-11 text-base"
-                value={materialQuantity}
-                onChange={(e) => setMaterialQuantity(e.target.value)}
-              />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        {purchaseSum != null ? (
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Сума закупівлі: </span>
+            <span className="font-medium tabular-nums">
+              {formatNumberWithUnit(purchaseSum, "₴")}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="actual_paid">Фактично сплачено, ₴</Label>
+          <Input
+            id="actual_paid"
+            inputMode="decimal"
+            className="h-11 text-base"
+            value={actualPaid}
+            onChange={(e) => setActualPaid(e.target.value)}
+            placeholder={
+              purchaseSum != null ? String(purchaseSum) : undefined
+            }
+          />
+        </div>
+
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="text-sm font-medium">Матеріали (передано)</div>
+          <div className="space-y-1.5">
+            <Label>Матеріал</Label>
+            <Input
+              className="h-11 text-base"
+              value={PACKING_BAG_LABEL}
+              readOnly
+              disabled
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="material_quantity">Кількість матеріалів</Label>
+            <Input
+              id="material_quantity"
+              inputMode="decimal"
+              className="h-11 text-base"
+              value={materialQuantity}
+              onChange={(e) => setMaterialQuantity(e.target.value)}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="space-y-4 border-t pt-4">
@@ -372,46 +394,38 @@ export function FieldDeliveryForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="odo_start">Одометр початок</Label>
+            <Label htmlFor="odo_start">Одометр початок *</Label>
             <Input
               id="odo_start"
               inputMode="decimal"
               className="h-11 text-base"
               value={startOdometer}
               onChange={(e) => setStartOdometer(e.target.value)}
+              required
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="odo_end">Одометр кінець</Label>
+            <Label htmlFor="odo_end">Одометр кінець *</Label>
             <Input
               id="odo_end"
               inputMode="decimal"
               className="h-11 text-base"
               value={endOdometer}
               onChange={(e) => setEndOdometer(e.target.value)}
+              required
             />
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="extra">Інші витрати, ₴</Label>
+          <Label htmlFor="fuel_price">Вартість пального, ₴/л *</Label>
           <Input
-            id="extra"
+            id="fuel_price"
             inputMode="decimal"
             className="h-11 text-base"
-            value={extraCosts}
-            onChange={(e) => setExtraCosts(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="notes">Нотатки</Label>
-          <Textarea
-            id="notes"
-            rows={3}
-            className="text-base"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            value={fuelPrice}
+            onChange={(e) => setFuelPrice(e.target.value)}
+            required
           />
         </div>
       </section>

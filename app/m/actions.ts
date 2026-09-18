@@ -112,15 +112,15 @@ export type FieldDeliveryTripInput = {
   productId: number;
   warehouseId: number;
   quantity: number;
-  pricePerUnit: number | null;
+  pricePerUnit: number;
+  actualPaid: number | null;
   deliveryDate: string;
   materialProductId: number | null;
   materialQuantity: number | null;
   vehicleId: string;
-  startOdometerKm: number | null;
-  endOdometerKm: number | null;
-  extraCostsUah: number | null;
-  notes: string | null;
+  startOdometerKm: number;
+  endOdometerKm: number;
+  fuelPriceUahPerL: number;
 };
 
 async function syncSupplierAdvanceFromLedger(
@@ -163,6 +163,26 @@ export async function createFieldDeliveryAndTrip(
     return { ok: false, error: "Заповніть обовʼязкові поля закупівлі" };
   }
 
+  if (input.pricePerUnit == null || !Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) {
+    return { ok: false, error: "Вкажіть ціну за одиницю" };
+  }
+
+  if (
+    input.startOdometerKm == null ||
+    input.endOdometerKm == null ||
+    input.endOdometerKm < input.startOdometerKm
+  ) {
+    return { ok: false, error: "Вкажіть коректний одометр початок і кінець" };
+  }
+
+  if (
+    input.fuelPriceUahPerL == null ||
+    !Number.isFinite(input.fuelPriceUahPerL) ||
+    input.fuelPriceUahPerL < 0
+  ) {
+    return { ok: false, error: "Вкажіть вартість пального за літр" };
+  }
+
   const bags = Math.floor(input.quantity);
   if (bags < 1) {
     return { ok: false, error: "Кількість має бути не менше 1" };
@@ -190,7 +210,7 @@ export async function createFieldDeliveryAndTrip(
     warehouse_id: input.warehouseId,
     quantity: input.quantity,
     price_per_unit: input.pricePerUnit,
-    actual_paid: null,
+    actual_paid: input.actualPaid,
     created_at: new Date(`${day}T12:00:00.000Z`).toISOString(),
     created_by_access_id: auth.access.id,
   };
@@ -254,7 +274,7 @@ export async function createFieldDeliveryAndTrip(
   const purchaseAmount = resolveSupplierDeliveryPayableAmount({
     quantity: input.quantity,
     pricePerUnit: input.pricePerUnit,
-    actualPaid: null,
+    actualPaid: input.actualPaid,
   });
 
   if (purchaseAmount > 0 && delivery.id) {
@@ -322,7 +342,7 @@ export async function createFieldDeliveryAndTrip(
     end_odometer_km: input.endOdometerKm,
     fuel_consumption_l_per_100km:
       vehicle.default_fuel_consumption_l_per_100km ?? defaults.fuel,
-    fuel_price_uah_per_l: null,
+    fuel_price_uah_per_l: input.fuelPriceUahPerL,
     depreciation_uah_per_km:
       vehicle.default_depreciation_uah_per_km ?? defaults.depreciation,
     days_count: 1,
@@ -330,9 +350,9 @@ export async function createFieldDeliveryAndTrip(
     freight_uah: 0,
     driver_pay_mode: "per_trip",
     driver_pay_uah: DEFAULT_RAW_DRIVER_PAY_UAH,
-    extra_costs_uah: input.extraCostsUah ?? 0,
+    extra_costs_uah: 0,
     bags_count: bags,
-    notes: input.notes,
+    notes: null,
   });
 
   if (!tripParsed.success) {
