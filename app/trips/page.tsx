@@ -89,6 +89,10 @@ import {
   downloadCsvFile,
   filterTripsForExport,
 } from "@/lib/trips/export";
+import {
+  buildRawDeliveryDebtByVehicle,
+  RAW_UNALLOCATED_VEHICLE_LABEL,
+} from "@/lib/debts/raw-delivery-debt";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
@@ -190,6 +194,7 @@ function TripsPageContent() {
   const [repaymentDate, setRepaymentDate] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentComment, setRepaymentComment] = useState("");
+  const [repaymentVehicleId, setRepaymentVehicleId] = useState("");
   const [repaymentPeriodFilter, setRepaymentPeriodFilter] =
     useState<RepaymentPeriodFilter>("all");
   const [repaymentYear, setRepaymentYear] = useState<number>(
@@ -202,6 +207,7 @@ function TripsPageContent() {
   const [editDate, setEditDate] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editComment, setEditComment] = useState("");
+  const [editVehicleId, setEditVehicleId] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [deleteRepaymentId, setDeleteRepaymentId] = useState<number | null>(
     null,
@@ -322,6 +328,7 @@ function TripsPageContent() {
     setEditDate(editingRepayment.date.slice(0, 10));
     setEditAmount(String(editingRepayment.amount));
     setEditComment(editingRepayment.description ?? "");
+    setEditVehicleId(editingRepayment.vehicle_id ?? "");
   }, [editingRepayment]);
 
   const filteredTrips = useMemo(() => {
@@ -442,6 +449,32 @@ function TripsPageContent() {
     const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
     return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
   }, [rawTripsForRepaymentBlock]);
+
+  const vehicleNamesById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of vehicles) {
+      map[v.id] = v.name;
+    }
+    return map;
+  }, [vehicles]);
+
+  const rawDebtByVehicle = useMemo(() => {
+    if (!rawRepaymentTotals) return null;
+    return buildRawDeliveryDebtByVehicle({
+      trips: rawTripsForRepaymentBlock.map((t) => ({
+        vehicle_id: t.vehicle_id,
+        vehicle_name: t.vehicle?.name ?? vehicleNamesById[t.vehicle_id] ?? null,
+        total_costs_uah: t.total_costs_uah,
+      })),
+      repayments: repaymentsList,
+      vehicleNames: vehicleNamesById,
+    });
+  }, [
+    rawRepaymentTotals,
+    rawTripsForRepaymentBlock,
+    repaymentsList,
+    vehicleNamesById,
+  ]);
 
   const remainingRepaymentUah = rawRepaymentTotals
     ? rawRepaymentTotals.sumTotalCostsUah - repaymentsSum
@@ -1091,6 +1124,47 @@ function TripsPageContent() {
                               {formatUah(remainingRepaymentUah)}
                             </span>
                           </div>
+                          {rawDebtByVehicle &&
+                            (rawDebtByVehicle.vehicles.length > 0 ||
+                              rawDebtByVehicle.unallocatedRepaidUah > 0) && (
+                              <div className="space-y-1.5 border-t pt-2">
+                                <span className="text-xs text-muted-foreground">
+                                  По авто
+                                </span>
+                                {rawDebtByVehicle.vehicles.map((row) => (
+                                  <div
+                                    key={row.vehicleId}
+                                    className="flex justify-between gap-2"
+                                  >
+                                    <span className="text-muted-foreground truncate">
+                                      {row.vehicleName}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "tabular-nums font-medium shrink-0",
+                                        row.remainingAmountUah < 0 &&
+                                          "text-destructive",
+                                      )}
+                                    >
+                                      {formatUah(row.remainingAmountUah)}
+                                    </span>
+                                  </div>
+                                ))}
+                                {rawDebtByVehicle.unallocatedRepaidUah > 0 && (
+                                  <div className="flex justify-between gap-2">
+                                    <span className="text-muted-foreground truncate">
+                                      {RAW_UNALLOCATED_VEHICLE_LABEL}
+                                    </span>
+                                    <span className="tabular-nums font-medium shrink-0 text-muted-foreground">
+                                      погашено{" "}
+                                      {formatUah(
+                                        rawDebtByVehicle.unallocatedRepaidUah,
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                         </div>
                       </div>
                       <div className="rounded-lg border p-4">
@@ -1106,6 +1180,10 @@ function TripsPageContent() {
                               toast.error("Оберіть дату");
                               return;
                             }
+                            if (!repaymentVehicleId.trim()) {
+                              toast.error("Оберіть транспорт");
+                              return;
+                            }
                             if (!(amount > 0)) {
                               toast.error("Вкажіть суму більше нуля");
                               return;
@@ -1115,6 +1193,7 @@ function TripsPageContent() {
                               repaymentDate,
                               amount,
                               repaymentComment,
+                              repaymentVehicleId,
                             );
                             setRepaymentSubmitting(false);
                             if (result.ok) {
@@ -1122,12 +1201,40 @@ function TripsPageContent() {
                               setRepaymentDate("");
                               setRepaymentAmount("");
                               setRepaymentComment("");
+                              setRepaymentVehicleId("");
                               refetchRepayments();
                             } else {
                               toast.error(result.error);
                             }
                           }}
                         >
+                          <div className="space-y-1.5 min-w-[180px]">
+                            <Label
+                              htmlFor="repayment-vehicle"
+                              className="text-xs text-muted-foreground"
+                            >
+                              Транспорт
+                            </Label>
+                            <Select
+                              value={repaymentVehicleId || undefined}
+                              onValueChange={setRepaymentVehicleId}
+                              disabled={repaymentSubmitting}
+                            >
+                              <SelectTrigger
+                                id="repayment-vehicle"
+                                className="w-[200px]"
+                              >
+                                <SelectValue placeholder="Оберіть авто" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {vehicles.map((v) => (
+                                  <SelectItem key={v.id} value={v.id}>
+                                    {v.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <div className="space-y-1.5">
                             <Label
                               htmlFor="repayment-date"
@@ -1140,6 +1247,7 @@ function TripsPageContent() {
                               type="date"
                               value={repaymentDate}
                               onChange={(e) => setRepaymentDate(e.target.value)}
+                              disabled={repaymentSubmitting}
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -1159,6 +1267,7 @@ function TripsPageContent() {
                               onChange={(e) =>
                                 setRepaymentAmount(e.target.value)
                               }
+                              disabled={repaymentSubmitting}
                             />
                           </div>
                           <div className="space-y-1.5 min-w-[200px] flex-1">
@@ -1175,10 +1284,22 @@ function TripsPageContent() {
                                 setRepaymentComment(e.target.value)
                               }
                               placeholder="Необов'язково"
+                              disabled={repaymentSubmitting}
                             />
                           </div>
-                          <Button type="submit" disabled={repaymentSubmitting}>
-                            {repaymentSubmitting ? "Збереження…" : "Погасити"}
+                          <Button
+                            type="submit"
+                            disabled={repaymentSubmitting}
+                            aria-busy={repaymentSubmitting}
+                          >
+                            {repaymentSubmitting ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Збереження…
+                              </>
+                            ) : (
+                              "Погасити"
+                            )}
                           </Button>
                         </form>
                       </div>
@@ -1232,6 +1353,7 @@ function TripsPageContent() {
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Дата</TableHead>
+                                    <TableHead>Транспорт</TableHead>
                                     <TableHead className="text-right">
                                       Сума
                                     </TableHead>
@@ -1250,6 +1372,10 @@ function TripsPageContent() {
                                             ? item.date.slice(0, 10)
                                             : item.date,
                                         )}
+                                      </TableCell>
+                                      <TableCell className="max-w-[160px] truncate">
+                                        {item.vehicle_name?.trim() ||
+                                          RAW_UNALLOCATED_VEHICLE_LABEL}
                                       </TableCell>
                                       <TableCell className="text-right tabular-nums font-medium">
                                         {formatUah(item.amount)}
@@ -1369,12 +1495,39 @@ function TripsPageContent() {
                       </DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
+                          <Label>Транспорт</Label>
+                          <Select
+                            value={editVehicleId || "__unallocated__"}
+                            onValueChange={(v) =>
+                              setEditVehicleId(
+                                v === "__unallocated__" ? "" : v,
+                              )
+                            }
+                            disabled={editSubmitting}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Оберіть авто" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__unallocated__">
+                                {RAW_UNALLOCATED_VEHICLE_LABEL}
+                              </SelectItem>
+                              {vehicles.map((v) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                  {v.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
                           <Label htmlFor="edit-date">Дата</Label>
                           <Input
                             id="edit-date"
                             type="date"
                             value={editDate}
                             onChange={(e) => setEditDate(e.target.value)}
+                            disabled={editSubmitting}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1386,6 +1539,7 @@ function TripsPageContent() {
                             step={0.01}
                             value={editAmount}
                             onChange={(e) => setEditAmount(e.target.value)}
+                            disabled={editSubmitting}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1396,6 +1550,7 @@ function TripsPageContent() {
                             value={editComment}
                             onChange={(e) => setEditComment(e.target.value)}
                             placeholder="Необов'язково"
+                            disabled={editSubmitting}
                           />
                         </div>
                       </div>
@@ -1403,6 +1558,7 @@ function TripsPageContent() {
                         <Button
                           type="button"
                           variant="outline"
+                          disabled={editSubmitting}
                           onClick={() => setEditingRepayment(null)}
                         >
                           Скасувати
@@ -1410,6 +1566,7 @@ function TripsPageContent() {
                         <Button
                           type="button"
                           disabled={editSubmitting}
+                          aria-busy={editSubmitting}
                           onClick={async () => {
                             if (!editingRepayment) return;
                             const amount = Number(editAmount);
@@ -1427,6 +1584,7 @@ function TripsPageContent() {
                               editDate,
                               amount,
                               editComment,
+                              editVehicleId || null,
                             );
                             setEditSubmitting(false);
                             if (result.ok) {
@@ -1438,7 +1596,14 @@ function TripsPageContent() {
                             }
                           }}
                         >
-                          {editSubmitting ? "Збереження…" : "Зберегти"}
+                          {editSubmitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Збереження…
+                            </>
+                          ) : (
+                            "Зберегти"
+                          )}
                         </Button>
                       </DialogFooter>
                     </DialogContent>

@@ -2356,7 +2356,8 @@ export async function createExpense(
   category_id: number,
   amount: number,
   description: string,
-  date?: string
+  date?: string,
+  vehicleId?: string | null
 ) {
   try {
     if (!category_id || amount <= 0) {
@@ -2388,6 +2389,7 @@ export async function createExpense(
           amount,
           description: description?.trim() || "",
           date: dateValue,
+          ...(vehicleId ? { vehicle_id: vehicleId } : {}),
         },
       ])
       .select(
@@ -2413,7 +2415,8 @@ export async function createExpense(
 export async function createRawCostRepayment(
   date: string,
   amount: number,
-  comment?: string
+  comment?: string,
+  vehicleId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!date || amount <= 0) {
@@ -2432,7 +2435,13 @@ export async function createRawCostRepayment(
       category = { id: created.id, name: created.name };
     }
 
-    await createExpense(category.id, amount, comment?.trim() ?? "", date);
+    await createExpense(
+      category.id,
+      amount,
+      comment?.trim() ?? "",
+      date,
+      vehicleId?.trim() || null
+    );
     revalidatePath("/expenses");
     revalidatePath("/trips");
     return { ok: true };
@@ -2622,6 +2631,8 @@ export type RawRepaymentItem = {
   date: string;
   amount: number;
   description: string;
+  vehicle_id: string | null;
+  vehicle_name: string | null;
 };
 
 export async function getRawRepayments(
@@ -2641,7 +2652,7 @@ export async function getRawRepayments(
 
     let query = supabase
       .from("expenses")
-      .select("id, date, amount, description")
+      .select("id, date, amount, description, vehicle_id, vehicle:vehicles(name)")
       .eq("category_id", category.id)
       .order("date", { ascending: false });
 
@@ -2653,12 +2664,24 @@ export async function getRawRepayments(
       console.error("Error fetching raw repayments:", error);
       return [];
     }
-    return (data ?? []).map((row) => ({
-      id: row.id,
-      date: row.date,
-      amount: Number(row.amount ?? 0),
-      description: row.description ?? "",
-    }));
+    return (data ?? []).map((row) => {
+      const vehicleJoin = row.vehicle as
+        | { name: string }
+        | { name: string }[]
+        | null
+        | undefined;
+      const vehicleName = Array.isArray(vehicleJoin)
+        ? (vehicleJoin[0]?.name ?? null)
+        : (vehicleJoin?.name ?? null);
+      return {
+        id: row.id,
+        date: row.date,
+        amount: Number(row.amount ?? 0),
+        description: row.description ?? "",
+        vehicle_id: (row.vehicle_id as string | null) ?? null,
+        vehicle_name: vehicleName,
+      };
+    });
   } catch {
     return [];
   }
@@ -2676,7 +2699,8 @@ export async function updateRawRepayment(
   id: number,
   date: string,
   amount: number,
-  comment?: string
+  comment?: string,
+  vehicleId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!date || amount <= 0) {
@@ -2690,6 +2714,7 @@ export async function updateRawRepayment(
         date: dateValue,
         amount,
         description: comment?.trim() ?? "",
+        vehicle_id: vehicleId?.trim() || null,
       })
       .eq("id", id);
     if (error) {
