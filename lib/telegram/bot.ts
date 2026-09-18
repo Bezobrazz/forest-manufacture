@@ -1,21 +1,6 @@
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-export async function getTelegramBotToken(): Promise<string | null> {
-  const fromEnv = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
-
-  try {
-    const supabase = createServiceRoleClient();
-    const { data, error } = await supabase
-      .from("settings")
-      .select("telegram_bot_token")
-      .single();
-    if (error || !data?.telegram_bot_token) return null;
-    return data.telegram_bot_token;
-  } catch (error) {
-    console.error("Error fetching Telegram bot token:", error);
-    return null;
-  }
+/** Token польового бота (Mini App). Окремо від TELEGRAM_BOT_TOKEN для алертів мішків. */
+export function getTelegramWorkBotToken(): string | null {
+  return process.env.TELEGRAM_BOT_WORK_TOKEN?.trim() || null;
 }
 
 export async function sendTelegramChatMessage(

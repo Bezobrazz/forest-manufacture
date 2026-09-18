@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTelegramBotToken } from "@/lib/telegram/bot";
+import { getTelegramWorkBotToken } from "@/lib/telegram/bot";
 import { handleTelegramBotUpdate } from "@/lib/telegram/handle-update";
 
 function webhookSecretOk(request: NextRequest): boolean {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const botToken = await getTelegramBotToken();
+  const botToken = getTelegramWorkBotToken();
   if (!botToken) {
     return NextResponse.json({ ok: false, error: "bot token missing" }, { status: 503 });
   }

@@ -15,15 +15,9 @@ export type TelegramMessageUpdate = {
 };
 
 function fieldKeyboard() {
-  const purchaseUrl = getMiniAppUrl("/m/purchase");
-  const tripUrl = getMiniAppUrl("/m/trip");
+  const homeUrl = getMiniAppUrl("/m");
   return {
-    keyboard: [
-      [
-        { text: "Закупівля сировини", web_app: { url: purchaseUrl } },
-        { text: "Поїздка", web_app: { url: tripUrl } },
-      ],
-    ],
+    keyboard: [[{ text: "Внести дані", web_app: { url: homeUrl } }]],
     resize_keyboard: true,
   };
 }

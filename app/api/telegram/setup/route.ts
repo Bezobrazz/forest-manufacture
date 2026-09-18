@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppBaseUrl, getMiniAppUrl } from "@/lib/telegram/app-url";
 import {
-  getTelegramBotToken,
+  getTelegramWorkBotToken,
   setTelegramChatMenuButton,
   setTelegramWebhook,
 } from "@/lib/telegram/bot";
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const botToken = await getTelegramBotToken();
+  const botToken = getTelegramWorkBotToken();
   if (!botToken) {
     return NextResponse.json({ ok: false, error: "bot token missing" }, { status: 503 });
   }

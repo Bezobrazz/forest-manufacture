@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createServerSupabaseClient } from "@/lib/supabase/server-auth";
-import { getTelegramBotToken } from "@/lib/telegram/bot";
+import { getTelegramWorkBotToken } from "@/lib/telegram/bot";
 import { validateTelegramInitData } from "@/lib/telegram/validate-init-data";
 
 export async function POST(request: NextRequest) {
-  const botToken = await getTelegramBotToken();
+  const botToken = getTelegramWorkBotToken();
   if (!botToken) {
     return NextResponse.json(
       { ok: false, error: "Telegram bot не налаштовано" },
