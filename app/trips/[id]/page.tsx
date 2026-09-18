@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/format";
@@ -70,13 +70,12 @@ function parseYmd(value: string): Date {
 }
 
 function getMileageFields(
-  tripType: TripType,
   distanceInputMode: DistanceInputMode,
   startOdometer: string,
   endOdometer: string,
   totalDistanceKm: string
 ) {
-  if (tripType === "commerce" && distanceInputMode === "total") {
+  if (distanceInputMode === "total") {
     return {
       distance_input_mode: "total" as const,
       start_odometer_km: null,
@@ -223,7 +222,6 @@ export default function TripDetailPage() {
     e.preventDefault();
     if (!tripId) return;
     const mileage = getMileageFields(
-      tripType,
       distanceInputMode,
       startOdometer,
       endOdometer,
@@ -535,25 +533,23 @@ export default function TripDetailPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 Пробіг
               </p>
-              {tripType === "commerce" && (
-                <Field id="distance_input_mode" label="Спосіб введення" className="mb-4">
-                  <ToggleGroup
-                    type="single"
-                    value={distanceInputMode}
-                    onValueChange={(v) => v && setDistanceInputMode(v as DistanceInputMode)}
-                    className="justify-start"
-                  >
-                    <ToggleGroupItem value="odometer" aria-label="Початок і кінець">
-                      Початок і кінець
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="total" aria-label="Загальний пробіг">
-                      Загальний пробіг
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                </Field>
-              )}
-              {tripType === "commerce" && distanceInputMode === "total" ? (
-                <Field id="total_distance_km" label="Загальний пробіг (км)">
+              <Field id="distance_input_mode" label="Спосіб введення" className="mb-4">
+                <ToggleGroup
+                  type="single"
+                  value={distanceInputMode}
+                  onValueChange={(v) => v && setDistanceInputMode(v as DistanceInputMode)}
+                  className="justify-start"
+                >
+                  <ToggleGroupItem value="odometer" aria-label="Початок і кінець">
+                    Початок і кінець
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="total" aria-label="Загальний кілометраж">
+                    Загальний кілометраж
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </Field>
+              {distanceInputMode === "total" ? (
+                <Field id="total_distance_km" label="Загальний кілометраж (км)">
                   <Input
                     id="total_distance_km"
                     type="text"
@@ -757,12 +753,20 @@ export default function TripDetailPage() {
             <Separator />
 
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Збереження..." : "Зберегти зміни"}
+              <Button type="submit" disabled={isPending} aria-busy={isPending}>
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Збереження…
+                  </>
+                ) : (
+                  "Зберегти зміни"
+                )}
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                disabled={isPending}
                 onClick={() => router.push("/trips")}
               >
                 Скасувати

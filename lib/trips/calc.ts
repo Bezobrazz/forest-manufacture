@@ -54,7 +54,7 @@ const ensureNonNegative = (value: number | null | undefined): number =>
 export type DistanceInputMode = "odometer" | "total";
 
 function resolveDistanceKm(input: TripInput): number {
-  if (input.trip_type === "commerce" && input.total_distance_km != null) {
+  if (input.total_distance_km != null) {
     return round2(ensureNonNegative(input.total_distance_km));
   }
 

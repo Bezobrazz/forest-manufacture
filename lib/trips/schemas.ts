@@ -50,11 +50,11 @@ export const tripFormSchema = z
       .transform((s) => (s?.trim() || null) ?? null),
   })
   .superRefine((data, ctx) => {
-    if (data.trip_type === "commerce" && data.distance_input_mode === "total") {
+    if (data.distance_input_mode === "total") {
       if (data.total_distance_km == null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Вкажіть загальний пробіг",
+          message: "Вкажіть загальний кілометраж",
           path: ["total_distance_km"],
         });
       }
@@ -72,7 +72,7 @@ export const tripFormSchema = z
     }
   })
   .transform((data) => {
-    if (data.trip_type === "commerce" && data.distance_input_mode === "total") {
+    if (data.distance_input_mode === "total") {
       return {
         ...data,
         start_odometer_km: null,

@@ -58,6 +58,20 @@ test("calculateTripMetrics: distance = 0", () => {
   assert.strictEqual(m.status, "profit");
 });
 
+test("calculateTripMetrics: raw з загальним кілометражем", () => {
+  const input: TripInput = {
+    ...baseInput,
+    trip_type: "raw",
+    start_odometer_km: 0,
+    end_odometer_km: 999,
+    total_distance_km: 80,
+  };
+  const m = calculateTripMetrics(input);
+
+  assert.strictEqual(m.distance_km, 80);
+  assert.strictEqual(m.fuel_used_l, 8);
+});
+
 test("calculateTripMetrics: commerce з загальним пробігом", () => {
   const input: TripInput = {
     ...baseInput,

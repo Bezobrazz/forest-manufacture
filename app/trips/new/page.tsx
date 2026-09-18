@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { ArrowLeft, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { formatUah, formatKm, formatL, formatPercent, parseNumericInput } from "@/lib/format";
@@ -63,13 +63,12 @@ function parseNum(value: string): number | null {
 }
 
 function getMileageFields(
-  tripType: TripType,
   distanceInputMode: DistanceInputMode,
   startOdometer: string,
   endOdometer: string,
   totalDistanceKm: string
 ) {
-  if (tripType === "commerce" && distanceInputMode === "total") {
+  if (distanceInputMode === "total") {
     return {
       distance_input_mode: "total" as const,
       start_odometer_km: null,
@@ -178,7 +177,6 @@ export default function NewTripPage() {
 
   const previewMetrics = useMemo(() => {
     const mileage = getMileageFields(
-      tripType,
       distanceInputMode,
       startOdometer,
       endOdometer,
@@ -234,7 +232,6 @@ export default function NewTripPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const mileage = getMileageFields(
-      tripType,
       distanceInputMode,
       startOdometer,
       endOdometer,
@@ -560,25 +557,23 @@ export default function NewTripPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 Пробіг
               </p>
-              {tripType === "commerce" && (
-                <Field id="distance_input_mode" label="Спосіб введення" className="mb-4">
-                  <ToggleGroup
-                    type="single"
-                    value={distanceInputMode}
-                    onValueChange={(v) => v && setDistanceInputMode(v as DistanceInputMode)}
-                    className="justify-start"
-                  >
-                    <ToggleGroupItem value="odometer" aria-label="Початок і кінець">
-                      Початок і кінець
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="total" aria-label="Загальний пробіг">
-                      Загальний пробіг
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                </Field>
-              )}
-              {tripType === "commerce" && distanceInputMode === "total" ? (
-                <Field id="total_distance_km" label="Загальний пробіг (км)">
+              <Field id="distance_input_mode" label="Спосіб введення" className="mb-4">
+                <ToggleGroup
+                  type="single"
+                  value={distanceInputMode}
+                  onValueChange={(v) => v && setDistanceInputMode(v as DistanceInputMode)}
+                  className="justify-start"
+                >
+                  <ToggleGroupItem value="odometer" aria-label="Початок і кінець">
+                    Початок і кінець
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="total" aria-label="Загальний кілометраж">
+                    Загальний кілометраж
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </Field>
+              {distanceInputMode === "total" ? (
+                <Field id="total_distance_km" label="Загальний кілометраж (км)">
                   <Input
                     id="total_distance_km"
                     type="text"
@@ -800,12 +795,20 @@ export default function NewTripPage() {
             <Separator />
 
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Збереження..." : "Зберегти поїздку"}
+              <Button type="submit" disabled={isPending} aria-busy={isPending}>
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Збереження…
+                  </>
+                ) : (
+                  "Зберегти поїздку"
+                )}
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                disabled={isPending}
                 onClick={() => router.push("/trips")}
               >
                 Скасувати
@@ -897,7 +900,7 @@ export default function NewTripPage() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Заповніть пробіг (початок і кінець) для розрахунку
+              Заповніть пробіг для розрахунку
             </p>
           )}
         </CardContent>
