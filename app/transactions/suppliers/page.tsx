@@ -1446,6 +1446,7 @@ function SupplierTransactionsPageContent() {
                       <TableRow>
                         <TableHead>Дата</TableHead>
                         <TableHead>Постачальник</TableHead>
+                        <TableHead>Хто вніс</TableHead>
                         <TableHead>Продукт</TableHead>
                         <TableHead className="text-right">
                           Матеріали (передано)
@@ -1483,6 +1484,9 @@ function SupplierTransactionsPageContent() {
                                           "Невідомий постачальник"}
                                       </span>
                                     </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    —
                                   </TableCell>
                                   <TableCell>
                                     <div className="flex items-center gap-2">
@@ -1586,6 +1590,10 @@ function SupplierTransactionsPageContent() {
                                         "Невідомий постачальник"}
                                     </span>
                                   </div>
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {delivery.created_by_access?.display_name ??
+                                    "—"}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 import Script from "next/script";
-import { getServerUser } from "@/lib/supabase/server-auth";
+import { getMiniAppAccessFromCookie } from "@/lib/telegram/mini-app-session";
 import { TelegramSessionGate } from "./telegram-session-gate";
 
 export default async function MiniAppLayout({
@@ -7,7 +7,7 @@ export default async function MiniAppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getServerUser();
+  const access = await getMiniAppAccessFromCookie();
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-lg bg-background pb-[env(safe-area-inset-bottom)]">
@@ -15,7 +15,7 @@ export default async function MiniAppLayout({
         src="https://telegram.org/js/telegram-web-app.js"
         strategy="beforeInteractive"
       />
-      <TelegramSessionGate isAuthenticated={!!user}>
+      <TelegramSessionGate hasAccessSession={!!access}>
         {children}
       </TelegramSessionGate>
     </div>

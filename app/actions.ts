@@ -3145,7 +3145,8 @@ export async function getSupplierDeliveries(): Promise<SupplierDelivery[]> {
         supplier:suppliers(*),
         product:products!supplier_deliveries_product_id_fkey(*, category:product_categories(*)),
         material_product:products!supplier_deliveries_material_product_id_fkey(*, category:product_categories(*)),
-        warehouse:warehouses(*)
+        warehouse:warehouses(*),
+        created_by_access:mini_app_accesses(display_name)
       `
       )
       .order("created_at", { ascending: false });

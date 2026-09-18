@@ -1,11 +1,4 @@
-import {
-  getMaterials,
-  getProductsByCategoryName,
-  getSuppliers,
-  getWarehouses,
-} from "@/app/actions";
-import { getLastUsedVehicleId } from "@/app/trips/actions";
-import { getVehicles } from "@/app/vehicles/actions";
+import { getMiniAppFormBootstrap } from "@/app/m/actions";
 import { FieldDeliveryForm } from "@/components/m/field-delivery-form";
 
 const DEFAULT_RAW_MATERIAL_NAME = "Кора Сировина";
@@ -23,28 +16,31 @@ function findIdByName<T extends { id: number; name: string }>(
 }
 
 export default async function MiniAppHomePage() {
-  const [suppliers, warehouses, materials, packingMaterials, vehicles, lastVehicleId] =
-    await Promise.all([
-      getSuppliers(),
-      getWarehouses(),
-      getMaterials(),
-      getProductsByCategoryName("Матеріали"),
-      getVehicles(),
-      getLastUsedVehicleId(),
-    ]);
+  const bootstrap = await getMiniAppFormBootstrap();
+
+  if (!bootstrap) {
+    return (
+      <div className="space-y-2 p-4 pt-6 text-center text-sm text-muted-foreground">
+        Очікування сесії Mini App…
+      </div>
+    );
+  }
 
   const warehouseId = String(
-    warehouses.find((w) => w.name.toLowerCase().includes("main"))?.id ??
-      warehouses[0]?.id ??
+    bootstrap.warehouses.find((w) => w.name.toLowerCase().includes("main"))
+      ?.id ??
+      bootstrap.warehouses[0]?.id ??
       ""
   );
-  const rawMaterials = materials.filter((m) => m.category?.name === "Сировина");
+  const rawMaterials = bootstrap.materials.filter(
+    (m) => m.category?.name === "Сировина"
+  );
   const productId = findIdByName(
-    rawMaterials.length > 0 ? rawMaterials : materials,
+    rawMaterials.length > 0 ? rawMaterials : bootstrap.materials,
     DEFAULT_RAW_MATERIAL_NAME
   );
   const defaultPackingProductId = findIdByName(
-    packingMaterials,
+    bootstrap.packingMaterials,
     DEFAULT_PACKING_MATERIAL_NAME
   );
 
@@ -62,13 +58,14 @@ export default async function MiniAppHomePage() {
         </p>
       ) : (
         <FieldDeliveryForm
-          suppliers={suppliers}
+          accessName={bootstrap.accessName}
+          suppliers={bootstrap.suppliers}
           warehouseId={warehouseId}
           productId={productId}
-          packingMaterials={packingMaterials}
+          packingMaterials={bootstrap.packingMaterials}
           defaultPackingProductId={defaultPackingProductId}
-          vehicles={vehicles}
-          lastVehicleId={lastVehicleId}
+          vehicles={bootstrap.vehicles}
+          lastVehicleId={bootstrap.lastVehicleId}
         />
       )}
     </div>

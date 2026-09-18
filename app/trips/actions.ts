@@ -31,6 +31,8 @@ export type TripListItem = {
   profit_per_km_uah: number | null;
   roi_percent: number | null;
   bags_count: number | null;
+  created_by_access_id?: string | null;
+  created_by_access?: { display_name: string } | null;
 };
 
 /** Повертає список рейсів із snapshot-полями (distance_km, total_costs_uah, profit_uah тощо). Звіти та підсумки використовують ці збережені значення без перерахунку на льоту. */
@@ -38,11 +40,27 @@ export async function getTrips(): Promise<TripListItem[]> {
   const supabase = await createServerSupabaseClient();
   const user = await getServerUser();
   if (!user) return [];
-  const { data, error } = await supabase
+
+  const { data: roleRow } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = roleRow?.role as string | undefined;
+  const seeAll = role === "owner" || role === "admin";
+
+  let query = supabase
     .from("trips")
-    .select("id, name, trip_date, trip_start_date, trip_end_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, bags_count, vehicle:vehicles(name)")
-    .eq("user_id", user.id)
+    .select(
+      "id, name, trip_date, trip_start_date, trip_end_date, trip_type, vehicle_id, distance_km, freight_uah, fuel_cost_uah, driver_cost_uah, total_costs_uah, profit_uah, profit_per_km_uah, roi_percent, bags_count, created_by_access_id, vehicle:vehicles(name), created_by_access:mini_app_accesses(display_name)"
+    )
     .order("trip_start_date", { ascending: false });
+
+  if (!seeAll) {
+    query = query.eq("user_id", user.id);
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.error("Error fetching trips:", error);
     return [];
@@ -55,11 +73,25 @@ export async function getTripsForExport(): Promise<TripDetail[]> {
   const supabase = await createServerSupabaseClient();
   const user = await getServerUser();
   if (!user) return [];
-  const { data, error } = await supabase
+
+  const { data: roleRow } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = roleRow?.role as string | undefined;
+  const seeAll = role === "owner" || role === "admin";
+
+  let query = supabase
     .from("trips")
-    .select("*, vehicle:vehicles(name)")
-    .eq("user_id", user.id)
+    .select("*, vehicle:vehicles(name), created_by_access:mini_app_accesses(display_name)")
     .order("trip_start_date", { ascending: false });
+
+  if (!seeAll) {
+    query = query.eq("user_id", user.id);
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.error("Error fetching trips for export:", error);
     return [];

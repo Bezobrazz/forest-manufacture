@@ -23,11 +23,26 @@ export async function getVehicles(): Promise<Vehicle[]> {
     return [];
   }
 
-  const { data, error } = await supabase
+  const { data: roleRow } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = roleRow?.role as string | undefined;
+  const seeFleet = role === "owner" || role === "admin";
+
+  let query = supabase
     .from("vehicles")
-    .select("id, user_id, name, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah, created_at")
-    .eq("user_id", user.id)
+    .select(
+      "id, user_id, name, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah, created_at"
+    )
     .order("name");
+
+  if (!seeFleet) {
+    query = query.eq("user_id", user.id);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error fetching vehicles:", error);

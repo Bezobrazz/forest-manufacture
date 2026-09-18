@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, Search, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { createSupplier, createSupplierDelivery } from "@/app/actions";
-import { createTrip } from "@/app/trips/actions";
+import {
+  createFieldDeliveryAndTrip,
+  createFieldSupplier,
+} from "@/app/m/actions";
 import type { Vehicle } from "@/app/vehicles/actions";
 import type { Product, Supplier } from "@/lib/types";
-import { TYPE_DEFAULTS } from "@/lib/trips/constants";
 import { dateToYYYYMMDD } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,10 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const DEFAULT_RAW_DRIVER_PAY_UAH = 1000;
-const DEFAULT_RAW_TRIP_NAME = "Доставка сировини";
-
 type Props = {
+  accessName: string;
   suppliers: Supplier[];
   warehouseId: string;
   productId: string;
@@ -54,6 +53,7 @@ function parseNum(value: string): number | null {
 }
 
 export function FieldDeliveryForm({
+  accessName,
   suppliers: initialSuppliers,
   warehouseId,
   productId,
@@ -106,18 +106,17 @@ export function FieldDeliveryForm({
     if (!name) return;
     setCreatingSupplier(true);
     try {
-      const formData = new FormData();
-      formData.set("name", name);
-      const result = await createSupplier(formData);
-      if (!result.success || !result.data) {
+      const result = await createFieldSupplier(name);
+      if (!result.ok) {
         toast.error("Помилка", { description: result.error });
         return;
       }
-      const created = result.data as Supplier;
       setSuppliers((prev) =>
-        [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "uk"))
+        [...prev, result.supplier].sort((a, b) =>
+          a.name.localeCompare(b.name, "uk")
+        )
       );
-      setSupplierId(String(created.id));
+      setSupplierId(String(result.supplier.id));
       setNewSupplierName("");
       setSupplierOpen(false);
       toast.success("Постачальника додано");
@@ -132,8 +131,7 @@ export function FieldDeliveryForm({
       toast.error("Заповніть поля закупівлі");
       return;
     }
-    const vehicle = vehicles.find((v) => v.id === vehicleId);
-    if (!vehicle) {
+    if (!vehicleId) {
       toast.error("Оберіть транспорт");
       return;
     }
@@ -143,61 +141,33 @@ export function FieldDeliveryForm({
       return;
     }
 
-    const day = dateToYYYYMMDD(eventDate);
-    const defaults = TYPE_DEFAULTS[vehicle.type];
     setPending(true);
     try {
-      const formData = new FormData();
-      formData.set("supplier_id", supplierId);
-      formData.set("product_id", productId);
-      formData.set("warehouse_id", warehouseId);
-      formData.set("quantity", quantity);
-      formData.set("delivery_date", day);
-      if (price.trim()) formData.set("price_per_unit", price);
-      if (materialQuantity.trim() && Number(materialQuantity) > 0) {
-        formData.set("material_product_id", materialProductId);
-        formData.set("material_quantity", materialQuantity);
-      }
-
-      const purchaseResult = await createSupplierDelivery(formData);
-      if (!purchaseResult.success) {
-        toast.error("Помилка закупівлі", {
-          description: purchaseResult.error,
-        });
-        return;
-      }
-
-      const tripResult = await createTrip({
-        name: DEFAULT_RAW_TRIP_NAME,
-        trip_start_date: day,
-        trip_end_date: day,
-        vehicle_id: vehicleId,
-        trip_type: "raw",
-        distance_input_mode: "odometer",
-        start_odometer_km: parseNum(startOdometer),
-        end_odometer_km: parseNum(endOdometer),
-        fuel_consumption_l_per_100km:
-          vehicle.default_fuel_consumption_l_per_100km ?? defaults.fuel,
-        fuel_price_uah_per_l: null,
-        depreciation_uah_per_km:
-          vehicle.default_depreciation_uah_per_km ?? defaults.depreciation,
-        days_count: 1,
-        daily_taxes_uah: vehicle.default_daily_taxes_uah ?? defaults.dailyTaxes,
-        freight_uah: 0,
-        driver_pay_mode: "per_trip",
-        driver_pay_uah: DEFAULT_RAW_DRIVER_PAY_UAH,
-        extra_costs_uah: parseNum(extraCosts) ?? 0,
-        bags_count: Math.floor(bags),
+      const result = await createFieldDeliveryAndTrip({
+        supplierId: Number(supplierId),
+        productId: Number(productId),
+        warehouseId: Number(warehouseId),
+        quantity: bags,
+        pricePerUnit: parseNum(price),
+        deliveryDate: dateToYYYYMMDD(eventDate),
+        materialProductId:
+          materialQuantity.trim() && Number(materialQuantity) > 0
+            ? Number(materialProductId)
+            : null,
+        materialQuantity:
+          materialQuantity.trim() && Number(materialQuantity) > 0
+            ? Number(materialQuantity)
+            : null,
+        vehicleId,
+        startOdometerKm: parseNum(startOdometer),
+        endOdometerKm: parseNum(endOdometer),
+        extraCostsUah: parseNum(extraCosts),
         notes: notes.trim() || null,
       });
-
-      if (!tripResult.ok) {
-        toast.error("Закупівлю збережено, поїздку — ні", {
-          description: tripResult.error,
-        });
+      if (!result.ok) {
+        toast.error("Помилка", { description: result.error });
         return;
       }
-
       toast.success("Закупівлю і поїздку збережено");
       setQuantity("");
       setPrice("");
@@ -215,14 +185,16 @@ export function FieldDeliveryForm({
   if (vehicles.length === 0) {
     return (
       <p className="text-sm text-destructive">
-        Немає транспорту в обліковому записі. Додайте авто в ERP, потім
-        повторіть.
+        Немає транспорту в автопарку. Додайте авто в ERP, потім повторіть.
       </p>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      <p className="text-sm text-muted-foreground">
+        Ви входите як <span className="font-medium text-foreground">{accessName}</span>
+      </p>
       <section className="space-y-4">
         <h2 className="text-sm font-medium text-muted-foreground">Закупівля</h2>
 
