@@ -119,11 +119,13 @@ export interface SupplierDelivery {
   material_quantity?: number | null;
   advance_used?: number;
   keepin_payment_id?: number | null;
+  created_by_access_id?: string | null;
   created_at: string;
   supplier?: Supplier;
   product?: Product;
   material_product?: Product | null;
   warehouse?: Warehouse;
+  created_by_access?: { display_name: string } | null;
 }
 
 export interface SupplierAdvanceTransaction {

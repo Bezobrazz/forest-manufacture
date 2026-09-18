@@ -913,6 +913,7 @@ function TripsPageContent() {
                       <TableRow>
                         <TableHead>Дата</TableHead>
                         <TableHead>Транспорт</TableHead>
+                        <TableHead>Хто вніс</TableHead>
                         <TableHead className="text-right">Відстань</TableHead>
                         <TableHead className="text-right">Витрати</TableHead>
                         <TableHead className="text-right">Мішки</TableHead>
@@ -941,6 +942,9 @@ function TripsPageContent() {
                               )}
                             </TableCell>
                             <TableCell>{t.vehicle?.name ?? "—"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {t.created_by_access?.display_name ?? "—"}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatKm(t.distance_km)}
                             </TableCell>

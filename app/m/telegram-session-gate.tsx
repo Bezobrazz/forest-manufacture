@@ -17,21 +17,22 @@ declare global {
 }
 
 type Props = {
-  isAuthenticated: boolean;
+  hasAccessSession: boolean;
   children: React.ReactNode;
 };
 
-export function TelegramSessionGate({ isAuthenticated, children }: Props) {
+export function TelegramSessionGate({ hasAccessSession, children }: Props) {
   const router = useRouter();
-  const [status, setStatus] = useState<"loading" | "ready" | "unlinked">(
-    isAuthenticated ? "ready" : "loading"
+  const [status, setStatus] = useState<"loading" | "ready" | "denied">(
+    hasAccessSession ? "ready" : "loading"
+  );
+  const [deniedMessage, setDeniedMessage] = useState(
+    "Telegram не прив’язано. Зверніться до адміністратора за кодом доступу."
   );
 
   useEffect(() => {
-    if (isAuthenticated) {
-      setStatus("ready");
-    }
-  }, [isAuthenticated]);
+    if (hasAccessSession) setStatus("ready");
+  }, [hasAccessSession]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -41,7 +42,7 @@ export function TelegramSessionGate({ isAuthenticated, children }: Props) {
     const initData = tg?.initData?.trim() ?? "";
 
     if (!initData) {
-      setStatus(isAuthenticated ? "ready" : "unlinked");
+      setStatus(hasAccessSession ? "ready" : "denied");
       return;
     }
 
@@ -56,18 +57,24 @@ export function TelegramSessionGate({ isAuthenticated, children }: Props) {
         });
         if (cancelled) return;
         if (!response.ok) {
-          setStatus(isAuthenticated ? "ready" : "unlinked");
+          let message = deniedMessage;
+          try {
+            const body = (await response.json()) as { message?: string };
+            if (body.message) message = body.message;
+          } catch {
+            /* ignore */
+          }
+          setDeniedMessage(message);
+          setStatus(hasAccessSession ? "ready" : "denied");
           return;
         }
         router.refresh();
         window.setTimeout(() => {
-          if (!cancelled) {
-            setStatus((prev) => (prev === "unlinked" ? prev : "ready"));
-          }
-        }, 800);
+          if (!cancelled) setStatus("ready");
+        }, 400);
       } catch {
-        if (!cancelled && !isAuthenticated) {
-          setStatus("unlinked");
+        if (!cancelled) {
+          setStatus(hasAccessSession ? "ready" : "denied");
         }
       }
     })();
@@ -75,7 +82,7 @@ export function TelegramSessionGate({ isAuthenticated, children }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, router]);
+  }, [deniedMessage, hasAccessSession, router]);
 
   if (status === "loading") {
     return (
@@ -86,14 +93,14 @@ export function TelegramSessionGate({ isAuthenticated, children }: Props) {
     );
   }
 
-  if (status === "unlinked") {
+  if (status === "denied") {
     return (
       <div className="mx-auto max-w-md space-y-3 px-4 py-10 text-center">
         <h1 className="text-xl font-semibold">Немає доступу</h1>
+        <p className="text-sm text-muted-foreground">{deniedMessage}</p>
         <p className="text-sm text-muted-foreground">
-          Telegram не прив’язано до облікового запису. Зверніться до
-          адміністратора: у профілі ERP згенеруйте код і надішліть боту{" "}
-          <span className="font-mono">/start КОД</span>.
+          Адміністратор створює доступ у ERP і дає команду{" "}
+          <span className="font-mono">/start КОД</span> для бота.
         </p>
       </div>
     );

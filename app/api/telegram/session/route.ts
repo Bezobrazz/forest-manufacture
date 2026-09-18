@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { createServerSupabaseClient } from "@/lib/supabase/server-auth";
 import { getTelegramWorkBotToken } from "@/lib/telegram/bot";
+import { setMiniAppAccessCookie } from "@/lib/telegram/mini-app-session";
 import { validateTelegramInitData } from "@/lib/telegram/validate-init-data";
 
 export async function POST(request: NextRequest) {
@@ -30,13 +30,13 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createServiceRoleClient();
-  const { data: profile, error: profileError } = await admin
-    .from("users")
-    .select("id, email")
+  const { data: access, error } = await admin
+    .from("mini_app_accesses")
+    .select("id, status, display_name")
     .eq("telegram_id", parsed.telegramId)
     .maybeSingle();
 
-  if (profileError || !profile?.email) {
+  if (error || !access) {
     return NextResponse.json(
       {
         ok: false,
@@ -47,33 +47,45 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email: profile.email,
-  });
-
-  const hashedToken = linkData?.properties?.hashed_token;
-  if (linkError || !hashedToken) {
-    console.error("generateLink failed:", linkError);
+  if (access.status === "blocked") {
     return NextResponse.json(
-      { ok: false, error: "Не вдалося створити сесію" },
+      {
+        ok: false,
+        error: "blocked",
+        message: "Доступ заблоковано. Зверніться до адміністратора.",
+      },
+      { status: 403 }
+    );
+  }
+
+  if (access.status !== "active") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "pending",
+        message: "Доступ ще не активовано.",
+      },
+      { status: 403 }
+    );
+  }
+
+  if (parsed.username) {
+    await admin
+      .from("mini_app_accesses")
+      .update({ telegram_username: parsed.username })
+      .eq("id", access.id);
+  }
+
+  const cookieOk = await setMiniAppAccessCookie(access.id);
+  if (!cookieOk) {
+    return NextResponse.json(
+      { ok: false, error: "Не вдалося створити сесію (немає секрету cookie)" },
       { status: 500 }
     );
   }
 
-  const supabase = await createServerSupabaseClient();
-  const { error: otpError } = await supabase.auth.verifyOtp({
-    type: "magiclink",
-    token_hash: hashedToken,
+  return NextResponse.json({
+    ok: true,
+    displayName: access.display_name,
   });
-
-  if (otpError) {
-    console.error("verifyOtp failed:", otpError);
-    return NextResponse.json(
-      { ok: false, error: "Не вдалося увійти" },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ ok: true });
 }

@@ -9,7 +9,7 @@ import { normalizeLinkCode } from "@/lib/telegram/link-code";
 export type TelegramMessageUpdate = {
   message?: {
     chat?: { id?: number };
-    from?: { id?: number };
+    from?: { id?: number; username?: string };
     text?: string;
   };
 };
@@ -37,6 +37,7 @@ export async function handleTelegramBotUpdate(
   const message = update.message;
   const chatId = message?.chat?.id;
   const fromId = message?.from?.id;
+  const username = message?.from?.username ?? null;
   const text = message?.text?.trim() ?? "";
   if (chatId == null || fromId == null) return;
 
@@ -57,21 +58,22 @@ export async function handleTelegramBotUpdate(
     await sendTelegramChatMessage(
       botToken,
       chatId,
-      "Щоб користуватися внесенням даних, адміністратор має згенерувати код прив’язки в профілі ERP.\n\nПісля цього надішліть: <code>/start КОД</code>",
+      "Щоб користуватися внесенням даних, адміністратор має створити доступ у ERP і надіслати код.\n\nПісля цього надішліть: <code>/start КОД</code>",
       { reply_markup: fieldKeyboard() }
     );
     return;
   }
 
-  const result = await consumeTelegramLinkCode(code, fromId);
+  const result = await consumeMiniAppInviteCode(code, fromId, username);
   await sendTelegramChatMessage(botToken, chatId, result.message, {
     reply_markup: fieldKeyboard(),
   });
 }
 
-export async function consumeTelegramLinkCode(
+export async function consumeMiniAppInviteCode(
   code: string,
-  telegramId: number
+  telegramId: number,
+  telegramUsername: string | null
 ): Promise<{ ok: boolean; message: string }> {
   const supabase = createServiceRoleClient();
   const normalized = normalizeLinkCode(code);
@@ -80,52 +82,75 @@ export async function consumeTelegramLinkCode(
   }
 
   const { data: row, error } = await supabase
-    .from("telegram_link_codes")
-    .select("id, user_id, expires_at")
+    .from("mini_app_invite_codes")
+    .select("id, access_id, expires_at")
     .eq("code", normalized)
     .maybeSingle();
 
   if (error || !row) {
     return {
       ok: false,
-      message: "Код не знайдено або вже використано. Згенеруйте новий у профілі ERP.",
+      message:
+        "Код не знайдено або вже використано. Попросіть адміністратора згенерувати новий.",
     };
   }
 
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await supabase.from("telegram_link_codes").delete().eq("id", row.id);
-    return { ok: false, message: "Код прострочено. Згенеруйте новий у профілі ERP." };
+    await supabase.from("mini_app_invite_codes").delete().eq("id", row.id);
+    return {
+      ok: false,
+      message: "Код прострочено. Попросіть адміністратора згенерувати новий.",
+    };
+  }
+
+  const { data: access, error: accessError } = await supabase
+    .from("mini_app_accesses")
+    .select("id, display_name, status")
+    .eq("id", row.access_id)
+    .maybeSingle();
+
+  if (accessError || !access) {
+    return { ok: false, message: "Доступ не знайдено." };
+  }
+
+  if (access.status === "blocked") {
+    return { ok: false, message: "Цей доступ заблоковано." };
   }
 
   const { data: taken } = await supabase
-    .from("users")
+    .from("mini_app_accesses")
     .select("id")
     .eq("telegram_id", telegramId)
-    .neq("id", row.user_id)
+    .neq("id", access.id)
     .maybeSingle();
 
   if (taken) {
     return {
       ok: false,
-      message: "Цей Telegram уже прив’язано до іншого облікового запису.",
+      message: "Цей Telegram уже прив’язано до іншого доступу.",
     };
   }
 
   const { error: updateError } = await supabase
-    .from("users")
-    .update({ telegram_id: telegramId })
-    .eq("id", row.user_id);
+    .from("mini_app_accesses")
+    .update({
+      telegram_id: telegramId,
+      telegram_username: telegramUsername,
+      status: "active",
+      linked_at: new Date().toISOString(),
+      blocked_at: null,
+    })
+    .eq("id", access.id);
 
   if (updateError) {
-    console.error("Failed to set telegram_id:", updateError);
-    return { ok: false, message: "Не вдалося прив’язати акаунт. Спробуйте пізніше." };
+    console.error("Failed to link mini_app_access:", updateError);
+    return { ok: false, message: "Не вдалося прив’язати. Спробуйте пізніше." };
   }
 
-  await supabase.from("telegram_link_codes").delete().eq("id", row.id);
+  await supabase.from("mini_app_invite_codes").delete().eq("access_id", access.id);
 
   return {
     ok: true,
-    message:
-      "Telegram прив’язано. Відкрийте Mini App кнопкою «Внести дані» або оберіть дію нижче.",
+    message: `Прив’язано як «${access.display_name}». Відкрийте Mini App кнопкою «Внести дані».`,
   };
 }

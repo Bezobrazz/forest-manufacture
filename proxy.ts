@@ -46,6 +46,7 @@ export async function proxy(request: NextRequest) {
     "/dashboard/users": ["owner", "admin"],
     "/api/admin": ["owner", "admin"],
     "/api/ai": ["owner", "admin"],
+    "/mini-app-access": ["owner", "admin"],
 
     // Роути для всіх авторизованих користувачів
     "/dashboard": ["owner", "admin", "worker"],
