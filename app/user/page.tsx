@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireAuth } from "@/lib/auth/require-role";
 import {
   Card,
@@ -8,10 +7,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, User, Mail, Shield, Calendar } from "lucide-react";
+import { User, Mail, Shield, Calendar } from "lucide-react";
 import { createServerSupabaseClient } from "@/lib/supabase/server-auth";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
+import { TelegramLinkCard } from "@/components/telegram-link-card";
 
 function getRoleLabel(role: string | null): string {
   switch (role) {
@@ -47,7 +47,7 @@ export default async function UserPage() {
   const supabase = await createServerSupabaseClient();
   const { data: userData } = await supabase
     .from("users")
-    .select("created_at")
+    .select("created_at, telegram_id")
     .eq("id", user.id)
     .single();
 
@@ -137,6 +137,15 @@ export default async function UserPage() {
                   </div>
                 </div>
               </div>
+
+              <TelegramLinkCard
+                linked={userData?.telegram_id != null}
+                telegramId={
+                  userData?.telegram_id != null
+                    ? Number(userData.telegram_id)
+                    : null
+                }
+              />
             </div>
           </CardContent>
         </Card>

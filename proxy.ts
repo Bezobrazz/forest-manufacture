@@ -15,6 +15,7 @@ export async function proxy(request: NextRequest) {
   if (
     currentPath.startsWith("/_next") ||
     currentPath.startsWith("/api/auth") ||
+    currentPath.startsWith("/api/telegram") ||
     currentPath === "/favicon.ico" ||
     /\.(svg|png|jpg|jpeg|gif|webp)$/.test(currentPath)
   ) {
