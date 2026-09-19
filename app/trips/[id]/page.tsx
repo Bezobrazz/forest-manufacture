@@ -39,6 +39,7 @@ import { formatUah, formatKm, formatPercent, parseNumericInput } from "@/lib/for
 import { dateToYYYYMMDD } from "@/lib/utils";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { TripDateField } from "@/components/trip-date-field";
+import { DeleteTripButton } from "@/components/delete-trip-button";
 
 const driverPayModeLabels: Record<DriverPayMode, string> = {
   per_trip: "За рейс",
@@ -771,6 +772,12 @@ export default function TripDetailPage() {
               >
                 Скасувати
               </Button>
+              <DeleteTripButton
+                tripId={tripId}
+                tripName={trip.name}
+                tripType={trip.trip_type}
+                variant="button"
+              />
             </div>
           </CardContent>
         </Card>

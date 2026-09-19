@@ -98,6 +98,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatUah, formatKm, formatPercent } from "@/lib/format";
 import { cn, dateToYYYYMMDD, getDateRangeForPeriod } from "@/lib/utils";
 import { QuickActionsButton } from "@/components/quick-actions-button";
+import { DeleteTripButton } from "@/components/delete-trip-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
@@ -830,6 +831,9 @@ function TripsPageContent() {
                         <TableHead className="text-right">Прибуток</TableHead>
                         <TableHead className="text-right">ROI</TableHead>
                         <TableHead>Статус</TableHead>
+                        <TableHead className="w-12">
+                          <span className="sr-only">Дії</span>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -867,6 +871,21 @@ function TripsPageContent() {
                             </TableCell>
                             <TableCell>
                               <span title={status.label}>{status.icon}</span>
+                            </TableCell>
+                            <TableCell
+                              className="text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <DeleteTripButton
+                                tripId={t.id}
+                                tripName={t.name}
+                                tripType={t.trip_type}
+                                onDeleted={() =>
+                                  setTrips((prev) =>
+                                    prev.filter((trip) => trip.id !== t.id),
+                                  )
+                                }
+                              />
                             </TableCell>
                           </TableRow>
                         );
@@ -951,6 +970,9 @@ function TripsPageContent() {
                         <TableHead className="text-right">Витрати</TableHead>
                         <TableHead className="text-right">Мішки</TableHead>
                         <TableHead className="text-right">Ціна мішка</TableHead>
+                        <TableHead className="w-12">
+                          <span className="sr-only">Дії</span>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -989,6 +1011,21 @@ function TripsPageContent() {
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatUah(costPerBag)}
+                            </TableCell>
+                            <TableCell
+                              className="text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <DeleteTripButton
+                                tripId={t.id}
+                                tripName={t.name}
+                                tripType={t.trip_type}
+                                onDeleted={() =>
+                                  setTrips((prev) =>
+                                    prev.filter((trip) => trip.id !== t.id),
+                                  )
+                                }
+                              />
                             </TableCell>
                           </TableRow>
                         );

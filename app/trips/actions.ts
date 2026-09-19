@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient, getServerUser } from "@/lib/supabase/server-auth";
 import {
   calculateTripMetrics,
@@ -392,6 +393,8 @@ export async function deleteTrip(
   if (error) {
     return { ok: false, error: error.message };
   }
+
+  revalidatePath("/trips");
 
   return { ok: true };
 }
