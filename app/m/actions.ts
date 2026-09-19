@@ -8,11 +8,87 @@ import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-su
 import { calculateTripMetrics } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
+import { sendTelegramMessage } from "@/lib/telegram";
 import type { Vehicle } from "@/app/vehicles/actions";
 import type { Product, Supplier, Warehouse } from "@/lib/types";
 
 const DEFAULT_RAW_DRIVER_PAY_UAH = 1000;
 const DEFAULT_RAW_TRIP_NAME = "Доставка сировини";
+
+function escapeTelegramHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function formatMoneyUa(amount: number): string {
+  return `${amount.toLocaleString("uk-UA", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} ₴`;
+}
+
+async function notifyFieldDeliveriesSubmitted(params: {
+  accessName: string;
+  day: string;
+  purchases: FieldPurchaseLineInput[];
+  vehicleName: string;
+  startOdometerKm: number;
+  endOdometerKm: number;
+  bagsTotal: number;
+  supabase: ReturnType<typeof createServiceRoleClient>;
+}) {
+  const supplierIds = [
+    ...new Set(params.purchases.map((p) => p.supplierId).filter(Boolean)),
+  ];
+  const { data: suppliers } = supplierIds.length
+    ? await params.supabase
+        .from("suppliers")
+        .select("id, name")
+        .in("id", supplierIds)
+    : { data: [] as { id: number; name: string }[] };
+  const nameById = new Map(
+    (suppliers ?? []).map((s) => [Number(s.id), String(s.name ?? "")])
+  );
+
+  const purchaseLines = params.purchases.map((p, i) => {
+    const name =
+      nameById.get(p.supplierId)?.trim() || `Постачальник #${p.supplierId}`;
+    const payable = resolveSupplierDeliveryPayableAmount({
+      quantity: p.quantity,
+      pricePerUnit: p.pricePerUnit,
+      actualPaid: p.actualPaid,
+    });
+    const bags = Math.floor(p.quantity);
+    return `${i + 1}. ${escapeTelegramHtml(name)} — <b>${bags}</b> мішк., ${escapeTelegramHtml(formatMoneyUa(payable))}`;
+  });
+
+  const distanceKm = Math.round(
+    (params.endOdometerKm - params.startOdometerKm) * 100
+  ) / 100;
+
+  const message = [
+    `📦 <b>Mini App: закупівлі і поїздка</b>`,
+    ``,
+    `Хто: <b>${escapeTelegramHtml(params.accessName)}</b>`,
+    `Дата: <b>${escapeTelegramHtml(params.day)}</b>`,
+    ``,
+    `<b>Закупівлі (${params.purchases.length})</b>`,
+    ...purchaseLines,
+    ``,
+    `<b>Поїздка</b>`,
+    `Транспорт: ${escapeTelegramHtml(params.vehicleName)}`,
+    `Одометр: ${params.startOdometerKm} → ${params.endOdometerKm} (${distanceKm} км)`,
+    `Мішків у поїздці: <b>${params.bagsTotal}</b>`,
+  ].join("\n");
+
+  try {
+    await sendTelegramMessage(message);
+  } catch (error) {
+    console.error("Mini App Telegram notify failed:", error);
+  }
+}
 
 export type MiniAppFormBootstrap = {
   accessName: string;
@@ -365,7 +441,7 @@ export async function createFieldDeliveriesAndTrip(
   const { data: vehicle, error: vehicleError } = await supabase
     .from("vehicles")
     .select(
-      "id, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah"
+      "id, name, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah"
     )
     .eq("id", input.vehicleId)
     .maybeSingle();
@@ -494,6 +570,19 @@ export async function createFieldDeliveriesAndTrip(
       error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${tripError.message}`,
     };
   }
+
+  await notifyFieldDeliveriesSubmitted({
+    accessName: auth.access.display_name,
+    day,
+    purchases: input.purchases,
+    vehicleName: String(
+      (vehicle as { name?: string | null }).name ?? "—"
+    ),
+    startOdometerKm: input.startOdometerKm,
+    endOdometerKm: input.endOdometerKm,
+    bagsTotal,
+    supabase,
+  });
 
   revalidatePath("/transactions/suppliers");
   revalidatePath("/trips");
