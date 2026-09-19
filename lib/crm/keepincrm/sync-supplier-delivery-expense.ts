@@ -1,5 +1,6 @@
 import {
   createKeepinExpensePayment,
+  deleteKeepinPayment,
   isKeepinSupplierExpenseSyncEnabled,
 } from "@/lib/crm/keepincrm/payments";
 
@@ -46,4 +47,20 @@ export async function syncSupplierDeliveryExpenseToKeepin(
   });
 
   return paymentId;
+}
+
+/** Видаляє пов’язану витрату в KeepinCRM. Без keepin_payment_id — no-op. */
+export async function syncSupplierDeliveryExpenseDeleteToKeepin(
+  keepinPaymentId: number | null | undefined
+): Promise<void> {
+  if (!isKeepinSupplierExpenseSyncEnabled()) {
+    return;
+  }
+
+  const id = Number(keepinPaymentId);
+  if (!Number.isFinite(id) || id <= 0) {
+    return;
+  }
+
+  await deleteKeepinPayment(id);
 }

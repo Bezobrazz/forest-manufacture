@@ -16,7 +16,10 @@ import type {
   SupplierAdvanceTransaction,
   Warehouse,
 } from "@/lib/types";
-import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
+import {
+  syncSupplierDeliveryExpenseDeleteToKeepin,
+  syncSupplierDeliveryExpenseToKeepin,
+} from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
 import {
   parseOptionalAmount,
   resolveSupplierDeliveryPayableAmount,
@@ -4198,7 +4201,9 @@ export async function deleteSupplierDelivery(deliveryId: number) {
 
     const { data: delivery, error: getError } = await supabase
       .from("supplier_deliveries")
-      .select("quantity, product_id, warehouse_id, supplier_id, price_per_unit, advance_used")
+      .select(
+        "quantity, product_id, warehouse_id, supplier_id, price_per_unit, advance_used, keepin_payment_id",
+      )
       .eq("id", deliveryId)
       .single();
 
@@ -4207,6 +4212,21 @@ export async function deleteSupplierDelivery(deliveryId: number) {
     }
 
     const supplierIdForAdvance = delivery.supplier_id as number;
+    const keepinPaymentId = (delivery as { keepin_payment_id?: number | null })
+      .keepin_payment_id;
+
+    try {
+      await syncSupplierDeliveryExpenseDeleteToKeepin(keepinPaymentId);
+    } catch (crmError) {
+      console.error("KeepinCRM supplier delivery expense delete:", crmError);
+      return {
+        success: false,
+        error:
+          crmError instanceof Error
+            ? `Не вдалося видалити витрату в KeepinCRM: ${crmError.message}`
+            : "Не вдалося видалити витрату в KeepinCRM",
+      };
+    }
 
     const { data: inventoryTransaction } = await supabase
       .from("inventory_transactions")

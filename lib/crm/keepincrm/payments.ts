@@ -342,7 +342,8 @@ export async function updateKeepinFundTransfer(
   }
 }
 
-export async function deleteKeepinFundTransfer(keepinPaymentId: number): Promise<void> {
+/** Видаляє платіж у KeepinCRM (витрата або переміщення). 404 вважаємо успіхом. */
+export async function deleteKeepinPayment(keepinPaymentId: number): Promise<void> {
   const res = await keepinRequest(`/payments/${keepinPaymentId}`, {
     method: "DELETE",
   });
@@ -355,6 +356,10 @@ export async function deleteKeepinFundTransfer(keepinPaymentId: number): Promise
       }`
     );
   }
+}
+
+export async function deleteKeepinFundTransfer(keepinPaymentId: number): Promise<void> {
+  await deleteKeepinPayment(keepinPaymentId);
 }
 
 export async function fetchKeepinPaymentsPage(
