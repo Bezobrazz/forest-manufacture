@@ -207,13 +207,13 @@ export function FieldDeliveryForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Ви входите як{" "}
-        <span className="font-medium text-foreground">{accessName}</span>
+        <span className="font-semibold text-foreground">{accessName}</span>
       </p>
-      <section className="space-y-4">
-        <h2 className="text-sm font-medium text-muted-foreground">Закупівля</h2>
+      <section className="space-y-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm">
+        <h2 className="text-base font-semibold">Закупівля</h2>
 
         <TripDateField
           id="event_date"
@@ -329,7 +329,7 @@ export function FieldDeliveryForm({
         {purchaseSum != null ? (
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
             <span className="text-muted-foreground">Сума закупівлі: </span>
-            <span className="font-medium tabular-nums">
+            <span className="font-semibold tabular-nums">
               {formatNumberWithUnit(purchaseSum, "₴")}
             </span>
           </div>
@@ -349,8 +349,8 @@ export function FieldDeliveryForm({
           />
         </div>
 
-        <div className="space-y-3 rounded-md border p-3">
-          <div className="text-sm font-medium">Матеріали (передано)</div>
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div className="text-sm font-semibold">Матеріали (передано)</div>
           <div className="space-y-1.5">
             <Label>Матеріал</Label>
             <Input
@@ -373,8 +373,8 @@ export function FieldDeliveryForm({
         </div>
       </section>
 
-      <section className="space-y-4 border-t pt-4">
-        <h2 className="text-sm font-medium text-muted-foreground">Поїздка</h2>
+      <section className="space-y-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm">
+        <h2 className="text-base font-semibold">Поїздка</h2>
 
         <div className="space-y-1.5">
           <Label>Транспорт *</Label>
