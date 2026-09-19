@@ -27,6 +27,8 @@ type TripDateFieldProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: (date: Date) => boolean;
+  /** Блокує відкриття календаря (сесія зафіксована) */
+  locked?: boolean;
 };
 
 export function TripDateField({
@@ -37,6 +39,7 @@ export function TripDateField({
   open,
   onOpenChange,
   disabled,
+  locked = false,
 }: TripDateFieldProps) {
   const isMobile = useIsMobile();
   const title = label.replace(" *", "");
@@ -45,6 +48,11 @@ export function TripDateField({
     if (!nextDate) return;
     onSelect(nextDate);
     onOpenChange(false);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (locked && next) return;
+    onOpenChange(next);
   };
 
   const triggerClassName = cn(
@@ -87,14 +95,15 @@ export function TripDateField({
             type="button"
             variant="outline"
             className={triggerClassName}
-            onClick={() => onOpenChange(true)}
+            disabled={locked}
+            onClick={() => handleOpenChange(true)}
           >
             <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
             {formatDate(date.toISOString())}
           </Button>
           <Drawer
             open={open}
-            onOpenChange={onOpenChange}
+            onOpenChange={handleOpenChange}
             shouldScaleBackground={false}
           >
             <DrawerContent className="pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -106,13 +115,14 @@ export function TripDateField({
           </Drawer>
         </>
       ) : (
-        <Popover modal open={open} onOpenChange={onOpenChange}>
+        <Popover modal open={open} onOpenChange={handleOpenChange}>
           <PopoverTrigger asChild>
             <Button
               id={id}
               type="button"
               variant="outline"
               className={triggerClassName}
+              disabled={locked}
             >
               <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
               {formatDate(date.toISOString())}

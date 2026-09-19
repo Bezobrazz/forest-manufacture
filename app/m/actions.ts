@@ -107,16 +107,20 @@ export async function createFieldSupplier(name: string): Promise<
   return { ok: true, supplier: data as Supplier };
 }
 
-export type FieldDeliveryTripInput = {
+export type FieldPurchaseLineInput = {
   supplierId: number;
-  productId: number;
-  warehouseId: number;
   quantity: number;
   pricePerUnit: number;
   actualPaid: number | null;
-  deliveryDate: string;
   materialProductId: number | null;
   materialQuantity: number | null;
+};
+
+export type FieldDeliveriesAndTripInput = {
+  purchases: FieldPurchaseLineInput[];
+  productId: number;
+  warehouseId: number;
+  deliveryDate: string;
   vehicleId: string;
   startOdometerKm: number;
   endOdometerKm: number;
@@ -147,80 +151,57 @@ async function syncSupplierAdvanceFromLedger(
   await supabase.from("suppliers").update({ advance }).eq("id", supplierId);
 }
 
-export async function createFieldDeliveryAndTrip(
-  input: FieldDeliveryTripInput
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const auth = await requireMiniAppAccess();
-  if (!auth.ok) return { ok: false, error: auth.error };
+async function insertFieldPurchaseDelivery(params: {
+  supabase: ReturnType<typeof createServiceRoleClient>;
+  accessId: string;
+  purchase: FieldPurchaseLineInput;
+  productId: number;
+  warehouseId: number;
+  day: string;
+  lineIndex: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const {
+    supabase,
+    accessId,
+    purchase,
+    productId,
+    warehouseId,
+    day,
+    lineIndex,
+  } = params;
+  const lineLabel = `Закупівля #${lineIndex + 1}`;
 
+  if (!purchase.supplierId || !purchase.quantity || purchase.quantity <= 0) {
+    return { ok: false, error: `${lineLabel}: заповніть обовʼязкові поля` };
+  }
   if (
-    !input.supplierId ||
-    !input.productId ||
-    !input.warehouseId ||
-    !input.quantity ||
-    input.quantity <= 0
+    purchase.pricePerUnit == null ||
+    !Number.isFinite(purchase.pricePerUnit) ||
+    purchase.pricePerUnit < 0
   ) {
-    return { ok: false, error: "Заповніть обовʼязкові поля закупівлі" };
+    return { ok: false, error: `${lineLabel}: вкажіть ціну за одиницю` };
   }
-
-  if (input.pricePerUnit == null || !Number.isFinite(input.pricePerUnit) || input.pricePerUnit < 0) {
-    return { ok: false, error: "Вкажіть ціну за одиницю" };
+  if (Math.floor(purchase.quantity) < 1) {
+    return { ok: false, error: `${lineLabel}: кількість має бути не менше 1` };
   }
-
-  if (
-    input.startOdometerKm == null ||
-    input.endOdometerKm == null ||
-    input.endOdometerKm < input.startOdometerKm
-  ) {
-    return { ok: false, error: "Вкажіть коректний одометр початок і кінець" };
-  }
-
-  if (
-    input.fuelPriceUahPerL == null ||
-    !Number.isFinite(input.fuelPriceUahPerL) ||
-    input.fuelPriceUahPerL < 0
-  ) {
-    return { ok: false, error: "Вкажіть вартість пального за літр" };
-  }
-
-  const bags = Math.floor(input.quantity);
-  if (bags < 1) {
-    return { ok: false, error: "Кількість має бути не менше 1" };
-  }
-
-  const supabase = createServiceRoleClient();
-  const { data: vehicle, error: vehicleError } = await supabase
-    .from("vehicles")
-    .select(
-      "id, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah"
-    )
-    .eq("id", input.vehicleId)
-    .maybeSingle();
-
-  if (vehicleError || !vehicle) {
-    return { ok: false, error: "Оберіть транспорт" };
-  }
-
-  const defaults = TYPE_DEFAULTS[vehicle.type as "van" | "truck"] ?? TYPE_DEFAULTS.van;
-  const day = input.deliveryDate.slice(0, 10);
 
   const insertPayload: Record<string, unknown> = {
-    supplier_id: input.supplierId,
-    product_id: input.productId,
-    warehouse_id: input.warehouseId,
-    quantity: input.quantity,
-    price_per_unit: input.pricePerUnit,
-    actual_paid: input.actualPaid,
+    supplier_id: purchase.supplierId,
+    product_id: productId,
+    warehouse_id: warehouseId,
+    quantity: purchase.quantity,
+    price_per_unit: purchase.pricePerUnit,
+    actual_paid: purchase.actualPaid,
     created_at: new Date(`${day}T12:00:00.000Z`).toISOString(),
-    created_by_access_id: auth.access.id,
+    created_by_access_id: accessId,
   };
   if (
-    input.materialProductId != null &&
-    input.materialQuantity != null &&
-    input.materialQuantity > 0
+    purchase.materialProductId != null &&
+    purchase.materialQuantity != null &&
+    purchase.materialQuantity > 0
   ) {
-    insertPayload.material_product_id = input.materialProductId;
-    insertPayload.material_quantity = input.materialQuantity;
+    insertPayload.material_product_id = purchase.materialProductId;
+    insertPayload.material_quantity = purchase.materialQuantity;
   }
 
   const { data: delivery, error: deliveryError } = await supabase
@@ -238,43 +219,50 @@ export async function createFieldDeliveryAndTrip(
   if (deliveryError || !delivery) {
     return {
       ok: false,
-      error: deliveryError?.message ?? "Не вдалося зберегти закупівлю",
+      error:
+        deliveryError?.message ??
+        `${lineLabel}: не вдалося зберегти закупівлю`,
     };
   }
 
-  const materialQty = Number(input.materialQuantity ?? 0);
-  const materialPid = input.materialProductId ?? 0;
+  const materialQty = Number(purchase.materialQuantity ?? 0);
+  const materialPid = purchase.materialProductId ?? 0;
   if (materialQty > 0 && materialPid) {
-    const { error: txError } = await supabase.from("inventory_transactions").insert({
-      product_id: materialPid,
-      quantity: materialQty,
-      transaction_type: "shipment",
-      reference_id: delivery.id,
-      warehouse_id: input.warehouseId,
-      notes: `Видача матеріалів постачальнику (поставка #${delivery.id}, Mini App)`,
-    });
+    const { error: txError } = await supabase
+      .from("inventory_transactions")
+      .insert({
+        product_id: materialPid,
+        quantity: materialQty,
+        transaction_type: "shipment",
+        reference_id: delivery.id,
+        warehouse_id: warehouseId,
+        notes: `Видача матеріалів постачальнику (поставка #${delivery.id}, Mini App)`,
+      });
     if (txError) {
       return {
         ok: false,
-        error: "Закупівлю збережено, але не вдалося списати матеріали зі складу",
+        error: `${lineLabel}: збережено, але не вдалося списати матеріали зі складу`,
       };
     }
     const { data: supplierRow } = await supabase
       .from("suppliers")
       .select("materials_balance")
-      .eq("id", input.supplierId)
+      .eq("id", purchase.supplierId)
       .single();
     const currentBalance = Number(supplierRow?.materials_balance ?? 0);
     await supabase
       .from("suppliers")
-      .update({ materials_balance: currentBalance + (materialQty - input.quantity) })
-      .eq("id", input.supplierId);
+      .update({
+        materials_balance:
+          currentBalance + (materialQty - purchase.quantity),
+      })
+      .eq("id", purchase.supplierId);
   }
 
   const purchaseAmount = resolveSupplierDeliveryPayableAmount({
-    quantity: input.quantity,
-    pricePerUnit: input.pricePerUnit,
-    actualPaid: input.actualPaid,
+    quantity: purchase.quantity,
+    pricePerUnit: purchase.pricePerUnit,
+    actualPaid: purchase.actualPaid,
   });
 
   if (purchaseAmount > 0 && delivery.id) {
@@ -282,7 +270,7 @@ export async function createFieldDeliveryAndTrip(
     const { data: advances } = await supabase
       .from("supplier_advance_transactions")
       .select("amount")
-      .eq("supplier_id", input.supplierId)
+      .eq("supplier_id", purchase.supplierId)
       .lte("created_at", advanceCutoffIso);
     const advancesSum = (advances ?? []).reduce(
       (s, r) => s + Number(r.amount ?? 0),
@@ -291,12 +279,14 @@ export async function createFieldDeliveryAndTrip(
     const { data: allDeliveriesForPool } = await supabase
       .from("supplier_deliveries")
       .select("advance_used, created_at, id")
-      .eq("supplier_id", input.supplierId);
+      .eq("supplier_id", purchase.supplierId);
     const advanceUsedSum = (allDeliveriesForPool ?? [])
       .filter((d) => {
         if (d.id === delivery.id) return false;
         const dDay = String(d.created_at ?? "").slice(0, 10);
-        return dDay < day || (dDay === day && Number(d.id) < Number(delivery.id));
+        return (
+          dDay < day || (dDay === day && Number(d.id) < Number(delivery.id))
+        );
       })
       .reduce((s, r) => s + Number(r.advance_used ?? 0), 0);
     const availableAdvance = Math.max(
@@ -309,16 +299,18 @@ export async function createFieldDeliveryAndTrip(
       .from("supplier_deliveries")
       .update({ advance_used: deductRounded })
       .eq("id", delivery.id);
-    await syncSupplierAdvanceFromLedger(supabase, input.supplierId);
+    await syncSupplierAdvanceFromLedger(supabase, purchase.supplierId);
 
     try {
       const paymentId = await syncSupplierDeliveryExpenseToKeepin({
         deliveryId: delivery.id as number,
         amount: purchaseAmount,
         atYmd: day,
-        supplierName: (delivery as { supplier?: { name?: string } }).supplier?.name ?? "",
-        productName: (delivery as { product?: { name?: string } }).product?.name ?? "",
-        quantity: input.quantity,
+        supplierName:
+          (delivery as { supplier?: { name?: string } }).supplier?.name ?? "",
+        productName:
+          (delivery as { product?: { name?: string } }).product?.name ?? "",
+        quantity: purchase.quantity,
       });
       if (paymentId != null) {
         await supabase
@@ -329,6 +321,84 @@ export async function createFieldDeliveryAndTrip(
     } catch (crmError) {
       console.error("KeepinCRM from Mini App:", crmError);
     }
+  }
+
+  return { ok: true };
+}
+
+export async function createFieldDeliveriesAndTrip(
+  input: FieldDeliveriesAndTripInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireMiniAppAccess();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  if (!input.purchases?.length) {
+    return { ok: false, error: "Додайте хоча б одну закупівлю" };
+  }
+  if (!input.productId || !input.warehouseId) {
+    return { ok: false, error: "Немає складу або сировини в довідниках" };
+  }
+  if (
+    input.startOdometerKm == null ||
+    input.endOdometerKm == null ||
+    input.endOdometerKm < input.startOdometerKm
+  ) {
+    return { ok: false, error: "Вкажіть коректний одометр початок і кінець" };
+  }
+  if (
+    input.fuelPriceUahPerL == null ||
+    !Number.isFinite(input.fuelPriceUahPerL) ||
+    input.fuelPriceUahPerL < 0
+  ) {
+    return { ok: false, error: "Вкажіть вартість пального за літр" };
+  }
+
+  const bagsTotal = input.purchases.reduce(
+    (sum, p) => sum + Math.floor(Number(p.quantity) || 0),
+    0
+  );
+  if (bagsTotal < 1) {
+    return { ok: false, error: "Загальна кількість мішків має бути не менше 1" };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from("vehicles")
+    .select(
+      "id, type, default_fuel_consumption_l_per_100km, default_depreciation_uah_per_km, default_daily_taxes_uah"
+    )
+    .eq("id", input.vehicleId)
+    .maybeSingle();
+
+  if (vehicleError || !vehicle) {
+    return { ok: false, error: "Оберіть транспорт" };
+  }
+
+  const defaults =
+    TYPE_DEFAULTS[vehicle.type as "van" | "truck"] ?? TYPE_DEFAULTS.van;
+  const day = input.deliveryDate.slice(0, 10);
+
+  let savedCount = 0;
+  for (let i = 0; i < input.purchases.length; i++) {
+    const result = await insertFieldPurchaseDelivery({
+      supabase,
+      accessId: auth.access.id,
+      purchase: input.purchases[i],
+      productId: input.productId,
+      warehouseId: input.warehouseId,
+      day,
+      lineIndex: i,
+    });
+    if (!result.ok) {
+      if (savedCount > 0) {
+        return {
+          ok: false,
+          error: `${result.error}. Збережено закупівель: ${savedCount}, поїздку не створено`,
+        };
+      }
+      return result;
+    }
+    savedCount += 1;
   }
 
   const tripParsed = tripFormSchema.safeParse({
@@ -351,7 +421,7 @@ export async function createFieldDeliveryAndTrip(
     driver_pay_mode: "per_trip",
     driver_pay_uah: DEFAULT_RAW_DRIVER_PAY_UAH,
     extra_costs_uah: 0,
-    bags_count: bags,
+    bags_count: bagsTotal,
     notes: null,
   });
 
@@ -364,7 +434,7 @@ export async function createFieldDeliveryAndTrip(
       tripParsed.error.message;
     return {
       ok: false,
-      error: `Закупівлю збережено, поїздку — ні: ${msg}`,
+      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${msg}`,
     };
   }
 
@@ -375,7 +445,7 @@ export async function createFieldDeliveryAndTrip(
   } catch (err) {
     return {
       ok: false,
-      error: `Закупівлю збережено, поїздку — ні: ${
+      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${
         err instanceof Error ? err.message : "помилка розрахунку"
       }`,
     };
@@ -421,7 +491,7 @@ export async function createFieldDeliveryAndTrip(
   if (tripError) {
     return {
       ok: false,
-      error: `Закупівлю збережено, поїздку — ні: ${tripError.message}`,
+      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${tripError.message}`,
     };
   }
 
