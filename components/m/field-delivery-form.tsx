@@ -326,14 +326,21 @@ export function FieldDeliveryForm({
           />
         </div>
 
-        {purchaseSum != null ? (
-          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-            <span className="text-muted-foreground">Сума закупівлі: </span>
-            <span className="font-semibold tabular-nums">
-              {formatNumberWithUnit(purchaseSum, "₴")}
-            </span>
-          </div>
-        ) : null}
+        <div className="space-y-1.5">
+          <Label htmlFor="purchase_sum">Сума, ₴</Label>
+          <Input
+            id="purchase_sum"
+            className="h-11 text-base font-semibold tabular-nums"
+            value={
+              purchaseSum != null
+                ? formatNumberWithUnit(purchaseSum, "₴")
+                : ""
+            }
+            placeholder="—"
+            readOnly
+            disabled
+          />
+        </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="actual_paid">Фактично сплачено, ₴</Label>
