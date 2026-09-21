@@ -2,7 +2,7 @@ const nbuCurrencyUrl = (currencyCode: string) =>
   `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&json`;
 
 export const SUGGESTED_PRICE_MARKUP_PERCENT = 35;
-export const SUGGESTED_EUR_PER_BAG = 0.6;
+export const SUGGESTED_EUR_PER_BAG = 0.06;
 
 type NbuRateRow = {
   cc?: string;
@@ -80,12 +80,17 @@ export function suggestedSellingPriceUah(
   return Math.ceil(costPerBagUah * (1 + markupPercent / 100));
 }
 
+/** Ціна з % прибутку + додаткові € на мішок (у грн), округлення вгору. */
 export function suggestedSellingPriceFromEurPerBag(
   costPerBagUah: number,
   eurMarkupPerBag: number,
-  eurUahRate: number
+  eurUahRate: number,
+  markupPercent: number = SUGGESTED_PRICE_MARKUP_PERCENT
 ): number {
-  return Math.ceil(costPerBagUah + convertEurToUah(eurMarkupPerBag, eurUahRate));
+  const baseWithMarkup = suggestedSellingPriceUah(costPerBagUah, markupPercent);
+  return Math.ceil(
+    baseWithMarkup + convertEurToUah(eurMarkupPerBag, eurUahRate)
+  );
 }
 
 export function convertUahToEur(uah: number, eurUahRate: number): number {

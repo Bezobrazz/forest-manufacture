@@ -31,9 +31,15 @@ test("suggestedSellingPriceUah adds markup and rounds up", () => {
   assert.equal(suggestedSellingPriceUah(100.01, SUGGESTED_PRICE_MARKUP_PERCENT), 136);
 });
 
-test("suggestedSellingPriceFromEurPerBag adds EUR markup to cost and rounds up", () => {
-  assert.equal(suggestedSellingPriceFromEurPerBag(100, 3, 52.1), 257);
-  assert.equal(suggestedSellingPriceFromEurPerBag(100, 2.5, 40), 200);
+test("suggestedSellingPriceFromEurPerBag adds EUR markup to % profit price and rounds up", () => {
+  // 100 * 1.35 = 135; + 3 * 52.1 = 156.3 → ceil(291.3) = 292
+  assert.equal(suggestedSellingPriceFromEurPerBag(100, 3, 52.1), 292);
+  // 100 * 1.35 = 135; + 2.5 * 40 = 100 → ceil(235) = 235
+  assert.equal(suggestedSellingPriceFromEurPerBag(100, 2.5, 40), 235);
+  assert.equal(
+    suggestedSellingPriceFromEurPerBag(100, 1, 50, 20),
+    Math.ceil(120 + 50)
+  );
 });
 
 test("convertUahToEur divides by EUR/UAH rate", () => {

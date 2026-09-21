@@ -497,10 +497,6 @@ function StatisticsPageContent() {
   const periodEndStr = dateToYYYYMMDD(periodEnd);
   const monthlyTaxesUah = parseMonthlyOverheadInput(monthlyTaxesInput);
   const monthlyElectricityUah = parseMonthlyOverheadInput(monthlyElectricityInput);
-  const averageMonthlyProduction = useMemo(
-    () => averageMonthlyProductionBags(shifts, periodEndStr),
-    [shifts, periodEndStr]
-  );
 
   const { totalProduction, productionByCategory } = useMemo(() => {
     const productCategoryById = new Map(
@@ -734,9 +730,47 @@ function StatisticsPageContent() {
     );
   };
 
-  const currentPeriodCostMetrics = useMemo(() => {
+  /** Якщо за обраний період ще немає закупок або поїздок «Сировина» — беремо попередній. */
+  const costMetricsPeriod = useMemo(() => {
     const startDay = periodStartStr;
     const endDay = periodEndStr;
+    const hasCostInputs =
+      getAveragePurchaseCostPerBagInRange(startDay, endDay) != null &&
+      getAverageTripCostPerBagInRange(startDay, endDay) != null;
+
+    if (hasCostInputs) {
+      return { startDay, endDay, usedPreviousPeriodFallback: false };
+    }
+
+    const prevStartDay = dateToYYYYMMDD(previousPeriodRange.prevStart);
+    const prevEndDay = dateToYYYYMMDD(previousPeriodRange.prevEnd);
+    const prevHasCostInputs =
+      getAveragePurchaseCostPerBagInRange(prevStartDay, prevEndDay) != null &&
+      getAverageTripCostPerBagInRange(prevStartDay, prevEndDay) != null;
+
+    if (prevHasCostInputs) {
+      return {
+        startDay: prevStartDay,
+        endDay: prevEndDay,
+        usedPreviousPeriodFallback: true,
+      };
+    }
+
+    return { startDay, endDay, usedPreviousPeriodFallback: false };
+  }, [
+    periodStartStr,
+    periodEndStr,
+    previousPeriodRange,
+    supplierDeliveries,
+    trips,
+  ]);
+
+  const currentPeriodCostMetrics = useMemo(() => {
+    const { startDay, endDay } = costMetricsPeriod;
+    const periodAverageMonthlyProduction = averageMonthlyProductionBags(
+      shifts,
+      endDay
+    );
 
     const purchaseCosts = sumPurchaseCostsInRange(startDay, endDay);
     const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
@@ -765,11 +799,11 @@ function StatisticsPageContent() {
       producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
     const taxesPerBag = monthlyOverheadPerBag(
       monthlyTaxesUah,
-      averageMonthlyProduction
+      periodAverageMonthlyProduction
     );
     const electricityPerBag = monthlyOverheadPerBag(
       monthlyElectricityUah,
-      averageMonthlyProduction
+      periodAverageMonthlyProduction
     );
     const managementSalaryPerBag =
       producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
@@ -785,7 +819,7 @@ function StatisticsPageContent() {
       taxesCosts,
       electricityCosts,
       managementSalaryCosts,
-      averageMonthlyProduction,
+      averageMonthlyProduction: periodAverageMonthlyProduction,
       purchaseCostPerBag,
       tripCostPerBag,
       fixedRewardPerBag,
@@ -797,15 +831,13 @@ function StatisticsPageContent() {
       totalCostPerBag,
     };
   }, [
-    periodStartStr,
-    periodEndStr,
+    costMetricsPeriod,
     expenses,
     fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
     monthlyTaxesUah,
     monthlyElectricityUah,
-    averageMonthlyProduction,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -813,14 +845,29 @@ function StatisticsPageContent() {
   ]);
 
   const previousPeriodCostMetrics = useMemo(() => {
-    const prevStartDay = dateToYYYYMMDD(previousPeriodRange.prevStart);
-    const prevEndDay = dateToYYYYMMDD(previousPeriodRange.prevEnd);
+    const { startDay, endDay } = costMetricsPeriod;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const [ys, ms, ds] = startDay.split("-").map((x) => Number.parseInt(x, 10));
+    const [ye, me, de] = endDay.split("-").map((x) => Number.parseInt(x, 10));
+    const start = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
+    const end = new Date(ye, me - 1, de, 0, 0, 0, 0);
+    const rangeDays =
+      Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1;
+    const prevEnd = new Date(start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    prevEnd.setHours(23, 59, 59, 999);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevEnd.getDate() - rangeDays + 1);
+    prevStart.setHours(0, 0, 0, 0);
 
     return {
-      totalCostPerBag: computeTotalCostPerBagForRange(prevStartDay, prevEndDay),
+      totalCostPerBag: computeTotalCostPerBagForRange(
+        dateToYYYYMMDD(prevStart),
+        dateToYYYYMMDD(prevEnd)
+      ),
     };
   }, [
-    previousPeriodRange,
+    costMetricsPeriod,
     expenses,
     fixedRewardPerBag,
     includeManagementSalaryInCost,
@@ -875,7 +922,8 @@ function StatisticsPageContent() {
         ? suggestedSellingPriceFromEurPerBag(
             currentPeriodCostMetrics.totalCostPerBag,
             suggestedEurPerBag,
-            eurUahRate
+            eurUahRate,
+            suggestedMarkupPercent
           )
         : null;
 
@@ -1740,6 +1788,15 @@ function StatisticsPageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {costMetricsPeriod.usedPreviousPeriodFallback ? (
+            <p className="text-sm text-muted-foreground rounded-lg border bg-muted/20 px-3 py-2">
+              Немає даних за обраний період — показано за попередній (
+              {formatDate(`${costMetricsPeriod.startDay}T12:00:00.000Z`)}
+              {" — "}
+              {formatDate(`${costMetricsPeriod.endDay}T12:00:00.000Z`)}
+              ).
+            </p>
+          ) : null}
           <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
             <div>
               <h3 className="text-sm font-medium">Постійні місячні витрати</h3>
@@ -1914,7 +1971,7 @@ function StatisticsPageContent() {
                       ? "Завантаження курсу євро (НБУ)…"
                       : suggestedPriceMode === "markup_percent"
                         ? `+${formatNumber(suggestedMarkupPercent)}% до собівартості, округлення вгору`
-                        : `+${formatNumberWithUnit(suggestedEurPerBag, "€")} до собівартості, округлення вгору`}
+                        : `ціна з +${formatNumber(suggestedMarkupPercent)}% + ${formatNumberWithUnit(suggestedEurPerBag, "€")}, округлення вгору`}
                     {!nbuRatesLoading && nbuRatesError
                       ? ` · ${nbuRatesError}`
                       : !nbuRatesLoading && eurUahRate != null

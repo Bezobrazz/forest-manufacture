@@ -322,29 +322,56 @@ export function buildAnalyticsSnapshot(
     );
   };
 
-  const purchaseCostPerBag = getAveragePurchaseCostPerBag(startDay, endDay);
-  const tripCostPerBag = getAverageTripCostPerBag(startDay, endDay);
-  const hourlyWageCosts = sumHourlyWage(startDay, endDay);
-  const producedQuantity = sumProduced(startDay, endDay);
+  // Якщо за обраний період ще немає закупок або поїздок «Сировина» — беремо попередній.
+  let costStartDay = startDay;
+  let costEndDay = endDay;
+  const hasCostInputs =
+    getAveragePurchaseCostPerBag(startDay, endDay) != null &&
+    getAverageTripCostPerBag(startDay, endDay) != null;
+  if (!hasCostInputs) {
+    const prevHasCostInputs =
+      getAveragePurchaseCostPerBag(prevStart, prevEnd) != null &&
+      getAverageTripCostPerBag(prevStart, prevEnd) != null;
+    if (prevHasCostInputs) {
+      costStartDay = prevStart;
+      costEndDay = prevEnd;
+    }
+  }
+  const costPrevious = previousPeriodRange(costStartDay, costEndDay);
+  const costAvgMonthlyProduction = averageMonthlyProductionBags(
+    data.shifts,
+    costEndDay
+  );
+
+  const purchaseCostPerBag = getAveragePurchaseCostPerBag(
+    costStartDay,
+    costEndDay
+  );
+  const tripCostPerBag = getAverageTripCostPerBag(costStartDay, costEndDay);
+  const costHourlyWageCosts = sumHourlyWage(costStartDay, costEndDay);
+  const producedQuantity = sumProduced(costStartDay, costEndDay);
   const managementSalaryCosts = prorateMonthlyAmountForDateRange(
     managementSalaryMonthlyTotal,
-    startDay,
-    endDay
+    costStartDay,
+    costEndDay
   );
   const hourlyWagePerBag =
-    producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    producedQuantity > 0 ? costHourlyWageCosts / producedQuantity : 0;
   const managementSalaryPerBag =
     producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
   const taxesPerBag = monthlyOverheadPerBag(
     monthlyTaxesUah,
-    avgMonthlyProduction
+    costAvgMonthlyProduction
   );
   const electricityPerBag = monthlyOverheadPerBag(
     monthlyElectricityUah,
-    avgMonthlyProduction
+    costAvgMonthlyProduction
   );
-  const totalCostPerBag = computeTotalCostPerBag(startDay, endDay);
-  const previousTotalCostPerBag = computeTotalCostPerBag(prevStart, prevEnd);
+  const totalCostPerBag = computeTotalCostPerBag(costStartDay, costEndDay);
+  const previousTotalCostPerBag = computeTotalCostPerBag(
+    costPrevious.prevStart,
+    costPrevious.prevEnd
+  );
 
   const structureBase = [
     {
@@ -505,7 +532,7 @@ export function buildAnalyticsSnapshot(
         expensesByCategory,
         SNAPSHOT_LIMITS.topExpenseCategories
       ),
-      hourlyWageUah: roundMoney(hourlyWageCosts),
+      hourlyWageUah: roundMoney(sumHourlyWage(startDay, endDay)),
     },
     trips: {
       rawCount,
@@ -519,8 +546,10 @@ export function buildAnalyticsSnapshot(
     purchases: {
       bags: roundQty(purchaseBags),
       totalCostUah: roundMoney(purchaseCost),
-      avgCostPerBag:
-        purchaseCostPerBag == null ? null : roundMoney(purchaseCostPerBag),
+      avgCostPerBag: (() => {
+        const avg = getAveragePurchaseCostPerBag(startDay, endDay);
+        return avg == null ? null : roundMoney(avg);
+      })(),
     },
     context: {
       averageMonthlyProductionBags:
