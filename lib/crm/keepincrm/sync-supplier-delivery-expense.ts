@@ -11,7 +11,12 @@ export type SupplierDeliveryExpenseSyncInput = {
   supplierName: string;
   productName: string;
   quantity: number;
+  purseId?: number;
+  categoryId?: number;
 };
+
+const CRM_SYNC_ATTEMPTS = 3;
+const CRM_SYNC_RETRY_DELAY_MS = 400;
 
 export function buildSupplierDeliveryExpenseComment(
   input: SupplierDeliveryExpenseSyncInput
@@ -22,9 +27,14 @@ export function buildSupplierDeliveryExpenseComment(
   return `Закупівля сировини #${input.deliveryId}: ${supplier}, ${product}, ${qty}`;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Проводить витрату в KeepinCRM (гаманець Петрович, категорія закупівлі сировини).
  * Повертає null, якщо синхронізація вимкнена або сума ≤ 0.
+ * При тимчасових збоях API робить кілька спроб.
  */
 export async function syncSupplierDeliveryExpenseToKeepin(
   input: SupplierDeliveryExpenseSyncInput
@@ -38,15 +48,28 @@ export async function syncSupplierDeliveryExpenseToKeepin(
     return null;
   }
 
-  const paymentId = await createKeepinExpensePayment({
-    amount,
-    atYmd: input.atYmd,
-    comment: buildSupplierDeliveryExpenseComment(input),
-    purseId: 0,
-    categoryId: 0,
-  });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= CRM_SYNC_ATTEMPTS; attempt++) {
+    try {
+      return await createKeepinExpensePayment({
+        amount,
+        atYmd: input.atYmd,
+        comment: buildSupplierDeliveryExpenseComment(input),
+        purseId: input.purseId && input.purseId > 0 ? input.purseId : 0,
+        categoryId:
+          input.categoryId && input.categoryId > 0 ? input.categoryId : 0,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < CRM_SYNC_ATTEMPTS) {
+        await sleep(CRM_SYNC_RETRY_DELAY_MS * attempt);
+      }
+    }
+  }
 
-  return paymentId;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("KeepinCRM: не вдалося створити витрату");
 }
 
 /** Видаляє пов’язану витрату в KeepinCRM. Без keepin_payment_id — no-op. */

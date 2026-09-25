@@ -184,6 +184,18 @@ async function resolveExpenseCategoryId(): Promise<number> {
   return match.id;
 }
 
+/** Одноразово резолвить гаманець/категорію для батча закупівель. */
+export async function resolveKeepinSupplierExpenseRefs(): Promise<{
+  purseId: number;
+  categoryId: number;
+}> {
+  const [purseId, categoryId] = await Promise.all([
+    resolvePurseId(),
+    resolveExpenseCategoryId(),
+  ]);
+  return { purseId, categoryId };
+}
+
 /** Створює витрату в KeepinCRM (POST /payments). */
 export async function createKeepinExpensePayment(
   input: CreateKeepinPaymentInput

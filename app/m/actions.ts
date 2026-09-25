@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { requireMiniAppAccess } from "@/lib/telegram/mini-app-session";
 import { resolveSupplierDeliveryPayableAmount } from "@/lib/suppliers/delivery-payable-amount";
 import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
+import { resolveKeepinSupplierExpenseRefs } from "@/lib/crm/keepincrm/payments";
 import { calculateTripMetrics } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
@@ -37,6 +38,7 @@ async function notifyFieldDeliveriesSubmitted(params: {
   startOdometerKm: number;
   endOdometerKm: number;
   bagsTotal: number;
+  crmFailures: string[];
   supabase: ReturnType<typeof createServiceRoleClient>;
 }) {
   const supplierIds = [
@@ -84,6 +86,13 @@ async function notifyFieldDeliveriesSubmitted(params: {
     `Транспорт: ${escapeTelegramHtml(params.vehicleName)}`,
     `Одометр: ${params.startOdometerKm} → ${params.endOdometerKm} (${distanceKm} км)`,
     `Мішків у поїздці: <b>${params.bagsTotal}</b>`,
+    ...(params.crmFailures.length
+      ? [
+          ``,
+          `⚠️ <b>KeepinCRM</b>`,
+          ...params.crmFailures.map((f) => escapeTelegramHtml(f)),
+        ]
+      : []),
   ].join("\n");
 
   try {
@@ -239,7 +248,11 @@ async function insertFieldPurchaseDelivery(params: {
   warehouseId: number;
   day: string;
   lineIndex: number;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  keepinRefs: { purseId: number; categoryId: number } | null;
+}): Promise<
+  | { ok: true; crmError?: string }
+  | { ok: false; error: string }
+> {
   const {
     supabase,
     accessId,
@@ -248,6 +261,7 @@ async function insertFieldPurchaseDelivery(params: {
     warehouseId,
     day,
     lineIndex,
+    keepinRefs,
   } = params;
   const lineLabel = `Закупівля #${lineIndex + 1}`;
 
@@ -395,15 +409,30 @@ async function insertFieldPurchaseDelivery(params: {
         productName:
           (delivery as { product?: { name?: string } }).product?.name ?? "",
         quantity: purchase.quantity,
+        purseId: keepinRefs?.purseId,
+        categoryId: keepinRefs?.categoryId,
       });
       if (paymentId != null) {
-        await supabase
+        const { error: crmLinkError } = await supabase
           .from("supplier_deliveries")
           .update({ keepin_payment_id: paymentId })
           .eq("id", delivery.id);
+        if (crmLinkError) {
+          console.error("keepin_payment_id update:", crmLinkError);
+          return {
+            ok: true,
+            crmError: `${lineLabel} (#${delivery.id}): витрату створено в CRM, але не привʼязано в ERP`,
+          };
+        }
       }
     } catch (crmError) {
       console.error("KeepinCRM from Mini App:", crmError);
+      const detail =
+        crmError instanceof Error ? crmError.message : "невідома помилка";
+      return {
+        ok: true,
+        crmError: `${lineLabel} (#${delivery.id}): ${detail}`,
+      };
     }
   }
 
@@ -412,7 +441,9 @@ async function insertFieldPurchaseDelivery(params: {
 
 export async function createFieldDeliveriesAndTrip(
   input: FieldDeliveriesAndTripInput
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; crmWarning?: string } | { ok: false; error: string }
+> {
   const auth = await requireMiniAppAccess();
   if (!auth.ok) return { ok: false, error: auth.error };
 
@@ -462,7 +493,15 @@ export async function createFieldDeliveriesAndTrip(
     TYPE_DEFAULTS[vehicle.type as "van" | "truck"] ?? TYPE_DEFAULTS.van;
   const day = input.deliveryDate.slice(0, 10);
 
+  let keepinRefs: { purseId: number; categoryId: number } | null = null;
+  try {
+    keepinRefs = await resolveKeepinSupplierExpenseRefs();
+  } catch (error) {
+    console.error("KeepinCRM refs resolve (Mini App):", error);
+  }
+
   let savedCount = 0;
+  const crmFailures: string[] = [];
   for (let i = 0; i < input.purchases.length; i++) {
     const result = await insertFieldPurchaseDelivery({
       supabase,
@@ -472,6 +511,7 @@ export async function createFieldDeliveriesAndTrip(
       warehouseId: input.warehouseId,
       day,
       lineIndex: i,
+      keepinRefs,
     });
     if (!result.ok) {
       if (savedCount > 0) {
@@ -481,6 +521,9 @@ export async function createFieldDeliveriesAndTrip(
         };
       }
       return result;
+    }
+    if (result.crmError) {
+      crmFailures.push(result.crmError);
     }
     savedCount += 1;
   }
@@ -589,12 +632,20 @@ export async function createFieldDeliveriesAndTrip(
     startOdometerKm: input.startOdometerKm,
     endOdometerKm: input.endOdometerKm,
     bagsTotal,
+    crmFailures,
     supabase,
   });
 
   revalidatePath("/transactions/suppliers");
   revalidatePath("/trips");
   revalidatePath("/suppliers");
+
+  if (crmFailures.length > 0) {
+    return {
+      ok: true,
+      crmWarning: `Закупівлі збережено, але в KeepinCRM не проведено: ${crmFailures.join("; ")}`,
+    };
+  }
 
   return { ok: true };
 }

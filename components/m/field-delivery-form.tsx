@@ -298,11 +298,15 @@ export function FieldDeliveryForm({
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success(
-        parsedPurchases.length > 1
-          ? `Збережено ${parsedPurchases.length} закупівлі і поїздку`
-          : "Закупівлю і поїздку збережено"
-      );
+      if (result.crmWarning) {
+        toast.warning(result.crmWarning);
+      } else {
+        toast.success(
+          parsedPurchases.length > 1
+            ? `Збережено ${parsedPurchases.length} закупівлі і поїздку`
+            : "Закупівлю і поїздку збережено"
+        );
+      }
       resetSession();
       router.refresh();
     } finally {
