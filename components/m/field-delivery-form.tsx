@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const PACKING_BAG_LABEL = "Мішок для сировини (білий)";
 
@@ -47,6 +48,7 @@ type PurchaseLine = {
   price: string;
   actualPaid: string;
   materialQuantity: string;
+  additionalInfo: string;
 };
 
 function parseNum(value: string): number | null {
@@ -64,6 +66,7 @@ function createEmptyLine(): PurchaseLine {
     price: "",
     actualPaid: "",
     materialQuantity: "",
+    additionalInfo: "",
   };
 }
 
@@ -80,7 +83,8 @@ function isLineDirty(line: PurchaseLine): boolean {
       line.quantity.trim() ||
       line.price.trim() ||
       line.actualPaid.trim() ||
-      line.materialQuantity.trim()
+      line.materialQuantity.trim() ||
+      line.additionalInfo.trim()
   );
 }
 
@@ -221,6 +225,7 @@ export function FieldDeliveryForm({
       actualPaid: number | null;
       materialProductId: number | null;
       materialQuantity: number | null;
+      additionalInfo: string | null;
     }[] = [];
 
     for (let i = 0; i < purchases.length; i++) {
@@ -241,6 +246,7 @@ export function FieldDeliveryForm({
         return;
       }
       const materialQty = parseNum(line.materialQuantity);
+      const additionalInfo = line.additionalInfo.trim();
       parsedPurchases.push({
         supplierId: Number(line.supplierId),
         quantity: bags,
@@ -252,6 +258,7 @@ export function FieldDeliveryForm({
             : null,
         materialQuantity:
           materialQty != null && materialQty > 0 ? materialQty : null,
+        additionalInfo: additionalInfo || null,
       });
     }
 
@@ -555,6 +562,21 @@ export function FieldDeliveryForm({
                   }
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor={`additional_info_${line.key}`}>
+                Додаткова інформація
+              </Label>
+              <Textarea
+                id={`additional_info_${line.key}`}
+                className="min-h-[88px] text-base"
+                value={line.additionalInfo}
+                onChange={(e) =>
+                  updateLine(line.key, { additionalInfo: e.target.value })
+                }
+                placeholder="Необовʼязково"
+              />
             </div>
           </section>
         );

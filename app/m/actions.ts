@@ -61,7 +61,10 @@ async function notifyFieldDeliveriesSubmitted(params: {
       actualPaid: p.actualPaid,
     });
     const bags = Math.floor(p.quantity);
-    return `${i + 1}. ${escapeTelegramHtml(name)} — <b>${bags}</b> мішк., ${escapeTelegramHtml(formatMoneyUa(payable))}`;
+    const base = `${i + 1}. ${escapeTelegramHtml(name)} — <b>${bags}</b> мішк., ${escapeTelegramHtml(formatMoneyUa(payable))}`;
+    const info = p.additionalInfo?.trim();
+    if (!info) return base;
+    return `${base}\n   └ ${escapeTelegramHtml(info)}`;
   });
 
   const distanceKm = Math.round(
@@ -190,6 +193,7 @@ export type FieldPurchaseLineInput = {
   actualPaid: number | null;
   materialProductId: number | null;
   materialQuantity: number | null;
+  additionalInfo: string | null;
 };
 
 export type FieldDeliveriesAndTripInput = {
@@ -271,6 +275,10 @@ async function insertFieldPurchaseDelivery(params: {
     created_at: new Date(`${day}T12:00:00.000Z`).toISOString(),
     created_by_access_id: accessId,
   };
+  const additionalInfo = purchase.additionalInfo?.trim();
+  if (additionalInfo) {
+    insertPayload.additional_info = additionalInfo;
+  }
   if (
     purchase.materialProductId != null &&
     purchase.materialQuantity != null &&
