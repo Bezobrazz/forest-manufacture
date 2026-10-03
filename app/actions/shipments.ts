@@ -408,7 +408,7 @@ export async function fulfillQueueShipmentAction(
     } else {
       const { data: ord, error: ordErr } = await supabase
         .from("crm_orders")
-        .select("id, crm_id, customer_id, queue_rank")
+        .select("id, crm_id, customer_id, queue_rank, total_amount, marge_amount")
         .eq("crm_id", crmKey)
         .maybeSingle();
 
@@ -424,6 +424,14 @@ export async function fulfillQueueShipmentAction(
         .eq("id", ord.customer_id)
         .maybeSingle();
       const customerName = typeof custRow?.name === "string" ? custRow.name : "";
+      const dealTotal =
+        ord.total_amount != null && Number.isFinite(Number(ord.total_amount))
+          ? Number(ord.total_amount)
+          : null;
+      const dealMarge =
+        ord.marge_amount != null && Number.isFinite(Number(ord.marge_amount))
+          ? Number(ord.marge_amount)
+          : null;
 
       for (const line of filtered) {
         const { data: itemRow, error: iErr } = await supabase
@@ -477,6 +485,20 @@ export async function fulfillQueueShipmentAction(
         return { success: false, error: msg };
       }
 
+      if (dealTotal != null || dealMarge != null) {
+        const { error: metricsErr } = await supabase.from("crm_shipped_deal_metrics").insert({
+          crm_id: crmKey,
+          customer_name: customerName,
+          total_amount: dealTotal ?? 0,
+          marge_amount: dealMarge ?? 0,
+          shipment_date: shipmentDate,
+          shipped_at: transactionCreatedAt,
+        });
+        if (metricsErr) {
+          console.error("fulfillQueueShipmentAction crm_shipped_deal_metrics:", metricsErr);
+        }
+      }
+
       try {
         await syncSingleKeepinAgreement(supabase, crmKey);
       } catch (syncErr) {
@@ -503,6 +525,7 @@ export async function fulfillQueueShipmentAction(
 
     revalidatePath("/shipments");
     revalidatePath("/inventory");
+    revalidatePath("/statistics");
     return { success: true };
   } catch (e) {
     await rollbackAppliedShipmentSteps(supabase, applied);

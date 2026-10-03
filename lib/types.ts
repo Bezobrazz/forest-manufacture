@@ -156,6 +156,10 @@ export interface CrmOrder {
   /** Менше значення = вищий пріоритет у черзі відвантажень */
   queue_rank: number;
   notes: string | null;
+  /** Сума угоди з KeepinCRM (грн), якщо синхронізовано */
+  total_amount?: number | null;
+  /** Маржа угоди з KeepinCRM (грн), якщо синхронізовано */
+  marge_amount?: number | null;
   synced_at: string;
   created_at: string;
 }

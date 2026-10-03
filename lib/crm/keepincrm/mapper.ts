@@ -10,6 +10,10 @@ export type ParsedKeepinAgreement = {
   result: string | null;
   archived: boolean;
   notes: string | null;
+  /** Сума угоди (KeepinCRM total_amount), грн */
+  total_amount: number | null;
+  /** Маржа угоди (KeepinCRM marge_amount), грн */
+  marge_amount: number | null;
   customerCrmId: string;
   customerName: string;
   customerPhone: string | null;
@@ -63,6 +67,38 @@ function parseJobs(raw: Record<string, unknown>): ParsedKeepinAgreement["lines"]
   }
 
   return lines;
+}
+
+/** Парсить грошове поле KeepinCRM (number або рядок на кшталт «246000,00»). */
+export function parseKeepinMoneyAmount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value * 100) / 100;
+  }
+  if (typeof value !== "string") return null;
+  const cleaned = value
+    .replace(/\s/g, "")
+    .replace(/[^\d,.\-]/g, "")
+    .replace(",", ".");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function crmDealMarginPercent(
+  totalAmount: number | null | undefined,
+  margeAmount: number | null | undefined
+): number | null {
+  if (
+    totalAmount == null ||
+    margeAmount == null ||
+    !Number.isFinite(totalAmount) ||
+    !Number.isFinite(margeAmount) ||
+    totalAmount <= 0
+  ) {
+    return null;
+  }
+  return Math.round((margeAmount / totalAmount) * 1000) / 10;
 }
 
 /** Нормалізує відповідь GET /agreements або /agreements/:id до внутрішньої моделі. */
@@ -125,6 +161,11 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
     typeof raw.result === "string" && raw.result.trim() ? raw.result.trim() : null;
   const archived = Boolean(raw.archived);
 
+  const total_amount =
+    parseKeepinMoneyAmount(raw.total_amount) ?? parseKeepinMoneyAmount(raw.total);
+  const marge_amount =
+    parseKeepinMoneyAmount(raw.marge_amount) ?? parseKeepinMoneyAmount(raw.marge);
+
   return {
     crm_id,
     crm_created_at_iso: created,
@@ -133,6 +174,8 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
     result,
     archived,
     notes,
+    total_amount,
+    marge_amount,
     customerCrmId,
     customerName,
     customerPhone: phone,

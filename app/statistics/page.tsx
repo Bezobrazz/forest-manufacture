@@ -8,6 +8,10 @@ import {
   type BarkShipmentsBreakdown,
   type StatisticsDateRange,
 } from "@/app/actions";
+import {
+  getCrmDealProfitabilityStats,
+  type CrmDealProfitabilityStats,
+} from "@/app/actions/crm-profitability";
 import { getStatisticsPageData } from "@/app/statistics/actions";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
 import {
@@ -118,7 +122,7 @@ import {
   suggestedSellingPriceUah,
 } from "@/lib/exchange/nbu-rates";
 
-const STATISTICS_PAGE_TABS = ["cost", "production", "ai"] as const;
+const STATISTICS_PAGE_TABS = ["cost", "production", "profitability", "ai"] as const;
 type StatisticsPageTab = (typeof STATISTICS_PAGE_TABS)[number];
 
 type SuggestedPriceMode = "markup_percent" | "eur_per_bag";
@@ -215,6 +219,9 @@ function StatisticsPageContent() {
     useState<BarkShipmentsBreakdown | null>(null);
   const [barkShipmentsDetailLoading, setBarkShipmentsDetailLoading] =
     useState(false);
+  const [crmProfitability, setCrmProfitability] =
+    useState<CrmDealProfitabilityStats | null>(null);
+  const [crmProfitabilityLoading, setCrmProfitabilityLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [monthlyProductionChartOpen, setMonthlyProductionChartOpen] =
     useState(false);
@@ -441,6 +448,30 @@ function StatisticsPageContent() {
       cancelled = true;
     };
   }, [period, selectedYear, statsDateRangeKey]);
+
+  useEffect(() => {
+    if (activeTab !== "profitability") return;
+    let cancelled = false;
+    setCrmProfitabilityLoading(true);
+    void (async () => {
+      try {
+        const data = await getCrmDealProfitabilityStats(
+          period,
+          selectedYear,
+          statsDateRange
+        );
+        if (!cancelled) setCrmProfitability(data);
+      } catch (error) {
+        console.error("Помилка при завантаженні рентабельності CRM:", error);
+        if (!cancelled) setCrmProfitability(null);
+      } finally {
+        if (!cancelled) setCrmProfitabilityLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, period, selectedYear, statsDateRangeKey]);
 
   useEffect(() => {
     const settings = parseFixedOverheadSettings(
@@ -1767,6 +1798,7 @@ function StatisticsPageContent() {
         <TabsList>
           <TabsTrigger value="cost">Собівартість</TabsTrigger>
           <TabsTrigger value="production">Виробництво</TabsTrigger>
+          <TabsTrigger value="profitability">Рентабельність</TabsTrigger>
           {canUseAi ? (
             <TabsTrigger value="ai" className="gap-1.5">
               <Sparkles className="h-4 w-4" />
@@ -2810,6 +2842,102 @@ function StatisticsPageContent() {
         </CardContent>
       </Card>
 
+        </TabsContent>
+
+        <TabsContent value="profitability" className="space-y-6 mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle>Рентабельність CRM-угод</CardTitle>
+              <CardDescription>
+                Виручка та маржа з KeepinCRM по відвантажених з черги угодах за обраний період.
+                Це окремі метрики від собівартості мішка з виробництва.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {crmProfitabilityLoading ? (
+                <p className="text-sm text-muted-foreground">Завантаження…</p>
+              ) : !crmProfitability || crmProfitability.dealsCount === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Немає знімків відвантажених CRM-угод за період. Після відвантаження з черги
+                  сума і маржа угоди потраплять сюди автоматично.
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                      <p className="text-xs text-muted-foreground">Угод</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {formatNumber(crmProfitability.dealsCount)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                      <p className="text-xs text-muted-foreground">Виручка CRM</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {formatNumberWithUnit(crmProfitability.revenueTotal, "₴")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                      <p className="text-xs text-muted-foreground">Маржа CRM</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {formatNumberWithUnit(crmProfitability.margeTotal, "₴")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                      <p className="text-xs text-muted-foreground">Рентабельність</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {crmProfitability.marginPercent != null
+                          ? `${formatNumber(crmProfitability.marginPercent)}%`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/40 text-left">
+                          <th className="px-3 py-2 font-medium">Дата</th>
+                          <th className="px-3 py-2 font-medium">Клієнт</th>
+                          <th className="px-3 py-2 font-medium">Угода</th>
+                          <th className="px-3 py-2 font-medium text-right">Виручка</th>
+                          <th className="px-3 py-2 font-medium text-right">Маржа</th>
+                          <th className="px-3 py-2 font-medium text-right">%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {crmProfitability.deals.map((deal) => (
+                          <tr key={deal.id} className="border-b last:border-0">
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {deal.shipment_date
+                                ? formatDate(`${deal.shipment_date}T12:00:00.000Z`)
+                                : "—"}
+                            </td>
+                            <td className="px-3 py-2">
+                              {deal.customer_name.trim() || "—"}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                              #{deal.crm_id}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatNumberWithUnit(deal.total_amount, "₴")}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatNumberWithUnit(deal.marge_amount, "₴")}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {deal.margin_percent != null
+                                ? `${formatNumber(deal.margin_percent)}%`
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {canUseAi ? (

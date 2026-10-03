@@ -142,6 +142,8 @@ async function upsertParsedAgreement(
         crm_created_at: parsed.crm_created_at_iso,
         queue_rank,
         notes: parsed.notes,
+        total_amount: parsed.total_amount,
+        marge_amount: parsed.marge_amount,
         synced_at: now,
       },
       { onConflict: "crm_id" }

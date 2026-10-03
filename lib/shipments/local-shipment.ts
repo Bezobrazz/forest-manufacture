@@ -106,6 +106,8 @@ export function mapPlanningOrderRowToCrmShape(row: ShipmentPlanningOrderDb): Crm
     crm_created_at: row.created_at,
     queue_rank: row.queue_rank,
     notes: null,
+    total_amount: null,
+    marge_amount: null,
     synced_at: row.updated_at ?? now,
     created_at: row.created_at,
   };

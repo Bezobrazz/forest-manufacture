@@ -76,7 +76,8 @@ import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
 import { stripQueueShipmentNotesPrefix, parseShipmentQueueNotesRef, buildShippedQueueCardKey } from "@/lib/shipments/shipped-cards";
-import { cn, dateToYYYYMMDD, formatDate, formatNumber } from "@/lib/utils";
+import { crmDealMarginPercent } from "@/lib/crm/keepincrm/mapper";
+import { cn, dateToYYYYMMDD, formatDate, formatNumber, formatNumberWithUnit } from "@/lib/utils";
 import type { CalendarProps } from "@/components/ui/calendar";
 
 const WEEK_STARTS_SAT = 6;
@@ -781,6 +782,15 @@ function ShipmentsPageContent() {
             const isDragging = draggingQueueCrmId === crmId;
             const isDropOver = dropTargetCrmId === crmId;
             const totalQty = f.order.items.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
+            const dealTotal =
+              f.order.total_amount != null && Number.isFinite(Number(f.order.total_amount))
+                ? Number(f.order.total_amount)
+                : null;
+            const dealMarge =
+              f.order.marge_amount != null && Number.isFinite(Number(f.order.marge_amount))
+                ? Number(f.order.marge_amount)
+                : null;
+            const dealMarginPct = crmDealMarginPercent(dealTotal, dealMarge);
             return (
               <Card
                 key={crmId}
@@ -880,6 +890,17 @@ function ShipmentsPageContent() {
                       <Badge variant="outline">Мапінг / норма</Badge>
                     ) : null}
                     <Badge variant="outline">К-сть: {totalQty} шт</Badge>
+                    {dealTotal != null ? (
+                      <Badge variant="outline" className="font-normal">
+                        Дохід {formatNumberWithUnit(dealTotal, "₴")}
+                      </Badge>
+                    ) : null}
+                    {dealMarge != null ? (
+                      <Badge variant="secondary" className="font-normal">
+                        Маржа {formatNumberWithUnit(dealMarge, "₴")}
+                        {dealMarginPct != null ? ` · ${formatNumber(dealMarginPct)}%` : ""}
+                      </Badge>
+                    ) : null}
                     </div>
                   </div>
                 </CardHeader>
@@ -892,6 +913,27 @@ function ShipmentsPageContent() {
                       <span className="shrink-0">{it.quantity} шт</span>
                     </div>
                   ))}
+                  {dealTotal != null || dealMarge != null ? (
+                    <div className="pt-2 mt-1 border-t text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                      {dealTotal != null ? (
+                        <span>
+                          Дохід CRM:{" "}
+                          <span className="text-foreground font-medium">
+                            {formatNumberWithUnit(dealTotal, "₴")}
+                          </span>
+                        </span>
+                      ) : null}
+                      {dealMarge != null ? (
+                        <span>
+                          Маржа CRM:{" "}
+                          <span className="text-foreground font-medium">
+                            {formatNumberWithUnit(dealMarge, "₴")}
+                            {dealMarginPct != null ? ` (${formatNumber(dealMarginPct)}%)` : ""}
+                          </span>
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="pt-2 flex flex-wrap gap-2 items-center justify-end">
                     {isLocalShipmentOrderCrmId(crmId) ? (
                       <>
@@ -1890,6 +1932,15 @@ function renderForecastMini(
   const itemsPreview = f.order.items.slice(0, 3);
   const restItemsCount = Math.max(f.order.items.length - itemsPreview.length, 0);
   const totalQty = f.order.items.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+  const dealTotal =
+    f.order.total_amount != null && Number.isFinite(Number(f.order.total_amount))
+      ? Number(f.order.total_amount)
+      : null;
+  const dealMarge =
+    f.order.marge_amount != null && Number.isFinite(Number(f.order.marge_amount))
+      ? Number(f.order.marge_amount)
+      : null;
+  const dealMarginPct = crmDealMarginPercent(dealTotal, dealMarge);
 
   return (
     <div key={f.order.crm_id} className="rounded-md border p-3 text-sm space-y-2">
@@ -1900,6 +1951,17 @@ function renderForecastMini(
             {f.isReady ? "Готово сьогодні" : f.etaDate ? "Очікує виробництва" : "Без ETA"}
           </Badge>
           <Badge variant="outline">К-сть: {totalQty} шт</Badge>
+          {dealTotal != null ? (
+            <Badge variant="outline" className="font-normal">
+              {formatNumberWithUnit(dealTotal, "₴")}
+            </Badge>
+          ) : null}
+          {dealMarge != null ? (
+            <Badge variant="secondary" className="font-normal">
+              Маржа {formatNumberWithUnit(dealMarge, "₴")}
+              {dealMarginPct != null ? ` · ${formatNumber(dealMarginPct)}%` : ""}
+            </Badge>
+          ) : null}
         </div>
       </div>
 

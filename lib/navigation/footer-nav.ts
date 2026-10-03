@@ -120,6 +120,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
         items: [
           { href: "/statistics?tab=cost", label: "Собівартість" },
           { href: "/statistics", label: "Виробництво" },
+          { href: "/statistics?tab=profitability", label: "Рентабельність" },
           { href: "/statistics?tab=ai", label: "ШІ аналіз" },
         ],
       },
