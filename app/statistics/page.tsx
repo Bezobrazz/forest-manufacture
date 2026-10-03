@@ -14,7 +14,6 @@ import {
   type CrmDealProfitabilityStats,
 } from "@/app/actions/crm-profitability";
 import { getStatisticsPageData } from "@/app/statistics/actions";
-import { currencyUnitLabel } from "@/lib/crm/keepincrm/mapper";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
 import {
   Card,
@@ -2925,126 +2924,325 @@ function StatisticsPageContent() {
                 </p>
               ) : (
                 <>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
-                      <p className="text-xs text-muted-foreground">Угод</p>
-                      <p className="text-2xl font-semibold tabular-nums">
-                        {formatNumber(crmProfitability.dealsCount)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
-                      <p className="text-xs text-muted-foreground">Виручка UAH</p>
-                      <p className="text-2xl font-semibold tabular-nums">
-                        {formatNumberWithUnit(crmProfitability.revenueUah, "₴")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Маржа {formatNumberWithUnit(crmProfitability.margeUah, "₴")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
-                      <p className="text-xs text-muted-foreground">Виручка EUR</p>
-                      <p className="text-2xl font-semibold tabular-nums">
-                        {formatNumberWithUnit(crmProfitability.revenueEur, "€")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Маржа {formatNumberWithUnit(crmProfitability.margeEur, "€")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1 sm:col-span-2 lg:col-span-3">
-                      <p className="text-xs text-muted-foreground">
-                        Еквівалент у грн
-                        {eurUahRate != null
-                          ? ` (курс НБУ ${formatNumberWithUnit(eurUahRate, "₴/€")}${
-                              nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""
-                            })`
-                          : " — курс НБУ недоступний"}
-                      </p>
-                      {crmProfitability.revenueUahEquivalent != null ? (
-                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                          <span>
-                            Виручка{" "}
-                            <span className="font-semibold tabular-nums">
-                              {formatNumberWithUnit(
-                                crmProfitability.revenueUahEquivalent,
-                                "₴"
-                              )}
-                            </span>
-                          </span>
-                          <span>
-                            Маржа{" "}
-                            <span className="font-semibold tabular-nums">
-                              {formatNumberWithUnit(
-                                crmProfitability.margeUahEquivalent ?? 0,
-                                "₴"
-                              )}
-                            </span>
-                          </span>
-                          <span>
-                            Рентабельність{" "}
-                            <span className="font-semibold tabular-nums">
-                              {crmProfitability.marginPercentEquivalent != null
-                                ? `${formatNumber(crmProfitability.marginPercentEquivalent)}%`
-                                : "—"}
-                            </span>
-                          </span>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Немає курсу для конвертації EUR → UAH
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  {(() => {
+                    const uahDeals = crmProfitability.deals.filter(
+                      (d) => d.currency !== "EUR"
+                    );
+                    const eurDeals = crmProfitability.deals.filter(
+                      (d) => d.currency === "EUR"
+                    );
+                    const uahMarginPct =
+                      crmProfitability.revenueUah > 0
+                        ? Math.round(
+                            (crmProfitability.margeUah /
+                              crmProfitability.revenueUah) *
+                              1000
+                          ) / 10
+                        : null;
+                    const eurMarginPct =
+                      crmProfitability.revenueEur > 0
+                        ? Math.round(
+                            (crmProfitability.margeEur /
+                              crmProfitability.revenueEur) *
+                              1000
+                          ) / 10
+                        : null;
+                    const eurRevenueUah =
+                      eurUahRate != null
+                        ? convertEurToUah(crmProfitability.revenueEur, eurUahRate)
+                        : null;
+                    const eurMargeUah =
+                      eurUahRate != null
+                        ? convertEurToUah(crmProfitability.margeEur, eurUahRate)
+                        : null;
 
-                  <div className="rounded-lg border overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/40 text-left">
-                          <th className="px-3 py-2 font-medium">Дата</th>
-                          <th className="px-3 py-2 font-medium">Клієнт</th>
-                          <th className="px-3 py-2 font-medium">Угода</th>
-                          <th className="px-3 py-2 font-medium">Валюта</th>
-                          <th className="px-3 py-2 font-medium text-right">Виручка</th>
-                          <th className="px-3 py-2 font-medium text-right">Маржа</th>
-                          <th className="px-3 py-2 font-medium text-right">%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {crmProfitability.deals.map((deal) => {
-                          const unit = currencyUnitLabel(deal.currency);
-                          return (
-                          <tr key={deal.id} className="border-b last:border-0">
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {deal.shipment_date
-                                ? formatDate(`${deal.shipment_date}T12:00:00.000Z`)
+                    const overallMarginPct =
+                      crmProfitability.marginPercentEquivalent;
+                    const dealMargins = crmProfitability.deals
+                      .map((d) => d.margin_percent)
+                      .filter((p): p is number => p != null && Number.isFinite(p));
+                    const averageDealMarginPct =
+                      dealMargins.length > 0
+                        ? Math.round(
+                            (dealMargins.reduce((a, b) => a + b, 0) /
+                              dealMargins.length) *
+                              10
+                          ) / 10
+                        : null;
+
+                    const renderDealsTable = (
+                      deals: typeof crmProfitability.deals,
+                      unit: string
+                    ) => (
+                      <div className="rounded-lg border overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/40 text-left">
+                              <th className="px-3 py-2 font-medium">Дата</th>
+                              <th className="px-3 py-2 font-medium">Клієнт</th>
+                              <th className="px-3 py-2 font-medium">Угода</th>
+                              <th className="px-3 py-2 font-medium text-right">
+                                Виручка
+                              </th>
+                              <th className="px-3 py-2 font-medium text-right">
+                                Маржа
+                              </th>
+                              <th className="px-3 py-2 font-medium text-right">%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {deals.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={6}
+                                  className="px-3 py-4 text-center text-muted-foreground"
+                                >
+                                  Немає угод у цій валюті за період
+                                </td>
+                              </tr>
+                            ) : (
+                              deals.map((deal) => (
+                                <tr key={deal.id} className="border-b last:border-0">
+                                  <td className="px-3 py-2 whitespace-nowrap">
+                                    {deal.shipment_date
+                                      ? formatDate(
+                                          `${deal.shipment_date}T12:00:00.000Z`
+                                        )
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {deal.customer_name.trim() || "—"}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                                    #{deal.crm_id}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums">
+                                    {formatNumberWithUnit(deal.total_amount, unit)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums">
+                                    {formatNumberWithUnit(deal.marge_amount, unit)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums">
+                                    {deal.margin_percent != null
+                                      ? `${formatNumber(deal.margin_percent)}%`
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+
+                    return (
+                      <div className="space-y-6">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <div className="rounded-lg border bg-muted/30 p-4">
+                            <p className="text-xs text-muted-foreground">Угод разом</p>
+                            <p className="text-2xl font-semibold tabular-nums">
+                              {formatNumber(crmProfitability.dealsCount)}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {formatNumber(uahDeals.length)} UAH ·{" "}
+                              {formatNumber(eurDeals.length)} EUR
+                            </p>
+                          </div>
+                          <div className="rounded-lg border bg-primary/5 border-primary/20 p-4">
+                            <p className="text-xs text-muted-foreground">
+                              Загальна рентабельність
+                            </p>
+                            <p className="text-2xl font-semibold tabular-nums">
+                              {overallMarginPct != null
+                                ? `${formatNumber(overallMarginPct)}%`
                                 : "—"}
-                            </td>
-                            <td className="px-3 py-2">
-                              {deal.customer_name.trim() || "—"}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                              #{deal.crm_id}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {deal.currency}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {formatNumberWithUnit(deal.total_amount, unit)}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {formatNumberWithUnit(deal.marge_amount, unit)}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {deal.margin_percent != null
-                                ? `${formatNumber(deal.margin_percent)}%`
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Сумарна маржа / виручка (в грн)
+                            </p>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-4">
+                            <p className="text-xs text-muted-foreground">
+                              Середня рентабельність угод
+                            </p>
+                            <p className="text-2xl font-semibold tabular-nums">
+                              {averageDealMarginPct != null
+                                ? `${formatNumber(averageDealMarginPct)}%`
                                 : "—"}
-                            </td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Середнє % маржі по угодах
+                            </p>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-4">
+                            <p className="text-xs text-muted-foreground">
+                              Виручка / маржа разом
+                            </p>
+                            <p className="text-lg font-semibold tabular-nums">
+                              {crmProfitability.revenueUahEquivalent != null
+                                ? formatNumberWithUnit(
+                                    crmProfitability.revenueUahEquivalent,
+                                    "₴"
+                                  )
+                                : "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Маржа{" "}
+                              {crmProfitability.margeUahEquivalent != null
+                                ? formatNumberWithUnit(
+                                    crmProfitability.margeUahEquivalent,
+                                    "₴"
+                                  )
+                                : "—"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <Card className="border-muted shadow-none">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Гривня (UAH)</CardTitle>
+                            <CardDescription>
+                              Відвантажені CRM-угоди в гривні за обраний період
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-4">
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Угод</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumber(uahDeals.length)}
+                                </p>
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Виручка</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumberWithUnit(
+                                    crmProfitability.revenueUah,
+                                    "₴"
+                                  )}
+                                </p>
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Маржа</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumberWithUnit(
+                                    crmProfitability.margeUah,
+                                    "₴"
+                                  )}
+                                </p>
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">
+                                  Рентабельність
+                                </p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {uahMarginPct != null
+                                    ? `${formatNumber(uahMarginPct)}%`
+                                    : "—"}
+                                </p>
+                              </div>
+                            </div>
+                            {renderDealsTable(uahDeals, "₴")}
+                          </CardContent>
+                        </Card>
+
+                        <Card className="border-muted shadow-none">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Євро (EUR)</CardTitle>
+                            <CardDescription>
+                              Відвантажені CRM-угоди в євро за обраний період
+                              {eurUahRate != null
+                                ? ` · курс НБУ ${formatNumberWithUnit(eurUahRate, "₴/€")}${
+                                    nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""
+                                  }`
+                                : ""}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-4">
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Угод</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumber(eurDeals.length)}
+                                </p>
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Виручка</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumberWithUnit(
+                                    crmProfitability.revenueEur,
+                                    "€"
+                                  )}
+                                </p>
+                                {eurRevenueUah != null ? (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    ≈ {formatNumberWithUnit(eurRevenueUah, "₴")}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">Маржа</p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {formatNumberWithUnit(
+                                    crmProfitability.margeEur,
+                                    "€"
+                                  )}
+                                </p>
+                                {eurMargeUah != null ? (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    ≈ {formatNumberWithUnit(eurMargeUah, "₴")}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <p className="text-xs text-muted-foreground">
+                                  Рентабельність
+                                </p>
+                                <p className="text-xl font-semibold tabular-nums">
+                                  {eurMarginPct != null
+                                    ? `${formatNumber(eurMarginPct)}%`
+                                    : "—"}
+                                </p>
+                              </div>
+                            </div>
+                            {renderDealsTable(eurDeals, "€")}
+                          </CardContent>
+                        </Card>
+
+                        {crmProfitability.revenueUahEquivalent != null ? (
+                          <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1">
+                            <span className="text-muted-foreground">Разом у грн:</span>
+                            <span>
+                              Виручка{" "}
+                              <span className="font-semibold tabular-nums">
+                                {formatNumberWithUnit(
+                                  crmProfitability.revenueUahEquivalent,
+                                  "₴"
+                                )}
+                              </span>
+                            </span>
+                            <span>
+                              Маржа{" "}
+                              <span className="font-semibold tabular-nums">
+                                {formatNumberWithUnit(
+                                  crmProfitability.margeUahEquivalent ?? 0,
+                                  "₴"
+                                )}
+                              </span>
+                            </span>
+                            <span>
+                              Рентабельність{" "}
+                              <span className="font-semibold tabular-nums">
+                                {crmProfitability.marginPercentEquivalent != null
+                                  ? `${formatNumber(crmProfitability.marginPercentEquivalent)}%`
+                                  : "—"}
+                              </span>
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
