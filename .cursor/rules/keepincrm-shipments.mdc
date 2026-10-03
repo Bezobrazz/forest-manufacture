@@ -1,0 +1,22 @@
+---
+description: Черга відвантажень KeepinCRM — лише stage id 5 (Доставка ОПТ)
+globs: lib/crm/keepincrm/**/*.ts,app/shipments/**/*.{ts,tsx},app/actions/shipments.ts,app/api/webhooks/keepincrm/**/*.ts
+alwaysApply: false
+---
+
+# KeepinCRM — черга відвантажень
+
+Синк угод для `/shipments` бере **лише** угоди з етапу **id=5** («Доставка ОПТ»).
+
+## Matching
+
+- Критерій — **`stage_id`**, не назва етапу.
+- Константа: `KEEPIN_SHIPMENT_QUEUE_STAGE_ID = "5"` у `lib/crm/keepincrm/mapper.ts`.
+- Env: `KEEPINCRM_ACTIVE_STAGE_IDS` (через кому). Порожньо → дефолт `"5"`. Ніколи не «усі етапи».
+
+## Fetch
+
+- `q[stage_id_eq]` у KeepinCRM API ненадійний (може повертати 0).
+- Тягнути відкриті угоди: `q[result_null]=true`, з rate limit / retry 429 у `keepinRequest`.
+- Відсіювати клієнтськи через `isAgreementInActiveStages` / allowlist id.
+- Не використовувати `q[stage_name_eq]` як primary filter.

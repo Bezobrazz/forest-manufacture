@@ -162,3 +162,13 @@ function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel
 5. Якщо Auto-review просить Approve на schema write — це очікувано; після схвалення користувачем продовжити застосування.
 
 Переважний спосіб: виконати SQL з міграційного файлу через `pg` (з `ssl: { rejectUnauthorized: false }` за потреби) або `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"` лише коли історія міграцій узгоджена; для однієї нової колонки — точковий `ALTER` з файлу міграції безпечніший за повний push усіх pending.
+
+## 17. KeepinCRM — черга відвантажень
+
+Синхронізація угод на сторінці відвантажень бере **лише** угоди з етапу **id=5** («Доставка ОПТ»).
+
+- Канонічний критерій matching — **`stage_id`**, не назва етапу.
+- Константи: `KEEPIN_SHIPMENT_QUEUE_STAGE_ID = "5"` у `lib/crm/keepincrm/mapper.ts`.
+- Env: `KEEPINCRM_ACTIVE_STAGE_IDS` (через кому). Якщо порожньо — дефолт `"5"`. **Ніколи** не трактувати порожній env як «усі етапи».
+- KeepinCRM `q[stage_id_eq]` ненадійний: тягнути відкриті угоди (`q[result_null]=true`) з rate limit і відсіювати клієнтськи за `stage_id`.
+- Назву «Доставка ОПТ» можна згадувати в UI/коментарях, але не використовувати як primary filter (`q[stage_name_eq]`).

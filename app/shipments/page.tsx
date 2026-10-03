@@ -959,8 +959,8 @@ function ShipmentsPageContent() {
           {forecasts.length === 0 && (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground text-sm">
-                Немає активних угод і локальних карток. Синхронізуйте з KeepinCRM, перевірте фільтр
-                етапів (KEEPINCRM_ACTIVE_STAGE_IDS) або додайте локальну картку для планування.
+                Немає активних угод і локальних карток. Синхронізуйте з KeepinCRM (етап id=5
+                «Доставка ОПТ») або додайте локальну картку для планування.
               </CardContent>
             </Card>
           )}

@@ -1,3 +1,7 @@
+/** Черга відвантажень: лише угоди на етапі «Доставка ОПТ» (KeepinCRM stage id=5). */
+export const KEEPIN_SHIPMENT_QUEUE_STAGE_NAME = "Доставка ОПТ";
+export const KEEPIN_SHIPMENT_QUEUE_STAGE_ID = "5";
+
 export type ParsedKeepinAgreement = {
   crm_id: string;
   crm_created_at_iso: string;
@@ -137,28 +141,33 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
   };
 }
 
-/** Значення `KEEPINCRM_ACTIVE_STAGE_IDS` (через кому). Якщо порожньо — всі проходять фільтр. */
-export function parseStageIdAllowlist(): Set<string> | null {
+/**
+ * ID етапів для черги відвантажень (`KEEPINCRM_ACTIVE_STAGE_IDS`).
+ * Якщо env порожній — лише «Доставка ОПТ» (id 5). Ніколи не «усі етапи».
+ */
+export function parseStageIdAllowlist(): Set<string> {
   const raw = process.env.KEEPINCRM_ACTIVE_STAGE_IDS?.trim();
-  if (!raw) return null;
   const set = new Set<string>();
-  for (const part of raw.split(",")) {
-    const t = part.trim();
-    if (t.length > 0) set.add(t);
+  if (raw) {
+    for (const part of raw.split(",")) {
+      const t = part.trim();
+      if (t.length > 0) set.add(t);
+    }
   }
-  return set.size > 0 ? set : null;
+  if (set.size === 0) {
+    set.add(KEEPIN_SHIPMENT_QUEUE_STAGE_ID);
+  }
+  return set;
 }
 
+/** Лише за `stage_id` (allowlist). Назва етапу не є критерієм matching. */
 export function isAgreementInActiveStages(parsed: ParsedKeepinAgreement): boolean {
   if (parsed.archived) return false;
   if (parsed.result !== null) return false;
-
-  const allow = parseStageIdAllowlist();
-  if (!allow) return true;
-  if (parsed.keepin_stage_id === null || parsed.keepin_stage_id === undefined)
+  if (parsed.keepin_stage_id === null || parsed.keepin_stage_id === undefined) {
     return false;
-  const sid = String(parsed.keepin_stage_id);
-  return allow.has(sid);
+  }
+  return parseStageIdAllowlist().has(String(parsed.keepin_stage_id));
 }
 
 export function normalizeProductKey(name: string): string {

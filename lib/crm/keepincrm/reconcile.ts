@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  fetchAllKeepinAgreements,
+  fetchKeepinAgreementsForSync,
   fetchKeepinAgreementRaw,
 } from "@/lib/crm/keepincrm/client";
 import {
@@ -245,7 +245,7 @@ export async function syncKeepinOrdersWithSupabase(
   supabase: SupabaseClient,
   onProgress?: (progress: { total: number; processed: number }) => void
 ): Promise<{ upserted: number; removed: number }> {
-  const rows = await fetchAllKeepinAgreements();
+  const rows = await fetchKeepinAgreementsForSync();
   const products = await loadProductLookup(supabase);
   const crmMappings = await loadCrmMappings(supabase);
   const seen = new Set<string>();
