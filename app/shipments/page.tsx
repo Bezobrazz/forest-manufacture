@@ -76,7 +76,7 @@ import type { Inventory, CrmOrderWithDetails, ShipmentForecast, Product } from "
 import { calculateForecast } from "@/lib/shipments/eta";
 import { isLocalShipmentOrderCrmId, parseLocalShipmentOrderId } from "@/lib/shipments/local-shipment";
 import { stripQueueShipmentNotesPrefix, parseShipmentQueueNotesRef, buildShippedQueueCardKey } from "@/lib/shipments/shipped-cards";
-import { crmDealMarginPercent } from "@/lib/crm/keepincrm/mapper";
+import { crmDealMarginPercent, currencyUnitLabel } from "@/lib/crm/keepincrm/mapper";
 import { cn, dateToYYYYMMDD, formatDate, formatNumber, formatNumberWithUnit } from "@/lib/utils";
 import type { CalendarProps } from "@/components/ui/calendar";
 
@@ -790,6 +790,8 @@ function ShipmentsPageContent() {
               f.order.marge_amount != null && Number.isFinite(Number(f.order.marge_amount))
                 ? Number(f.order.marge_amount)
                 : null;
+            const dealCurrency = (f.order.currency ?? "UAH").toUpperCase();
+            const dealUnit = currencyUnitLabel(dealCurrency);
             const dealMarginPct = crmDealMarginPercent(dealTotal, dealMarge);
             return (
               <Card
@@ -892,12 +894,13 @@ function ShipmentsPageContent() {
                     <Badge variant="outline">К-сть: {totalQty} шт</Badge>
                     {dealTotal != null ? (
                       <Badge variant="outline" className="font-normal">
-                        Дохід {formatNumberWithUnit(dealTotal, "₴")}
+                        Дохід {formatNumberWithUnit(dealTotal, dealUnit)}
+                        {dealCurrency !== "UAH" ? ` ${dealCurrency}` : ""}
                       </Badge>
                     ) : null}
                     {dealMarge != null ? (
                       <Badge variant="secondary" className="font-normal">
-                        Маржа {formatNumberWithUnit(dealMarge, "₴")}
+                        Маржа {formatNumberWithUnit(dealMarge, dealUnit)}
                         {dealMarginPct != null ? ` · ${formatNumber(dealMarginPct)}%` : ""}
                       </Badge>
                     ) : null}
@@ -919,7 +922,8 @@ function ShipmentsPageContent() {
                         <span>
                           Дохід CRM:{" "}
                           <span className="text-foreground font-medium">
-                            {formatNumberWithUnit(dealTotal, "₴")}
+                            {formatNumberWithUnit(dealTotal, dealUnit)}
+                            {dealCurrency !== "UAH" ? ` ${dealCurrency}` : ""}
                           </span>
                         </span>
                       ) : null}
@@ -927,7 +931,7 @@ function ShipmentsPageContent() {
                         <span>
                           Маржа CRM:{" "}
                           <span className="text-foreground font-medium">
-                            {formatNumberWithUnit(dealMarge, "₴")}
+                            {formatNumberWithUnit(dealMarge, dealUnit)}
                             {dealMarginPct != null ? ` (${formatNumber(dealMarginPct)}%)` : ""}
                           </span>
                         </span>
@@ -1940,6 +1944,8 @@ function renderForecastMini(
     f.order.marge_amount != null && Number.isFinite(Number(f.order.marge_amount))
       ? Number(f.order.marge_amount)
       : null;
+  const dealCurrency = (f.order.currency ?? "UAH").toUpperCase();
+  const dealUnit = currencyUnitLabel(dealCurrency);
   const dealMarginPct = crmDealMarginPercent(dealTotal, dealMarge);
 
   return (
@@ -1953,12 +1959,13 @@ function renderForecastMini(
           <Badge variant="outline">К-сть: {totalQty} шт</Badge>
           {dealTotal != null ? (
             <Badge variant="outline" className="font-normal">
-              {formatNumberWithUnit(dealTotal, "₴")}
+              {formatNumberWithUnit(dealTotal, dealUnit)}
+              {dealCurrency !== "UAH" ? ` ${dealCurrency}` : ""}
             </Badge>
           ) : null}
           {dealMarge != null ? (
             <Badge variant="secondary" className="font-normal">
-              Маржа {formatNumberWithUnit(dealMarge, "₴")}
+              Маржа {formatNumberWithUnit(dealMarge, dealUnit)}
               {dealMarginPct != null ? ` · ${formatNumber(dealMarginPct)}%` : ""}
             </Badge>
           ) : null}

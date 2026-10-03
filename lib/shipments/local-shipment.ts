@@ -108,6 +108,7 @@ export function mapPlanningOrderRowToCrmShape(row: ShipmentPlanningOrderDb): Crm
     notes: null,
     total_amount: null,
     marge_amount: null,
+    currency: null,
     synced_at: row.updated_at ?? now,
     created_at: row.created_at,
   };

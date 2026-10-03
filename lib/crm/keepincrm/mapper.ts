@@ -10,10 +10,12 @@ export type ParsedKeepinAgreement = {
   result: string | null;
   archived: boolean;
   notes: string | null;
-  /** Сума угоди (KeepinCRM total_amount), грн */
+  /** Сума угоди (KeepinCRM total_amount) у валюті угоди */
   total_amount: number | null;
-  /** Маржа угоди (KeepinCRM marge_amount), грн */
+  /** Маржа угоди (KeepinCRM marge_amount) у валюті угоди */
   marge_amount: number | null;
+  /** Валюта сум (UAH, EUR, …) */
+  currency: string;
   customerCrmId: string;
   customerName: string;
   customerPhone: string | null;
@@ -101,6 +103,50 @@ export function crmDealMarginPercent(
   return Math.round((margeAmount / totalAmount) * 1000) / 10;
 }
 
+export function normalizeKeepinCurrency(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) return null;
+  return code;
+}
+
+/**
+ * Валюта сум угоди: agreement.currency, або єдина валюта jobs,
+ * якщо всі рядки в одній валюті (виправляє кейс agreement=UAH, jobs=EUR).
+ */
+export function resolveKeepinAgreementCurrency(raw: Record<string, unknown>): string {
+  const agreementCurrency = normalizeKeepinCurrency(raw.currency);
+  const jobs = raw.jobs ?? raw.jobs_attributes;
+  const jobCurrencies = new Set<string>();
+  if (Array.isArray(jobs)) {
+    for (const j of jobs) {
+      const job = asRecord(j);
+      if (!job) continue;
+      const amount = Number(job.amount ?? job.quantity ?? job.count ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const cur = normalizeKeepinCurrency(job.currency);
+      if (cur) jobCurrencies.add(cur);
+    }
+  }
+
+  if (jobCurrencies.size === 1) {
+    const only = [...jobCurrencies][0];
+    if (!agreementCurrency || agreementCurrency === only) return only;
+    // Угода каже іншу валюту, а всі позиції — одну: беремо валюту позицій.
+    return only;
+  }
+
+  return agreementCurrency ?? "UAH";
+}
+
+export function currencyUnitLabel(currency: string | null | undefined): string {
+  const code = (currency ?? "UAH").toUpperCase();
+  if (code === "UAH") return "₴";
+  if (code === "EUR") return "€";
+  if (code === "USD") return "$";
+  return code;
+}
+
 /** Нормалізує відповідь GET /agreements або /agreements/:id до внутрішньої моделі. */
 export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepinAgreement | null {
   const raw = unwrapAgreementPayload(root);
@@ -165,6 +211,7 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
     parseKeepinMoneyAmount(raw.total_amount) ?? parseKeepinMoneyAmount(raw.total);
   const marge_amount =
     parseKeepinMoneyAmount(raw.marge_amount) ?? parseKeepinMoneyAmount(raw.marge);
+  const currency = resolveKeepinAgreementCurrency(raw);
 
   return {
     crm_id,
@@ -176,6 +223,7 @@ export function parseKeepinAgreement(root: Record<string, unknown>): ParsedKeepi
     notes,
     total_amount,
     marge_amount,
+    currency,
     customerCrmId,
     customerName,
     customerPhone: phone,

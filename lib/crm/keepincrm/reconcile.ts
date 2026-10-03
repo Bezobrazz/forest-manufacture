@@ -144,6 +144,7 @@ async function upsertParsedAgreement(
         notes: parsed.notes,
         total_amount: parsed.total_amount,
         marge_amount: parsed.marge_amount,
+        currency: parsed.currency,
         synced_at: now,
       },
       { onConflict: "crm_id" }

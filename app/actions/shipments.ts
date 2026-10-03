@@ -408,7 +408,7 @@ export async function fulfillQueueShipmentAction(
     } else {
       const { data: ord, error: ordErr } = await supabase
         .from("crm_orders")
-        .select("id, crm_id, customer_id, queue_rank, total_amount, marge_amount")
+        .select("id, crm_id, customer_id, queue_rank, total_amount, marge_amount, currency")
         .eq("crm_id", crmKey)
         .maybeSingle();
 
@@ -432,6 +432,10 @@ export async function fulfillQueueShipmentAction(
         ord.marge_amount != null && Number.isFinite(Number(ord.marge_amount))
           ? Number(ord.marge_amount)
           : null;
+      const dealCurrency =
+        typeof ord.currency === "string" && ord.currency.trim()
+          ? ord.currency.trim().toUpperCase()
+          : "UAH";
 
       for (const line of filtered) {
         const { data: itemRow, error: iErr } = await supabase
@@ -486,14 +490,18 @@ export async function fulfillQueueShipmentAction(
       }
 
       if (dealTotal != null || dealMarge != null) {
-        const { error: metricsErr } = await supabase.from("crm_shipped_deal_metrics").insert({
-          crm_id: crmKey,
-          customer_name: customerName,
-          total_amount: dealTotal ?? 0,
-          marge_amount: dealMarge ?? 0,
-          shipment_date: shipmentDate,
-          shipped_at: transactionCreatedAt,
-        });
+        const { error: metricsErr } = await supabase.from("crm_shipped_deal_metrics").upsert(
+          {
+            crm_id: crmKey,
+            customer_name: customerName,
+            total_amount: dealTotal ?? 0,
+            marge_amount: dealMarge ?? 0,
+            currency: dealCurrency,
+            shipment_date: shipmentDate,
+            shipped_at: transactionCreatedAt,
+          },
+          { onConflict: "crm_id,shipment_date" }
+        );
         if (metricsErr) {
           console.error("fulfillQueueShipmentAction crm_shipped_deal_metrics:", metricsErr);
         }

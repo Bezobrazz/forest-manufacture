@@ -10,9 +10,11 @@ import {
 } from "@/app/actions";
 import {
   getCrmDealProfitabilityStats,
+  backfillCrmShippedDealMetricsFromKeepinAction,
   type CrmDealProfitabilityStats,
 } from "@/app/actions/crm-profitability";
 import { getStatisticsPageData } from "@/app/statistics/actions";
+import { currencyUnitLabel } from "@/lib/crm/keepincrm/mapper";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
 import {
   Card,
@@ -25,8 +27,10 @@ import {
   ArrowLeft,
   BarChart,
   Calendar as CalendarIcon,
+  Loader2,
   Package,
   PieChart,
+  RefreshCw,
   Sparkles,
   Truck,
   TrendingUp,
@@ -222,6 +226,8 @@ function StatisticsPageContent() {
   const [crmProfitability, setCrmProfitability] =
     useState<CrmDealProfitabilityStats | null>(null);
   const [crmProfitabilityLoading, setCrmProfitabilityLoading] = useState(false);
+  const [crmBackfillPending, setCrmBackfillPending] = useState(false);
+  const [crmBackfillMessage, setCrmBackfillMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [monthlyProductionChartOpen, setMonthlyProductionChartOpen] =
     useState(false);
@@ -458,7 +464,8 @@ function StatisticsPageContent() {
         const data = await getCrmDealProfitabilityStats(
           period,
           selectedYear,
-          statsDateRange
+          statsDateRange,
+          eurUahRate
         );
         if (!cancelled) setCrmProfitability(data);
       } catch (error) {
@@ -471,7 +478,7 @@ function StatisticsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, period, selectedYear, statsDateRangeKey]);
+  }, [activeTab, period, selectedYear, statsDateRangeKey, eurUahRate]);
 
   useEffect(() => {
     const settings = parseFixedOverheadSettings(
@@ -2846,49 +2853,146 @@ function StatisticsPageContent() {
 
         <TabsContent value="profitability" className="space-y-6 mt-0">
           <Card>
-            <CardHeader>
-              <CardTitle>Рентабельність CRM-угод</CardTitle>
-              <CardDescription>
-                Виручка та маржа з KeepinCRM по відвантажених з черги угодах за обраний період.
-                Це окремі метрики від собівартості мішка з виробництва.
-              </CardDescription>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle>Рентабельність CRM-угод</CardTitle>
+                <CardDescription>
+                  Виручка та маржа з KeepinCRM по відвантажених з черги угодах за обраний період.
+                  Це окремі метрики від собівартості мішка з виробництва.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                disabled={crmBackfillPending || crmProfitabilityLoading}
+                aria-busy={crmBackfillPending}
+                onClick={async () => {
+                  setCrmBackfillPending(true);
+                  setCrmBackfillMessage(null);
+                  try {
+                    const res = await backfillCrmShippedDealMetricsFromKeepinAction();
+                    if (!res.success) {
+                      setCrmBackfillMessage(res.error ?? "Не вдалося підтягнути угоди");
+                      return;
+                    }
+                    setCrmBackfillMessage(
+                      `Додано: ${res.inserted}, оновлено: ${res.updated}, помилок: ${res.failed}`
+                    );
+                    setCrmProfitabilityLoading(true);
+                    const data = await getCrmDealProfitabilityStats(
+                      period,
+                      selectedYear,
+                      statsDateRange,
+                      eurUahRate
+                    );
+                    setCrmProfitability(data);
+                  } catch (e) {
+                    console.error(e);
+                    setCrmBackfillMessage("Не вдалося підтягнути угоди з CRM");
+                  } finally {
+                    setCrmBackfillPending(false);
+                    setCrmProfitabilityLoading(false);
+                  }
+                }}
+              >
+                {crmBackfillPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Підтягування…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Підтягнути з CRM
+                  </>
+                )}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-6">
+              {crmBackfillMessage ? (
+                <p className="text-sm text-muted-foreground rounded-lg border bg-muted/20 px-3 py-2">
+                  {crmBackfillMessage}
+                </p>
+              ) : null}
               {crmProfitabilityLoading ? (
                 <p className="text-sm text-muted-foreground">Завантаження…</p>
               ) : !crmProfitability || crmProfitability.dealsCount === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Немає знімків відвантажених CRM-угод за період. Після відвантаження з черги
-                  сума і маржа угоди потраплять сюди автоматично.
+                  Немає знімків відвантажених CRM-угод за період. Натисніть «Підтягнути з CRM»,
+                  щоб заповнити вже відвантажені угоди з черги, або відвантажте нову угоду.
                 </p>
               ) : (
                 <>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
                       <p className="text-xs text-muted-foreground">Угод</p>
                       <p className="text-2xl font-semibold tabular-nums">
                         {formatNumber(crmProfitability.dealsCount)}
                       </p>
                     </div>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                      <p className="text-xs text-muted-foreground">Виручка CRM</p>
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                      <p className="text-xs text-muted-foreground">Виручка UAH</p>
                       <p className="text-2xl font-semibold tabular-nums">
-                        {formatNumberWithUnit(crmProfitability.revenueTotal, "₴")}
+                        {formatNumberWithUnit(crmProfitability.revenueUah, "₴")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Маржа {formatNumberWithUnit(crmProfitability.margeUah, "₴")}
                       </p>
                     </div>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                      <p className="text-xs text-muted-foreground">Маржа CRM</p>
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                      <p className="text-xs text-muted-foreground">Виручка EUR</p>
                       <p className="text-2xl font-semibold tabular-nums">
-                        {formatNumberWithUnit(crmProfitability.margeTotal, "₴")}
+                        {formatNumberWithUnit(crmProfitability.revenueEur, "€")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Маржа {formatNumberWithUnit(crmProfitability.margeEur, "€")}
                       </p>
                     </div>
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                      <p className="text-xs text-muted-foreground">Рентабельність</p>
-                      <p className="text-2xl font-semibold tabular-nums">
-                        {crmProfitability.marginPercent != null
-                          ? `${formatNumber(crmProfitability.marginPercent)}%`
-                          : "—"}
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1 sm:col-span-2 lg:col-span-3">
+                      <p className="text-xs text-muted-foreground">
+                        Еквівалент у грн
+                        {eurUahRate != null
+                          ? ` (курс НБУ ${formatNumberWithUnit(eurUahRate, "₴/€")}${
+                              nbuExchangeDate ? ` · ${nbuExchangeDate}` : ""
+                            })`
+                          : " — курс НБУ недоступний"}
                       </p>
+                      {crmProfitability.revenueUahEquivalent != null ? (
+                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                          <span>
+                            Виручка{" "}
+                            <span className="font-semibold tabular-nums">
+                              {formatNumberWithUnit(
+                                crmProfitability.revenueUahEquivalent,
+                                "₴"
+                              )}
+                            </span>
+                          </span>
+                          <span>
+                            Маржа{" "}
+                            <span className="font-semibold tabular-nums">
+                              {formatNumberWithUnit(
+                                crmProfitability.margeUahEquivalent ?? 0,
+                                "₴"
+                              )}
+                            </span>
+                          </span>
+                          <span>
+                            Рентабельність{" "}
+                            <span className="font-semibold tabular-nums">
+                              {crmProfitability.marginPercentEquivalent != null
+                                ? `${formatNumber(crmProfitability.marginPercentEquivalent)}%`
+                                : "—"}
+                            </span>
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Немає курсу для конвертації EUR → UAH
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -2899,13 +3003,16 @@ function StatisticsPageContent() {
                           <th className="px-3 py-2 font-medium">Дата</th>
                           <th className="px-3 py-2 font-medium">Клієнт</th>
                           <th className="px-3 py-2 font-medium">Угода</th>
+                          <th className="px-3 py-2 font-medium">Валюта</th>
                           <th className="px-3 py-2 font-medium text-right">Виручка</th>
                           <th className="px-3 py-2 font-medium text-right">Маржа</th>
                           <th className="px-3 py-2 font-medium text-right">%</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {crmProfitability.deals.map((deal) => (
+                        {crmProfitability.deals.map((deal) => {
+                          const unit = currencyUnitLabel(deal.currency);
+                          return (
                           <tr key={deal.id} className="border-b last:border-0">
                             <td className="px-3 py-2 whitespace-nowrap">
                               {deal.shipment_date
@@ -2918,11 +3025,14 @@ function StatisticsPageContent() {
                             <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                               #{deal.crm_id}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {formatNumberWithUnit(deal.total_amount, "₴")}
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {deal.currency}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums">
-                              {formatNumberWithUnit(deal.marge_amount, "₴")}
+                              {formatNumberWithUnit(deal.total_amount, unit)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatNumberWithUnit(deal.marge_amount, unit)}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums">
                               {deal.margin_percent != null
@@ -2930,7 +3040,8 @@ function StatisticsPageContent() {
                                 : "—"}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
