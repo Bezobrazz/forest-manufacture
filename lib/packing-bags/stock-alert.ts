@@ -29,16 +29,6 @@ function getTodayInKyiv() {
   return `${y}-${m}-${d}`;
 }
 
-function getKyivHour() {
-  const hour = new Intl.DateTimeFormat("en-US", {
-    timeZone: KYIV_TZ,
-    hour: "2-digit",
-    hour12: false,
-  }).format(new Date());
-
-  return Number(hour);
-}
-
 function createSupabaseAdminClient() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -98,12 +88,12 @@ export async function checkPackingBagLowStockAndNotify(options: CheckOptions = {
     return { ok: true as const, notified: false, quantity };
   }
 
-  if (getKyivHour() !== 9) return { ok: true as const, notified: false, quantity };
+  // Час задає vercel cron (06:00 UTC ≈ 08/09 Київ). Тут лише once-per-day.
   if (state.packing_bag_last_morning_alert_date === todayKyiv) {
     return { ok: true as const, notified: false, quantity };
   }
 
-  const message = `⚠️ <b>Низький залишок мішків</b>\n\n«${PACKING_BAG_PRODUCT_NAME}»: <b>${quantity} шт</b>\nПоріг: ≤ ${PACKING_BAG_LOW_STOCK_THRESHOLD} шт\n\nНагадування на 09:00 (Київ).`;
+  const message = `⚠️ <b>Низький залишок мішків</b>\n\n«${PACKING_BAG_PRODUCT_NAME}»: <b>${quantity} шт</b>\nПоріг: ≤ ${PACKING_BAG_LOW_STOCK_THRESHOLD} шт\n\nЩоденне нагадування (cron).`;
   const sent = await sendTelegramMessage(message);
   if (!sent) return { ok: false as const, reason: "telegram_send_failed" };
 

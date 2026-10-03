@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 interface TelegramConfig {
   botToken: string;
@@ -6,13 +6,11 @@ interface TelegramConfig {
 }
 
 export async function getTelegramConfig(): Promise<TelegramConfig | null> {
-  const envConfig = {
-    botToken: process.env.TELEGRAM_BOT_TOKEN ?? null,
-    chatId: process.env.TELEGRAM_CHAT_ID ?? null,
-  };
+  const envBotToken = process.env.TELEGRAM_BOT_TOKEN?.trim() || null;
+  const envChatId = process.env.TELEGRAM_CHAT_ID?.trim() || null;
 
-  if (envConfig.botToken && envConfig.chatId) {
-    return { botToken: envConfig.botToken, chatId: envConfig.chatId };
+  if (envBotToken && envChatId) {
+    return { botToken: envBotToken, chatId: envChatId };
   }
 
   let data:
@@ -23,11 +21,13 @@ export async function getTelegramConfig(): Promise<TelegramConfig | null> {
     | null = null;
 
   try {
-    const supabase = await createServerClient();
+    // Service role: cron / Mini App не мають user-session cookies.
+    const supabase = createServiceRoleClient();
     const { data: settings, error } = await supabase
       .from("settings")
       .select("telegram_bot_token, telegram_chat_id")
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error || !settings) {
       console.error("Error fetching Telegram config:", error);
@@ -40,8 +40,8 @@ export async function getTelegramConfig(): Promise<TelegramConfig | null> {
     return null;
   }
 
-  const botToken = envConfig.botToken ?? data.telegram_bot_token;
-  const chatId = envConfig.chatId ?? data.telegram_chat_id;
+  const botToken = envBotToken ?? data.telegram_bot_token?.trim() ?? null;
+  const chatId = envChatId ?? data.telegram_chat_id?.trim() ?? null;
 
   if (!botToken) {
     console.error("Telegram bot token is missing");

@@ -96,7 +96,10 @@ async function notifyFieldDeliveriesSubmitted(params: {
   ].join("\n");
 
   try {
-    await sendTelegramMessage(message);
+    const sent = await sendTelegramMessage(message);
+    if (!sent) {
+      console.error("Mini App Telegram notify failed: sendTelegramMessage returned false");
+    }
   } catch (error) {
     console.error("Mini App Telegram notify failed:", error);
   }

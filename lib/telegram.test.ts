@@ -23,14 +23,21 @@ test.afterEach(() => {
 test("sendTelegramMessage: без токена — false, fetch не викликається", async () => {
   delete process.env.TELEGRAM_BOT_TOKEN;
   delete process.env.TELEGRAM_CHAT_ID;
+  const serviceKeyBefore = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   let called = false;
   globalThis.fetch = () => {
     called = true;
     return Promise.resolve(new Response("{}", { status: 200 }));
   };
-  const ok = await sendTelegramMessage("hi");
-  assert.strictEqual(ok, false);
-  assert.strictEqual(called, false);
+  try {
+    const ok = await sendTelegramMessage("hi");
+    assert.strictEqual(ok, false);
+    assert.strictEqual(called, false);
+  } finally {
+    if (serviceKeyBefore === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKeyBefore;
+  }
 });
 
 test("sendTelegramMessage: env token+chat, 200 OK — true", async () => {
