@@ -9,6 +9,7 @@ import {
   getHourlyWageExpensesForShift,
   getProducts,
   getShiftDetails,
+  getShiftLoadingRates,
   updateShiftProductionReward,
 } from "@/app/actions";
 import { CompleteShiftButton } from "@/components/complete-shift-button";
@@ -101,7 +102,10 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
   );
 
   const products = await getProducts();
-  const hourlyWageExpenses = await getHourlyWageExpensesForShift(shift.id);
+  const [hourlyWageExpenses, loadingRates] = await Promise.all([
+    getHourlyWageExpensesForShift(shift.id),
+    getShiftLoadingRates(),
+  ]);
 
   // Підрахунок загальної кількості виробленої продукції по категоріям
   const productionByCategory: Record<string, number> = {};
@@ -345,6 +349,8 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             shift.opened_at || shift.created_at || shift.shift_date
           }
           employeeCount={employeeCount}
+          totalBags={totalProduction}
+          initialLoadingRates={loadingRates}
           initialExpenses={hourlyWageExpenses}
         >
         <ShiftWageSummaryCard

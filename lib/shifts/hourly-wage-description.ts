@@ -1,13 +1,21 @@
-export type HourlyWageKind = "accounting" | "manual";
+export type HourlyWageKind =
+  | "accounting"
+  | "manual"
+  | "loading_count"
+  | "loading";
 
 const KIND_LABEL: Record<HourlyWageKind, string> = {
   accounting: "облік",
   manual: "сума",
+  loading_count: "підрахунок",
+  loading: "завантаження",
 };
 
 const DEFAULT_COMMENT: Record<HourlyWageKind, string> = {
   accounting: "погодинна",
   manual: "Вантажні роботи",
+  loading_count: "підрахунок завантаження",
+  loading: "завантаження продукції",
 };
 
 export const buildShiftHourlyWageDescription = (
@@ -44,6 +52,20 @@ export const parseShiftHourlyWageDescription = (
 
   if (rest.startsWith("сума,")) {
     return { kind: "manual", comment: rest.slice("сума,".length).trim() };
+  }
+
+  if (rest.startsWith("підрахунок,")) {
+    return {
+      kind: "loading_count",
+      comment: rest.slice("підрахунок,".length).trim(),
+    };
+  }
+
+  if (rest.startsWith("завантаження,")) {
+    return {
+      kind: "loading",
+      comment: rest.slice("завантаження,".length).trim(),
+    };
   }
 
   if (!rest || rest === "погодинна") {

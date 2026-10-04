@@ -34,6 +34,11 @@ import {
   isHourlyWageDescriptionForShift,
   parseShiftHourlyWageDescription,
 } from "@/lib/shifts/hourly-wage-description";
+import {
+  DEFAULT_SHIFT_LOADING_RATES,
+  parseShiftLoadingRates,
+  type ShiftLoadingRates,
+} from "@/lib/shifts/loading-rates";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
 
@@ -2626,6 +2631,86 @@ export async function getHourlyWageExpensesForShift(
   } catch (error) {
     console.error("Failed to fetch hourly wage expenses for shift:", error);
     return [];
+  }
+}
+
+export async function getShiftLoadingRates(): Promise<ShiftLoadingRates> {
+  try {
+    const supabase = await createServerClient();
+    const { data, error } = await supabase
+      .from("settings")
+      .select("loading_count_rate_uah, product_loading_rate_uah")
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching shift loading rates:", error);
+      return { ...DEFAULT_SHIFT_LOADING_RATES };
+    }
+
+    return parseShiftLoadingRates(data);
+  } catch (error) {
+    console.error("Failed to fetch shift loading rates:", error);
+    return { ...DEFAULT_SHIFT_LOADING_RATES };
+  }
+}
+
+export async function updateShiftLoadingRates(
+  rates: ShiftLoadingRates
+): Promise<{ ok: true; rates: ShiftLoadingRates } | { ok: false; error: string }> {
+  try {
+    const loadingCountRateUah = Number(rates.loadingCountRateUah);
+    const productLoadingRateUah = Number(rates.productLoadingRateUah);
+
+    if (
+      !Number.isFinite(loadingCountRateUah) ||
+      loadingCountRateUah < 0 ||
+      !Number.isFinite(productLoadingRateUah) ||
+      productLoadingRateUah < 0
+    ) {
+      return { ok: false, error: "Ставки мають бути невід’ємними числами" };
+    }
+
+    const nextRates: ShiftLoadingRates = {
+      loadingCountRateUah: Math.round(loadingCountRateUah * 100) / 100,
+      productLoadingRateUah: Math.round(productLoadingRateUah * 100) / 100,
+    };
+
+    const supabase = await createServerClient();
+    const { data: existing, error: existingError } = await supabase
+      .from("settings")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (existingError) {
+      return { ok: false, error: existingError.message };
+    }
+
+    const payload = {
+      loading_count_rate_uah: nextRates.loadingCountRateUah,
+      product_loading_rate_uah: nextRates.productLoadingRateUah,
+    };
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("settings")
+        .update(payload)
+        .eq("id", existing.id);
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+    } else {
+      const { error } = await supabase.from("settings").insert(payload);
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+    }
+
+    return { ok: true, rates: nextRates };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Помилка при збереженні ставок";
+    return { ok: false, error: message };
   }
 }
 

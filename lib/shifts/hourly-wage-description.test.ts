@@ -8,9 +8,21 @@ import {
 test("build and parse tagged hourly wage descriptions", () => {
   const accounting = buildShiftHourlyWageDescription(12, "accounting", "ніч");
   const manual = buildShiftHourlyWageDescription(12, "manual", "вантаж");
+  const loadingCount = buildShiftHourlyWageDescription(
+    12,
+    "loading_count",
+    "підрахунок завантаження"
+  );
+  const loading = buildShiftHourlyWageDescription(
+    12,
+    "loading",
+    "завантаження продукції"
+  );
 
   assert.equal(accounting, "Зміна #12, облік, ніч");
   assert.equal(manual, "Зміна #12, сума, вантаж");
+  assert.equal(loadingCount, "Зміна #12, підрахунок, підрахунок завантаження");
+  assert.equal(loading, "Зміна #12, завантаження, завантаження продукції");
   assert.deepEqual(parseShiftHourlyWageDescription(accounting, 12), {
     kind: "accounting",
     comment: "ніч",
@@ -18,6 +30,14 @@ test("build and parse tagged hourly wage descriptions", () => {
   assert.deepEqual(parseShiftHourlyWageDescription(manual, 12), {
     kind: "manual",
     comment: "вантаж",
+  });
+  assert.deepEqual(parseShiftHourlyWageDescription(loadingCount, 12), {
+    kind: "loading_count",
+    comment: "підрахунок завантаження",
+  });
+  assert.deepEqual(parseShiftHourlyWageDescription(loading, 12), {
+    kind: "loading",
+    comment: "завантаження продукції",
   });
 });
 

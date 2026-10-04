@@ -8,7 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { createHourlyWageExpense, updateHourlyWageExpenseComment } from "@/app/actions";
+import {
+  createHourlyWageExpense,
+  updateHourlyWageExpenseComment,
+  updateShiftLoadingRates,
+} from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,15 +24,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Clock, DollarSign, Loader2, Minus, Pencil, Plus } from "lucide-react";
+import { Clock, DollarSign, Loader2, Minus, Package, Pencil, Plus } from "lucide-react";
 import {
   buildShiftHourlyWageDescription,
   parseShiftHourlyWageDescription,
   type HourlyWageKind,
 } from "@/lib/shifts/hourly-wage-description";
+import {
+  DEFAULT_SHIFT_LOADING_RATES,
+  type ShiftLoadingRates,
+} from "@/lib/shifts/loading-rates";
 
 const DEFAULT_RATE = 75;
 const DEFAULT_MANUAL_COMMENT = "Вантажні роботи";
+
+const KIND_PLACEHOLDER: Record<HourlyWageKind, string> = {
+  accounting: "погодинна",
+  manual: "Вантажні роботи",
+  loading_count: "підрахунок завантаження",
+  loading: "завантаження продукції",
+};
+
+const KIND_EMPTY_MESSAGE: Record<HourlyWageKind, string> = {
+  accounting: "Погодинний облік ще не збережено",
+  manual: "Суму витрат ще не збережено",
+  loading_count: "Витрату за підрахунок завантаження ще не збережено",
+  loading: "Витрату за завантаження продукції ще не збережено",
+};
 
 export type HourlyWageExpenseItem = {
   id: number;
@@ -41,12 +63,19 @@ type HourlyWageContextValue = {
   shiftId: number;
   shiftOpenedAt: string;
   employeeCount: number;
+  totalBags: number;
+  loadingRates: ShiftLoadingRates;
+  setLoadingRates: (rates: ShiftLoadingRates) => void;
   expenses: HourlyWageExpenseItem[];
   expensesTotal: number;
   draftAccountingAmount: number;
   draftManualAmount: number;
+  draftLoadingCountAmount: number;
+  draftLoadingAmount: number;
   setDraftAccountingAmount: (amount: number) => void;
   setDraftManualAmount: (amount: number) => void;
+  setDraftLoadingCountAmount: (amount: number) => void;
+  setDraftLoadingAmount: (amount: number) => void;
   addExpense: (expense: HourlyWageExpenseItem) => void;
   updateExpense: (expense: HourlyWageExpenseItem) => void;
 };
@@ -65,6 +94,8 @@ interface HourlyWageProviderProps {
   shiftId: number;
   shiftOpenedAt: string;
   employeeCount: number;
+  totalBags: number;
+  initialLoadingRates?: ShiftLoadingRates;
   initialExpenses: HourlyWageExpenseItem[];
   children: ReactNode;
 }
@@ -73,16 +104,25 @@ export function HourlyWageProvider({
   shiftId,
   shiftOpenedAt,
   employeeCount,
+  totalBags,
+  initialLoadingRates = DEFAULT_SHIFT_LOADING_RATES,
   initialExpenses,
   children,
 }: HourlyWageProviderProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
+  const [loadingRates, setLoadingRates] = useState(initialLoadingRates);
   const [draftAccountingAmount, setDraftAccountingAmount] = useState(0);
   const [draftManualAmount, setDraftManualAmount] = useState(0);
+  const [draftLoadingCountAmount, setDraftLoadingCountAmount] = useState(0);
+  const [draftLoadingAmount, setDraftLoadingAmount] = useState(0);
 
   useEffect(() => {
     setExpenses(initialExpenses);
   }, [initialExpenses]);
+
+  useEffect(() => {
+    setLoadingRates(initialLoadingRates);
+  }, [initialLoadingRates]);
 
   const expensesTotal = expenses.reduce((sum, item) => sum + item.amount, 0);
 
@@ -107,12 +147,19 @@ export function HourlyWageProvider({
         shiftId,
         shiftOpenedAt,
         employeeCount,
+        totalBags,
+        loadingRates,
+        setLoadingRates,
         expenses,
         expensesTotal,
         draftAccountingAmount,
         draftManualAmount,
+        draftLoadingCountAmount,
+        draftLoadingAmount,
         setDraftAccountingAmount,
         setDraftManualAmount,
+        setDraftLoadingCountAmount,
+        setDraftLoadingAmount,
         addExpense,
         updateExpense,
       }}
@@ -152,15 +199,29 @@ export function ShiftWageSummaryCard({
     expensesTotal,
     draftAccountingAmount,
     draftManualAmount,
+    draftLoadingCountAmount,
+    draftLoadingAmount,
   } = useHourlyWage();
   const accountingExpenses = expensesOfKind(expenses, shiftId, "accounting");
   const manualExpenses = expensesOfKind(expenses, shiftId, "manual");
+  const loadingCountExpenses = expensesOfKind(expenses, shiftId, "loading_count");
+  const loadingExpenses = expensesOfKind(expenses, shiftId, "loading");
   const accountingTotal =
     accountingExpenses.reduce((sum, item) => sum + item.amount, 0) +
     draftAccountingAmount;
   const manualTotal =
     manualExpenses.reduce((sum, item) => sum + item.amount, 0) + draftManualAmount;
-  const hourlyTotal = expensesTotal + draftAccountingAmount + draftManualAmount;
+  const loadingCountTotal =
+    loadingCountExpenses.reduce((sum, item) => sum + item.amount, 0) +
+    draftLoadingCountAmount;
+  const loadingTotal =
+    loadingExpenses.reduce((sum, item) => sum + item.amount, 0) + draftLoadingAmount;
+  const hourlyTotal =
+    expensesTotal +
+    draftAccountingAmount +
+    draftManualAmount +
+    draftLoadingCountAmount +
+    draftLoadingAmount;
   const totalCompensation = totalWages + hourlyTotal;
   const totalCompensationPerEmployee =
     employeeCount > 0 ? totalCompensation / employeeCount : 0;
@@ -170,7 +231,9 @@ export function ShiftWageSummaryCard({
     hasProduction ||
     expenses.length > 0 ||
     draftAccountingAmount > 0 ||
-    draftManualAmount > 0;
+    draftManualAmount > 0 ||
+    draftLoadingCountAmount > 0 ||
+    draftLoadingAmount > 0;
 
   if (!isVisible) {
     return null;
@@ -215,6 +278,24 @@ export function ShiftWageSummaryCard({
               </div>
               <div className="text-2xl font-bold">
                 {manualTotal.toFixed(2)} грн
+              </div>
+            </div>
+
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="text-sm text-muted-foreground mb-1">
+                Підрахунок завантаження
+              </div>
+              <div className="text-2xl font-bold">
+                {loadingCountTotal.toFixed(2)} грн
+              </div>
+            </div>
+
+            <div className="bg-muted p-4 rounded-lg">
+              <div className="text-sm text-muted-foreground mb-1">
+                Завантаження продукції
+              </div>
+              <div className="text-2xl font-bold">
+                {loadingTotal.toFixed(2)} грн
               </div>
             </div>
 
@@ -319,7 +400,7 @@ function HourlyWageExpenseRow({
             id={`hourly-comment-${expense.id}`}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder={kind === "manual" ? "Вантажні роботи" : "погодинна"}
+            placeholder={KIND_PLACEHOLDER[kind]}
             disabled={isPending}
           />
         </div>
@@ -389,11 +470,7 @@ function HourlyWageExpenseList({ kind }: { kind: HourlyWageKind }) {
 
   if (items.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        {kind === "accounting"
-          ? "Погодинний облік ще не збережено"
-          : "Суму витрат ще не збережено"}
-      </p>
+      <p className="text-sm text-muted-foreground">{KIND_EMPTY_MESSAGE[kind]}</p>
     );
   }
 
@@ -722,6 +799,173 @@ function HourlyWageManualForm() {
   );
 }
 
+function LoadingBagExpenseForm({
+  kind,
+}: {
+  kind: "loading_count" | "loading";
+}) {
+  const router = useRouter();
+  const {
+    shiftId,
+    shiftOpenedAt,
+    totalBags,
+    loadingRates,
+    setLoadingRates,
+    setDraftLoadingCountAmount,
+    setDraftLoadingAmount,
+    addExpense,
+  } = useHourlyWage();
+
+  const isCount = kind === "loading_count";
+  const rateKey = isCount ? "loadingCountRateUah" : "productLoadingRateUah";
+  const title = isCount ? "Підрахунок завантаження" : "Завантаження продукції";
+  const setDraftAmount = isCount
+    ? setDraftLoadingCountAmount
+    : setDraftLoadingAmount;
+
+  const [bags, setBags] = useState(
+    totalBags > 0 ? String(totalBags) : ""
+  );
+  const [rate, setRate] = useState(String(loadingRates[rateKey]));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setBags(totalBags > 0 ? String(totalBags) : "");
+  }, [totalBags]);
+
+  useEffect(() => {
+    setRate(String(loadingRates[rateKey]));
+  }, [loadingRates, rateKey]);
+
+  const bagsNum = Number.parseFloat(bags);
+  const rateNum = Number.parseFloat(rate);
+  const hasValidBags = Number.isFinite(bagsNum) && bagsNum > 0;
+  const hasValidRate = Number.isFinite(rateNum) && rateNum >= 0;
+  const calculatedAmount =
+    hasValidBags && hasValidRate
+      ? Math.round(bagsNum * rateNum * 100) / 100
+      : 0;
+
+  useEffect(() => {
+    setDraftAmount(calculatedAmount > 0 ? calculatedAmount : 0);
+  }, [calculatedAmount, setDraftAmount]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!hasValidBags) {
+      toast.error("Вкажіть кількість мішків більше нуля");
+      return;
+    }
+    if (!hasValidRate) {
+      toast.error("Вкажіть ставку не менше нуля");
+      return;
+    }
+    if (calculatedAmount <= 0) {
+      toast.error("Сума має бути більше нуля");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const nextRates: ShiftLoadingRates = {
+        ...loadingRates,
+        [rateKey]: Math.round(rateNum * 100) / 100,
+      };
+      const ratesResult = await updateShiftLoadingRates(nextRates);
+      if (!ratesResult.ok) {
+        toast.error(ratesResult.error);
+        return;
+      }
+      setLoadingRates(ratesResult.rates);
+
+      const expenseDate = new Date(shiftOpenedAt).toISOString().slice(0, 10);
+      const result = await createHourlyWageExpense(
+        calculatedAmount,
+        expenseDate,
+        buildShiftHourlyWageDescription(
+          shiftId,
+          kind,
+          `${title}, ${bagsNum} міш. × ${nextRates[rateKey]} грн`
+        ),
+        shiftId
+      );
+      if (result.ok) {
+        addExpense(result.expense);
+        toast.success(`${title} збережено`);
+        setBags("");
+        setDraftAmount(0);
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`loading-bags-${kind}`}>Кількість мішків</Label>
+          <Input
+            id={`loading-bags-${kind}`}
+            type="number"
+            min="0"
+            step="1"
+            placeholder={totalBags > 0 ? String(totalBags) : "0"}
+            value={bags}
+            onChange={(e) => setBags(e.target.value)}
+            disabled={isSubmitting}
+          />
+          {totalBags > 0 && (
+            <p className="text-xs text-muted-foreground">
+              З продукції зміни: {totalBags}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`loading-rate-${kind}`}>Ставка (грн/мішок)</Label>
+          <Input
+            id={`loading-rate-${kind}`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            disabled={isSubmitting}
+          />
+        </div>
+      </div>
+      <div className="bg-muted p-4 rounded-lg space-y-1">
+        <div className="text-sm text-muted-foreground">Поточний розрахунок</div>
+        <div className="text-2xl font-bold">
+          {calculatedAmount.toFixed(2)} грн
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {(hasValidBags ? bagsNum : 0)} міш. ×{" "}
+          {(hasValidRate ? rateNum : 0)} грн/мішок
+        </div>
+      </div>
+      <Button
+        type="submit"
+        disabled={calculatedAmount <= 0 || isSubmitting}
+        aria-busy={isSubmitting}
+        className="w-full sm:w-[340px]"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Збереження…
+          </>
+        ) : (
+          `Зберегти: ${title}`
+        )}
+      </Button>
+    </form>
+  );
+}
+
 export function HourlyWageSections() {
   return (
     <>
@@ -759,6 +1003,39 @@ export function HourlyWageSections() {
           <div>
             <h4 className="text-sm font-medium mb-2">Збережені суми</h4>
             <HourlyWageExpenseList kind="manual" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            Витрати за завантаження
+          </CardTitle>
+          <CardDescription>
+            Підрахунок завантаження та завантаження продукції: мішки × ставка.
+            Ставки зберігаються і підставляються наступного разу.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          <div className="space-y-6">
+            <h4 className="text-sm font-medium">Підрахунок завантаження</h4>
+            <LoadingBagExpenseForm kind="loading_count" />
+            <div>
+              <h5 className="text-sm font-medium mb-2">Збережений підрахунок</h5>
+              <HourlyWageExpenseList kind="loading_count" />
+            </div>
+          </div>
+          <div className="space-y-6">
+            <h4 className="text-sm font-medium">Завантаження продукції</h4>
+            <LoadingBagExpenseForm kind="loading" />
+            <div>
+              <h5 className="text-sm font-medium mb-2">
+                Збережене завантаження
+              </h5>
+              <HourlyWageExpenseList kind="loading" />
+            </div>
           </div>
         </CardContent>
       </Card>
