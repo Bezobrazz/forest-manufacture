@@ -28,7 +28,7 @@ import {
   formatNumberWithUnit,
 } from "@/lib/utils";
 
-type PeriodMode = "day" | "week" | "month";
+type PeriodMode = "day" | "week" | "month" | "year";
 
 const MONTH_LABELS = [...Array(12)].map((_, i) =>
   new Date(2024, i, 15).toLocaleDateString("uk-UA", { month: "long" })
@@ -67,6 +67,11 @@ function getPeriodBounds(
       to: dateToYYYYMMDD(getWeekEnd(anchor)),
     };
   }
+  if (period === "year") {
+    const from = new Date(anchor.getFullYear(), 0, 1);
+    const to = new Date(anchor.getFullYear(), 11, 31);
+    return { from: dateToYYYYMMDD(from), to: dateToYYYYMMDD(to) };
+  }
   const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const to = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
   return { from: dateToYYYYMMDD(from), to: dateToYYYYMMDD(to) };
@@ -75,6 +80,9 @@ function getPeriodBounds(
 function formatPeriodLabel(period: PeriodMode, from: string, to: string): string {
   if (period === "day" || from === to) {
     return formatDate(`${from}T12:00:00.000Z`);
+  }
+  if (period === "year") {
+    return from.slice(0, 4);
   }
   if (period === "month") {
     const [y, m] = from.split("-").map(Number);
@@ -209,6 +217,7 @@ export function FieldOperationsPanel({
 
   const isEmpty = !isLoading && !error && dayGroups.length === 0;
   const showDayPicker = period === "day" || period === "week";
+  const showMonthSelect = period !== "year";
 
   return (
     <div className="space-y-4">
@@ -218,6 +227,7 @@ export function FieldOperationsPanel({
             ["day", "День"],
             ["week", "Тиждень"],
             ["month", "Місяць"],
+            ["year", "Рік"],
           ] as const
         ).map(([value, label]) => (
           <Button
@@ -234,23 +244,25 @@ export function FieldOperationsPanel({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={String(anchorDate.getMonth())}
-          onValueChange={(value) => {
-            setMonthYear(anchorDate.getFullYear(), Number(value));
-          }}
-        >
-          <SelectTrigger className="h-9 w-[150px]">
-            <SelectValue placeholder="Місяць" />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_LABELS.map((label, idx) => (
-              <SelectItem key={label} value={String(idx)}>
-                {label.charAt(0).toUpperCase() + label.slice(1)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {showMonthSelect ? (
+          <Select
+            value={String(anchorDate.getMonth())}
+            onValueChange={(value) => {
+              setMonthYear(anchorDate.getFullYear(), Number(value));
+            }}
+          >
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue placeholder="Місяць" />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_LABELS.map((label, idx) => (
+                <SelectItem key={label} value={String(idx)}>
+                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
 
         <Select
           value={String(anchorDate.getFullYear())}
