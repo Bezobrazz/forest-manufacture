@@ -668,11 +668,29 @@ export type MiniAppOperation = {
   payable_amount: number;
 };
 
+export type MiniAppTripOperation = {
+  id: string;
+  trip_date: string;
+  vehicle_name: string;
+  start_odometer_km: number | null;
+  end_odometer_km: number | null;
+  distance_km: number | null;
+  bags_count: number | null;
+  fuel_cost_uah: number | null;
+  total_costs_uah: number | null;
+  access_name: string | null;
+};
+
 export async function getMiniAppOperations(
   fromYmd: string,
   toYmd: string
 ): Promise<
-  { ok: true; operations: MiniAppOperation[] } | { ok: false; error: string }
+  | {
+      ok: true;
+      operations: MiniAppOperation[];
+      trips: MiniAppTripOperation[];
+    }
+  | { ok: false; error: string }
 > {
   const auth = await requireMiniAppAccess();
   if (!auth.ok) return { ok: false, error: auth.error };
@@ -687,10 +705,11 @@ export async function getMiniAppOperations(
   }
 
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from("supplier_deliveries")
-    .select(
-      `
+  const [deliveriesRes, tripsRes] = await Promise.all([
+    supabase
+      .from("supplier_deliveries")
+      .select(
+        `
       id,
       created_at,
       quantity,
@@ -702,47 +721,103 @@ export async function getMiniAppOperations(
       product:products!supplier_deliveries_product_id_fkey(name),
       created_by_access:mini_app_accesses(display_name)
     `
-    )
-    .not("created_by_access_id", "is", null)
-    .gte("created_at", `${from}T00:00:00.000Z`)
-    .lte("created_at", `${to}T23:59:59.999Z`)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
+      )
+      .not("created_by_access_id", "is", null)
+      .gte("created_at", `${from}T00:00:00.000Z`)
+      .lte("created_at", `${to}T23:59:59.999Z`)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
+    supabase
+      .from("trips")
+      .select(
+        `
+      id,
+      trip_start_date,
+      trip_date,
+      start_odometer_km,
+      end_odometer_km,
+      distance_km,
+      bags_count,
+      fuel_cost_uah,
+      total_costs_uah,
+      vehicle:vehicles(name),
+      created_by_access:mini_app_accesses(display_name)
+    `
+      )
+      .not("created_by_access_id", "is", null)
+      .gte("trip_start_date", from)
+      .lte("trip_start_date", to)
+      .order("trip_start_date", { ascending: false }),
+  ]);
 
-  if (error) {
-    return { ok: false, error: error.message };
+  if (deliveriesRes.error) {
+    return { ok: false, error: deliveriesRes.error.message };
+  }
+  if (tripsRes.error) {
+    return { ok: false, error: tripsRes.error.message };
   }
 
-  const operations: MiniAppOperation[] = (data ?? []).map((row) => {
-    const quantity = Number(row.quantity ?? 0);
-    const pricePerUnit =
-      row.price_per_unit != null ? Number(row.price_per_unit) : null;
-    const actualPaid =
-      row.actual_paid != null ? Number(row.actual_paid) : null;
-    const supplier = row.supplier as { name?: string } | null;
-    const product = row.product as { name?: string } | null;
+  const operations: MiniAppOperation[] = (deliveriesRes.data ?? []).map(
+    (row) => {
+      const quantity = Number(row.quantity ?? 0);
+      const pricePerUnit =
+        row.price_per_unit != null ? Number(row.price_per_unit) : null;
+      const actualPaid =
+        row.actual_paid != null ? Number(row.actual_paid) : null;
+      const supplier = row.supplier as { name?: string } | null;
+      const product = row.product as { name?: string } | null;
+      const access = row.created_by_access as {
+        display_name?: string;
+      } | null;
+
+      return {
+        id: Number(row.id),
+        created_at: String(row.created_at ?? ""),
+        quantity,
+        price_per_unit: pricePerUnit,
+        actual_paid: actualPaid,
+        additional_info:
+          row.additional_info != null ? String(row.additional_info) : null,
+        material_quantity:
+          row.material_quantity != null
+            ? Number(row.material_quantity)
+            : null,
+        supplier_name: supplier?.name?.trim() || "Невідомий постачальник",
+        product_name: product?.name?.trim() || "Невідомий продукт",
+        access_name: access?.display_name?.trim() || null,
+        payable_amount: resolveSupplierDeliveryPayableAmount({
+          quantity,
+          pricePerUnit,
+          actualPaid,
+        }),
+      };
+    }
+  );
+
+  const trips: MiniAppTripOperation[] = (tripsRes.data ?? []).map((row) => {
+    const vehicle = row.vehicle as { name?: string } | null;
     const access = row.created_by_access as { display_name?: string } | null;
+    const tripDate = String(
+      row.trip_start_date ?? row.trip_date ?? ""
+    ).slice(0, 10);
 
     return {
-      id: Number(row.id),
-      created_at: String(row.created_at ?? ""),
-      quantity,
-      price_per_unit: pricePerUnit,
-      actual_paid: actualPaid,
-      additional_info:
-        row.additional_info != null ? String(row.additional_info) : null,
-      material_quantity:
-        row.material_quantity != null ? Number(row.material_quantity) : null,
-      supplier_name: supplier?.name?.trim() || "Невідомий постачальник",
-      product_name: product?.name?.trim() || "Невідомий продукт",
+      id: String(row.id),
+      trip_date: tripDate,
+      vehicle_name: vehicle?.name?.trim() || "Транспорт",
+      start_odometer_km:
+        row.start_odometer_km != null ? Number(row.start_odometer_km) : null,
+      end_odometer_km:
+        row.end_odometer_km != null ? Number(row.end_odometer_km) : null,
+      distance_km: row.distance_km != null ? Number(row.distance_km) : null,
+      bags_count: row.bags_count != null ? Number(row.bags_count) : null,
+      fuel_cost_uah:
+        row.fuel_cost_uah != null ? Number(row.fuel_cost_uah) : null,
+      total_costs_uah:
+        row.total_costs_uah != null ? Number(row.total_costs_uah) : null,
       access_name: access?.display_name?.trim() || null,
-      payable_amount: resolveSupplierDeliveryPayableAmount({
-        quantity,
-        pricePerUnit,
-        actualPaid,
-      }),
     };
   });
 
-  return { ok: true, operations };
+  return { ok: true, operations, trips };
 }

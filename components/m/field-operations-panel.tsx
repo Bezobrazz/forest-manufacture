@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { CalendarIcon, Loader2, Package, Truck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarIcon, Loader2, Package, Route, Truck } from "lucide-react";
 import { uk } from "date-fns/locale";
 import {
   getMiniAppOperations,
   type MiniAppOperation,
+  type MiniAppTripOperation,
 } from "@/app/m/actions";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -91,17 +92,32 @@ function formatMoney(amount: number): string {
   })} ₴`;
 }
 
+function dayKeyFromIso(value: string): string {
+  return value.slice(0, 10);
+}
+
+type DayGroup = {
+  day: string;
+  trips: MiniAppTripOperation[];
+  purchases: MiniAppOperation[];
+};
+
 type FieldOperationsPanelProps = {
   active?: boolean;
 };
 
-export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProps) {
-  const [period, setPeriod] = useState<PeriodMode>("day");
-  const [anchorDate, setAnchorDate] = useState(() => startOfLocalDay(new Date()));
+export function FieldOperationsPanel({
+  active = true,
+}: FieldOperationsPanelProps) {
+  const [period, setPeriod] = useState<PeriodMode>("month");
+  const [anchorDate, setAnchorDate] = useState(() =>
+    startOfLocalDay(new Date())
+  );
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [operations, setOperations] = useState<MiniAppOperation[]>([]);
+  const [trips, setTrips] = useState<MiniAppTripOperation[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(false);
 
   const bounds = useMemo(
     () => getPeriodBounds(period, anchorDate),
@@ -119,42 +135,77 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
 
   useEffect(() => {
     if (!active) return;
+
     let cancelled = false;
-    startTransition(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    void (async () => {
       const result = await getMiniAppOperations(bounds.from, bounds.to);
       if (cancelled) return;
       if (!result.ok) {
         setError(result.error);
         setOperations([]);
+        setTrips([]);
+        setIsLoading(false);
         return;
       }
-      setError(null);
       setOperations(result.operations);
-    });
+      setTrips(result.trips);
+      setIsLoading(false);
+    })();
+
     return () => {
       cancelled = true;
     };
   }, [active, bounds.from, bounds.to]);
 
+  const dayGroups = useMemo(() => {
+    const map = new Map<string, DayGroup>();
+
+    for (const trip of trips) {
+      const day = trip.trip_date;
+      if (!day) continue;
+      const group = map.get(day) ?? { day, trips: [], purchases: [] };
+      group.trips.push(trip);
+      map.set(day, group);
+    }
+
+    for (const purchase of operations) {
+      const day = dayKeyFromIso(purchase.created_at);
+      if (!day) continue;
+      const group = map.get(day) ?? { day, trips: [], purchases: [] };
+      group.purchases.push(purchase);
+      map.set(day, group);
+    }
+
+    return [...map.values()].sort((a, b) => (a.day < b.day ? 1 : -1));
+  }, [operations, trips]);
+
   const totals = useMemo(() => {
-    return operations.reduce(
-      (acc, op) => {
-        acc.bags += Math.floor(op.quantity);
-        acc.amount += op.payable_amount;
-        return acc;
-      },
-      { bags: 0, amount: 0 }
+    const bags = operations.reduce(
+      (sum, op) => sum + Math.floor(op.quantity),
+      0
     );
-  }, [operations]);
+    const amount = operations.reduce((sum, op) => sum + op.payable_amount, 0);
+    return {
+      bags,
+      amount: Math.round(amount * 100) / 100,
+      trips: trips.length,
+      purchases: operations.length,
+    };
+  }, [operations, trips]);
 
   const pickerLabel =
     period === "month"
       ? formatPeriodLabel("month", bounds.from, bounds.to)
       : formatDate(`${dateToYYYYMMDD(anchorDate)}T12:00:00.000Z`);
 
+  const isEmpty = !isLoading && !error && dayGroups.length === 0;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {(
           [
             ["day", "День"],
@@ -166,6 +217,7 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
             key={value}
             type="button"
             size="sm"
+            className="h-9 px-3 text-sm"
             variant={period === value ? "default" : "outline"}
             onClick={() => setPeriod(value)}
           >
@@ -182,11 +234,11 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
               size="sm"
               variant="outline"
               className={cn(
-                "justify-start font-normal",
+                "h-9 justify-start font-normal",
                 !anchorDate && "text-muted-foreground"
               )}
             >
-              <CalendarIcon className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+              <CalendarIcon className="mr-1.5 h-4 w-4 shrink-0" />
               {pickerLabel}
             </Button>
           </PopoverTrigger>
@@ -213,12 +265,10 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
               value={String(anchorDate.getMonth())}
               onValueChange={(value) => {
                 const month = Number(value);
-                setAnchorDate(
-                  new Date(anchorDate.getFullYear(), month, 1)
-                );
+                setAnchorDate(new Date(anchorDate.getFullYear(), month, 1));
               }}
             >
-              <SelectTrigger className="h-8 w-[140px]">
+              <SelectTrigger className="h-9 w-[150px]">
                 <SelectValue placeholder="Місяць" />
               </SelectTrigger>
               <SelectContent>
@@ -236,7 +286,7 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
                 setAnchorDate(new Date(year, anchorDate.getMonth(), 1));
               }}
             >
-              <SelectTrigger className="h-8 w-[100px]">
+              <SelectTrigger className="h-9 w-[100px]">
                 <SelectValue placeholder="Рік" />
               </SelectTrigger>
               <SelectContent>
@@ -251,72 +301,163 @@ export function FieldOperationsPanel({ active = true }: FieldOperationsPanelProp
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>Період: {formatPeriodLabel(period, bounds.from, bounds.to)}</span>
-        {isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-label="Завантаження" />
-        ) : (
-          <span>
-            {operations.length} оп. · {formatNumberWithUnit(totals.bags, "міш.")} ·{" "}
-            {formatMoney(Math.round(totals.amount * 100) / 100)}
-          </span>
-        )}
+      <div className="space-y-1 text-sm text-muted-foreground">
+        <div>Період: {formatPeriodLabel(period, bounds.from, bounds.to)}</div>
+        {!isLoading ? (
+          <div>
+            {totals.purchases} закупівель · {totals.trips} поїздок ·{" "}
+            {formatNumberWithUnit(totals.bags, "міш.")} ·{" "}
+            {formatMoney(totals.amount)}
+          </div>
+        ) : null}
       </div>
 
-      {error ? (
-        <p className="text-sm text-destructive">{error}</p>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      {isLoading ? (
+        <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="h-7 w-7 animate-spin" aria-hidden />
+          <p className="text-sm">Завантаження операцій…</p>
+        </div>
       ) : null}
 
-      {!error && !isPending && operations.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
+      {isEmpty ? (
+        <p className="py-10 text-center text-base text-muted-foreground">
           Немає внесених операцій за цей період
         </p>
       ) : null}
 
-      <div className="space-y-2">
-        {operations.map((op) => (
-          <article
-            key={op.id}
-            className="rounded-lg border bg-card p-3 text-sm shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Truck className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{op.supplier_name}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Package className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{op.product_name}</span>
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="font-medium">{formatMoney(op.payable_amount)}</div>
-                <div className="text-xs text-muted-foreground">
-                  {formatDate(op.created_at)}
-                </div>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>{formatNumberWithUnit(Math.floor(op.quantity), "міш.")}</span>
-              {op.price_per_unit != null ? (
-                <span>{formatMoney(op.price_per_unit)} / од.</span>
-              ) : null}
-              {op.material_quantity != null && op.material_quantity > 0 ? (
-                <span>
-                  Мішки: {formatNumberWithUnit(op.material_quantity, "шт")}
-                </span>
-              ) : null}
-              {op.access_name ? <span>Хто: {op.access_name}</span> : null}
-            </div>
-            {op.additional_info ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {op.additional_info}
-              </p>
-            ) : null}
-          </article>
-        ))}
-      </div>
+      {!isLoading ? (
+        <div className="space-y-5">
+          {dayGroups.map((group) => (
+            <section key={group.day} className="space-y-3">
+              <h2 className="text-base font-semibold">
+                {formatDate(`${group.day}T12:00:00.000Z`)}
+              </h2>
+
+              {group.trips.map((trip) => (
+                <article
+                  key={`trip-${trip.id}`}
+                  className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-2 text-base font-semibold">
+                        <Route className="h-5 w-5 shrink-0 text-primary" />
+                        <span>Поїздка</span>
+                      </div>
+                      <p className="text-base font-medium">{trip.vehicle_name}</p>
+                    </div>
+                    {trip.distance_km != null ? (
+                      <div className="shrink-0 text-right text-base font-semibold">
+                        {formatNumberWithUnit(trip.distance_km, "км")}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    {trip.start_odometer_km != null &&
+                    trip.end_odometer_km != null ? (
+                      <div className="rounded-lg bg-background/70 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">
+                          Одометр
+                        </div>
+                        <div className="font-medium">
+                          {trip.start_odometer_km} → {trip.end_odometer_km}
+                        </div>
+                      </div>
+                    ) : null}
+                    {trip.bags_count != null ? (
+                      <div className="rounded-lg bg-background/70 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">
+                          Мішки
+                        </div>
+                        <div className="font-medium">
+                          {formatNumberWithUnit(trip.bags_count, "шт")}
+                        </div>
+                      </div>
+                    ) : null}
+                    {trip.fuel_cost_uah != null ? (
+                      <div className="rounded-lg bg-background/70 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">
+                          Пальне
+                        </div>
+                        <div className="font-medium">
+                          {formatMoney(trip.fuel_cost_uah)}
+                        </div>
+                      </div>
+                    ) : null}
+                    {trip.total_costs_uah != null ? (
+                      <div className="rounded-lg bg-background/70 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">
+                          Витрати
+                        </div>
+                        <div className="font-medium">
+                          {formatMoney(trip.total_costs_uah)}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {trip.access_name ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Хто: {trip.access_name}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+
+              {group.purchases.map((op) => (
+                <article
+                  key={`purchase-${op.id}`}
+                  className="rounded-xl border bg-card p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-2 text-base font-semibold">
+                        <Truck className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{op.supplier_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Package className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{op.product_name}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-base font-semibold">
+                        {formatMoney(op.payable_amount)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatNumberWithUnit(Math.floor(op.quantity), "міш.")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+                    {op.price_per_unit != null ? (
+                      <span>{formatMoney(op.price_per_unit)} / од.</span>
+                    ) : null}
+                    {op.material_quantity != null &&
+                    op.material_quantity > 0 ? (
+                      <span>
+                        Мішки:{" "}
+                        {formatNumberWithUnit(op.material_quantity, "шт")}
+                      </span>
+                    ) : null}
+                    {op.access_name ? <span>Хто: {op.access_name}</span> : null}
+                  </div>
+
+                  {op.additional_info ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {op.additional_info}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </section>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
