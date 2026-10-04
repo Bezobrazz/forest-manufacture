@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  cn,
   dateToYYYYMMDD,
   formatDate,
   formatNumberWithUnit,
@@ -196,12 +195,20 @@ export function FieldOperationsPanel({
     };
   }, [operations, trips]);
 
-  const pickerLabel =
-    period === "month"
-      ? formatPeriodLabel("month", bounds.from, bounds.to)
-      : formatDate(`${dateToYYYYMMDD(anchorDate)}T12:00:00.000Z`);
+  const selectedMonth = new Date(
+    anchorDate.getFullYear(),
+    anchorDate.getMonth(),
+    1
+  );
+
+  const setMonthYear = (year: number, month: number) => {
+    const maxDay = new Date(year, month + 1, 0).getDate();
+    const day = Math.min(anchorDate.getDate(), maxDay);
+    setAnchorDate(new Date(year, month, day));
+  };
 
   const isEmpty = !isLoading && !error && dayGroups.length === 0;
+  const showDayPicker = period === "day" || period === "week";
 
   return (
     <div className="space-y-4">
@@ -227,77 +234,80 @@ export function FieldOperationsPanel({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn(
-                "h-9 justify-start font-normal",
-                !anchorDate && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-1.5 h-4 w-4 shrink-0" />
-              {pickerLabel}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={anchorDate}
-              onSelect={(date) => {
-                if (!date) return;
-                setAnchorDate(startOfLocalDay(date));
-                setCalendarOpen(false);
-              }}
-              defaultMonth={anchorDate}
-              locale={uk}
-              weekStartsOn={WEEK_STARTS_SAT}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+        <Select
+          value={String(anchorDate.getMonth())}
+          onValueChange={(value) => {
+            setMonthYear(anchorDate.getFullYear(), Number(value));
+          }}
+        >
+          <SelectTrigger className="h-9 w-[150px]">
+            <SelectValue placeholder="Місяць" />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTH_LABELS.map((label, idx) => (
+              <SelectItem key={label} value={String(idx)}>
+                {label.charAt(0).toUpperCase() + label.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        {period === "month" ? (
-          <>
-            <Select
-              value={String(anchorDate.getMonth())}
-              onValueChange={(value) => {
-                const month = Number(value);
-                setAnchorDate(new Date(anchorDate.getFullYear(), month, 1));
-              }}
-            >
-              <SelectTrigger className="h-9 w-[150px]">
-                <SelectValue placeholder="Місяць" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_LABELS.map((label, idx) => (
-                  <SelectItem key={label} value={String(idx)}>
-                    {label.charAt(0).toUpperCase() + label.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={String(anchorDate.getFullYear())}
-              onValueChange={(value) => {
-                const year = Number(value);
-                setAnchorDate(new Date(year, anchorDate.getMonth(), 1));
-              }}
-            >
-              <SelectTrigger className="h-9 w-[100px]">
-                <SelectValue placeholder="Рік" />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={String(year)}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
+        <Select
+          value={String(anchorDate.getFullYear())}
+          onValueChange={(value) => {
+            setMonthYear(Number(value), anchorDate.getMonth());
+          }}
+        >
+          <SelectTrigger className="h-9 w-[100px]">
+            <SelectValue placeholder="Рік" />
+          </SelectTrigger>
+          <SelectContent>
+            {yearOptions.map((year) => (
+              <SelectItem key={year} value={String(year)}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {showDayPicker ? (
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 justify-start font-normal"
+              >
+                <CalendarIcon className="mr-1.5 h-4 w-4 shrink-0" />
+                {anchorDate.getDate().toString().padStart(2, "0")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={anchorDate}
+                month={selectedMonth}
+                onMonthChange={() => undefined}
+                fromMonth={selectedMonth}
+                toMonth={selectedMonth}
+                onSelect={(date) => {
+                  if (!date) return;
+                  setAnchorDate(
+                    new Date(
+                      anchorDate.getFullYear(),
+                      anchorDate.getMonth(),
+                      date.getDate()
+                    )
+                  );
+                  setCalendarOpen(false);
+                }}
+                locale={uk}
+                weekStartsOn={WEEK_STARTS_SAT}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         ) : null}
       </div>
 
