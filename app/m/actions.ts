@@ -642,6 +642,7 @@ export async function createFieldDeliveriesAndTrip(
   revalidatePath("/transactions/suppliers");
   revalidatePath("/trips");
   revalidatePath("/suppliers");
+  revalidatePath("/m");
 
   if (crmFailures.length > 0) {
     return {
@@ -651,4 +652,97 @@ export async function createFieldDeliveriesAndTrip(
   }
 
   return { ok: true };
+}
+
+export type MiniAppOperation = {
+  id: number;
+  created_at: string;
+  quantity: number;
+  price_per_unit: number | null;
+  actual_paid: number | null;
+  additional_info: string | null;
+  material_quantity: number | null;
+  supplier_name: string;
+  product_name: string;
+  access_name: string | null;
+  payable_amount: number;
+};
+
+export async function getMiniAppOperations(
+  fromYmd: string,
+  toYmd: string
+): Promise<
+  { ok: true; operations: MiniAppOperation[] } | { ok: false; error: string }
+> {
+  const auth = await requireMiniAppAccess();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const from = fromYmd.slice(0, 10);
+  const to = toYmd.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return { ok: false, error: "Некоректний період" };
+  }
+  if (from > to) {
+    return { ok: false, error: "Дата початку пізніше кінця" };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("supplier_deliveries")
+    .select(
+      `
+      id,
+      created_at,
+      quantity,
+      price_per_unit,
+      actual_paid,
+      additional_info,
+      material_quantity,
+      supplier:suppliers(name),
+      product:products!supplier_deliveries_product_id_fkey(name),
+      created_by_access:mini_app_accesses(display_name)
+    `
+    )
+    .not("created_by_access_id", "is", null)
+    .gte("created_at", `${from}T00:00:00.000Z`)
+    .lte("created_at", `${to}T23:59:59.999Z`)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  const operations: MiniAppOperation[] = (data ?? []).map((row) => {
+    const quantity = Number(row.quantity ?? 0);
+    const pricePerUnit =
+      row.price_per_unit != null ? Number(row.price_per_unit) : null;
+    const actualPaid =
+      row.actual_paid != null ? Number(row.actual_paid) : null;
+    const supplier = row.supplier as { name?: string } | null;
+    const product = row.product as { name?: string } | null;
+    const access = row.created_by_access as { display_name?: string } | null;
+
+    return {
+      id: Number(row.id),
+      created_at: String(row.created_at ?? ""),
+      quantity,
+      price_per_unit: pricePerUnit,
+      actual_paid: actualPaid,
+      additional_info:
+        row.additional_info != null ? String(row.additional_info) : null,
+      material_quantity:
+        row.material_quantity != null ? Number(row.material_quantity) : null,
+      supplier_name: supplier?.name?.trim() || "Невідомий постачальник",
+      product_name: product?.name?.trim() || "Невідомий продукт",
+      access_name: access?.display_name?.trim() || null,
+      payable_amount: resolveSupplierDeliveryPayableAmount({
+        quantity,
+        pricePerUnit,
+        actualPaid,
+      }),
+    };
+  });
+
+  return { ok: true, operations };
 }

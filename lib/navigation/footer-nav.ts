@@ -96,6 +96,14 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
         ],
       },
       {
+        label: "Mini App",
+        href: "/m",
+        items: [
+          { href: "/m", label: "Внесення" },
+          { href: "/m?tab=operations", label: "Операції" },
+        ],
+      },
+      {
         label: "Закупка",
         href: "/transactions/suppliers",
         items: [

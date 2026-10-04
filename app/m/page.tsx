@@ -1,5 +1,5 @@
 import { getMiniAppFormBootstrap } from "@/app/m/actions";
-import { FieldDeliveryForm } from "@/components/m/field-delivery-form";
+import { MiniAppClient } from "@/components/m/mini-app-client";
 
 const DEFAULT_RAW_MATERIAL_NAME = "Кора Сировина";
 const DEFAULT_PACKING_MATERIAL_NAME = "Мішок для сировини (білий)";
@@ -44,33 +44,27 @@ export default async function MiniAppHomePage() {
     DEFAULT_PACKING_MATERIAL_NAME
   );
 
+  let formError: string | null = null;
+  if (!warehouseId || !productId) {
+    formError = "Немає складу або сировини в довідниках. Зверніться до офісу.";
+  } else if (!defaultPackingProductId) {
+    formError =
+      "Немає продукту «Мішок для сировини (білий)». Зверніться до офісу.";
+  }
+
   return (
     <div className="space-y-4 p-4 pt-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Польове внесення</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Закупівля і поїздка сировини одним збереженням
-        </p>
-      </div>
-      {!warehouseId || !productId ? (
-        <p className="text-sm text-destructive">
-          Немає складу або сировини в довідниках. Зверніться до офісу.
-        </p>
-      ) : !defaultPackingProductId ? (
-        <p className="text-sm text-destructive">
-          Немає продукту «Мішок для сировини (білий)». Зверніться до офісу.
-        </p>
-      ) : (
-        <FieldDeliveryForm
-          accessName={bootstrap.accessName}
-          suppliers={bootstrap.suppliers}
-          warehouseId={warehouseId}
-          productId={productId}
-          packingProductId={defaultPackingProductId}
-          vehicles={bootstrap.vehicles}
-          lastVehicleId={bootstrap.lastVehicleId}
-        />
-      )}
+      <MiniAppClient
+        accessName={bootstrap.accessName}
+        suppliers={bootstrap.suppliers}
+        warehouseId={warehouseId}
+        productId={productId}
+        packingProductId={defaultPackingProductId}
+        vehicles={bootstrap.vehicles}
+        lastVehicleId={bootstrap.lastVehicleId}
+        formReady={!formError}
+        formError={formError}
+      />
     </div>
   );
 }
