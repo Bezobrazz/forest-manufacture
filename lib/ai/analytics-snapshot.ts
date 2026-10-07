@@ -8,7 +8,7 @@ import {
   averageMonthlyProductionBags,
   monthlyOverheadPerBag,
 } from "@/lib/statistics/fixed-overhead";
-import { isCostShiftWageCategory } from "@/lib/expenses/constants";
+import { COST_SHIFT_WAGE_CATEGORY_NAMES } from "@/lib/expenses/constants";
 
 /** Обрізання довгих списків у snapshot (етап 4). */
 export const SNAPSHOT_LIMITS = {
@@ -279,14 +279,19 @@ export function buildAnalyticsSnapshot(
     return totalCost / totalBagsLocal;
   };
 
-  const sumHourlyWage = (from: string, to: string) =>
+  const sumWageCategory = (from: string, to: string, categoryName: string) =>
     data.expenses.reduce((sum, expense) => {
       const day = toDayKey(expense.date);
       if (!isDayInRange(day, from, to)) return sum;
-      const categoryName = String(expense.category?.name ?? "").trim();
-      if (!isCostShiftWageCategory(categoryName)) return sum;
+      if (String(expense.category?.name ?? "").trim() !== categoryName) return sum;
       return sum + Number(expense.amount ?? 0);
     }, 0);
+
+  const sumHourlyWage = (from: string, to: string) =>
+    COST_SHIFT_WAGE_CATEGORY_NAMES.reduce(
+      (sum, categoryName) => sum + sumWageCategory(from, to, categoryName),
+      0
+    );
 
   const computeTotalCostPerBag = (from: string, to: string): number | null => {
     const hourlyWageCosts = sumHourlyWage(from, to);

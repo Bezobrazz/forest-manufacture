@@ -15,7 +15,12 @@ import {
 } from "@/app/actions/crm-profitability";
 import { getStatisticsPageData } from "@/app/statistics/actions";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
-import { isCostShiftWageCategory } from "@/lib/expenses/constants";
+import {
+  COST_SHIFT_WAGE_CATEGORY_NAMES,
+  HOURLY_WAGE_CATEGORY_NAME,
+  LOADING_COUNT_CATEGORY_NAME,
+  PRODUCT_LOADING_CATEGORY_NAME,
+} from "@/lib/expenses/constants";
 import {
   Card,
   CardContent,
@@ -694,14 +699,24 @@ function StatisticsPageContent() {
     return totalCost / totalBags;
   };
 
-  const sumHourlyWageCostsInRange = (startDay: string, endDay: string) =>
+  const sumWageCategoryCostsInRange = (
+    startDay: string,
+    endDay: string,
+    categoryName: string
+  ) =>
     expenses.reduce((sum, expense) => {
       const day = toDayKey(expense.date);
       if (!isDayInRange(day, startDay, endDay)) return sum;
-      const categoryName = String(expense.category?.name ?? "").trim();
-      if (!isCostShiftWageCategory(categoryName)) return sum;
+      if (String(expense.category?.name ?? "").trim() !== categoryName) return sum;
       return sum + Number(expense.amount ?? 0);
     }, 0);
+
+  const sumHourlyWageCostsInRange = (startDay: string, endDay: string) =>
+    COST_SHIFT_WAGE_CATEGORY_NAMES.reduce(
+      (sum, categoryName) =>
+        sum + sumWageCategoryCostsInRange(startDay, endDay, categoryName),
+      0
+    );
 
   const sumProducedQuantityInRange = (startDay: string, endDay: string) =>
     shifts.reduce((sum, shift) => {
@@ -814,7 +829,23 @@ function StatisticsPageContent() {
     const purchaseBags = sumPurchaseBagsInRange(startDay, endDay);
     const rawTripCosts = sumRawTripsCostsInRange(startDay, endDay);
     const tripBags = sumBagsInRange(startDay, endDay);
-    const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
+    const accountingWageCosts = sumWageCategoryCostsInRange(
+      startDay,
+      endDay,
+      HOURLY_WAGE_CATEGORY_NAME
+    );
+    const productLoadingWageCosts = sumWageCategoryCostsInRange(
+      startDay,
+      endDay,
+      PRODUCT_LOADING_CATEGORY_NAME
+    );
+    const loadingCountWageCosts = sumWageCategoryCostsInRange(
+      startDay,
+      endDay,
+      LOADING_COUNT_CATEGORY_NAME
+    );
+    const hourlyWageCosts =
+      accountingWageCosts + productLoadingWageCosts + loadingCountWageCosts;
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
     const taxesCosts = prorateMonthlyAmountForDateRange(
       monthlyTaxesUah,
@@ -833,8 +864,12 @@ function StatisticsPageContent() {
     );
     const purchaseCostPerBag = getAveragePurchaseCostPerBagInRange(startDay, endDay);
     const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
-    const hourlyWagePerBag =
-      producedQuantity > 0 ? hourlyWageCosts / producedQuantity : 0;
+    const perBag = (amount: number) =>
+      producedQuantity > 0 ? amount / producedQuantity : 0;
+    const accountingWagePerBag = perBag(accountingWageCosts);
+    const productLoadingWagePerBag = perBag(productLoadingWageCosts);
+    const loadingCountWagePerBag = perBag(loadingCountWageCosts);
+    const hourlyWagePerBag = perBag(hourlyWageCosts);
     const taxesPerBag = monthlyOverheadPerBag(
       monthlyTaxesUah,
       periodAverageMonthlyProduction
@@ -843,8 +878,7 @@ function StatisticsPageContent() {
       monthlyElectricityUah,
       periodAverageMonthlyProduction
     );
-    const managementSalaryPerBag =
-      producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
+    const managementSalaryPerBag = perBag(managementSalaryCosts);
     const totalCostPerBag = computeTotalCostPerBagForRange(startDay, endDay);
 
     return {
@@ -853,6 +887,9 @@ function StatisticsPageContent() {
       rawTripCosts,
       tripBags,
       producedQuantity,
+      accountingWageCosts,
+      productLoadingWageCosts,
+      loadingCountWageCosts,
       hourlyWageCosts,
       taxesCosts,
       electricityCosts,
@@ -861,6 +898,9 @@ function StatisticsPageContent() {
       purchaseCostPerBag,
       tripCostPerBag,
       fixedRewardPerBag,
+      accountingWagePerBag,
+      productLoadingWagePerBag,
+      loadingCountWagePerBag,
       hourlyWagePerBag,
       taxesPerBag,
       electricityPerBag,
@@ -1005,15 +1045,21 @@ function StatisticsPageContent() {
     ? (currentPeriodCostMetrics.managementSalaryPerBag ?? 0)
     : 0;
 
+  const shiftWagePerBagTotal =
+    (currentPeriodCostMetrics.accountingWagePerBag ?? 0) +
+    (currentPeriodCostMetrics.productLoadingWagePerBag ?? 0) +
+    (currentPeriodCostMetrics.loadingCountWagePerBag ?? 0);
   const structureTotal =
     (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
     (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
-    (currentPeriodCostMetrics.hourlyWagePerBag ?? 0) +
+    shiftWagePerBagTotal +
     (currentPeriodCostMetrics.taxesPerBag ?? 0) +
     (currentPeriodCostMetrics.electricityPerBag ?? 0) +
     managementSalaryPerBagForStructure +
     (currentPeriodCostMetrics.packingBagFromLatestTx ?? 0);
+  const structurePercent = (value: number) =>
+    structureTotal > 0 ? (value / structureTotal) * 100 : 0;
   const structureRows = [
     {
       label: "Середня вартість мішка із закупок",
@@ -1028,8 +1074,23 @@ function StatisticsPageContent() {
       value: currentPeriodCostMetrics.fixedRewardPerBag ?? 0,
     },
     {
+      id: "shiftWages",
       label: "З.П. змін на мішок",
-      value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
+      value: shiftWagePerBagTotal,
+      children: [
+        {
+          label: HOURLY_WAGE_CATEGORY_NAME,
+          value: currentPeriodCostMetrics.accountingWagePerBag ?? 0,
+        },
+        {
+          label: PRODUCT_LOADING_CATEGORY_NAME,
+          value: currentPeriodCostMetrics.productLoadingWagePerBag ?? 0,
+        },
+        {
+          label: LOADING_COUNT_CATEGORY_NAME,
+          value: currentPeriodCostMetrics.loadingCountWagePerBag ?? 0,
+        },
+      ],
     },
     {
       label: "Податки на мішок",
@@ -1048,10 +1109,15 @@ function StatisticsPageContent() {
       label: `«${PACKING_BAG_PRODUCT_NAME}» (остання закупівля)`,
       value: currentPeriodCostMetrics.packingBagFromLatestTx ?? 0,
     },
-  ].map((item) => ({
-    ...item,
-    percent: structureTotal > 0 ? (item.value / structureTotal) * 100 : 0,
-  }))
+  ]
+    .map((item) => ({
+      ...item,
+      percent: structurePercent(item.value),
+      children: item.children?.map((child) => ({
+        ...child,
+        percent: structurePercent(child.value),
+      })),
+    }))
     .sort((a, b) => b.value - a.value);
 
   const shiftsInPeriod = useMemo(() => {
@@ -2183,11 +2249,51 @@ function StatisticsPageContent() {
                 {formatNumberWithUnit(currentPeriodCostMetrics.fixedRewardPerBag, "₴")}
               </span>
             </div>
-            <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">З.П. змін (сума)</span>
-              <span className="tabular-nums">
-                {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWageCosts, "₴")}
-              </span>
+            <div className="py-2 border-b space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">З.П. змін (сума)</span>
+                <span className="tabular-nums">
+                  {formatNumberWithUnit(
+                    currentPeriodCostMetrics.hourlyWageCosts,
+                    "₴"
+                  )}
+                </span>
+              </div>
+              <div className="ml-4 space-y-1 border-l pl-3">
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {HOURLY_WAGE_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.accountingWageCosts,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {PRODUCT_LOADING_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.productLoadingWageCosts,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {LOADING_COUNT_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.loadingCountWageCosts,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">
@@ -2252,11 +2358,51 @@ function StatisticsPageContent() {
                 )}
               </span>
             </div>
-            <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">З.П. змін на мішок</span>
-              <span className="tabular-nums">
-                {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWagePerBag, "₴")}
-              </span>
+            <div className="py-2 border-b space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">З.П. змін на мішок</span>
+                <span className="tabular-nums">
+                  {formatNumberWithUnit(
+                    currentPeriodCostMetrics.hourlyWagePerBag,
+                    "₴"
+                  )}
+                </span>
+              </div>
+              <div className="ml-4 space-y-1 border-l pl-3">
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {HOURLY_WAGE_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.accountingWagePerBag,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {PRODUCT_LOADING_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.productLoadingWagePerBag,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {LOADING_COUNT_CATEGORY_NAME}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatNumberWithUnit(
+                      currentPeriodCostMetrics.loadingCountWagePerBag,
+                      "₴"
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">Електроенергія (за період)</span>
@@ -2331,6 +2477,24 @@ function StatisticsPageContent() {
                           style={{ width: `${Math.max(row.percent, 0)}%` }}
                         ></div>
                       </div>
+                      {row.children && row.children.length > 0 ? (
+                        <div className="ml-3 mt-2 space-y-1.5 border-l pl-3">
+                          {row.children.map((child) => (
+                            <div
+                              key={child.label}
+                              className="flex justify-between items-center gap-3 text-xs"
+                            >
+                              <span className="text-muted-foreground">
+                                {child.label}
+                              </span>
+                              <span className="tabular-nums shrink-0">
+                                {formatNumberWithUnit(child.value, "₴")} (
+                                {formatPercentage(child.percent, 1)})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </>
                   );
 
