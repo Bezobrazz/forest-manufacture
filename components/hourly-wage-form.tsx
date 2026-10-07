@@ -42,14 +42,14 @@ const KIND_PLACEHOLDER: Record<HourlyWageKind, string> = {
   accounting: "погодинна",
   manual: "Вантажні роботи",
   loading_count: "підрахунок завантаження",
-  loading: "завантаження продукції",
+  loading: "завантаження кори",
 };
 
 const KIND_EMPTY_MESSAGE: Record<HourlyWageKind, string> = {
   accounting: "Погодинний облік ще не збережено",
   manual: "Суму витрат ще не збережено",
   loading_count: "Витрату за підрахунок завантаження ще не збережено",
-  loading: "Витрату за завантаження продукції ще не збережено",
+  loading: "Витрату за завантаження кори ще не збережено",
 };
 
 export type HourlyWageExpenseItem = {
@@ -288,7 +288,7 @@ export function ShiftWageSummaryCard({
 
             <div className="bg-muted p-4 rounded-lg">
               <div className="text-sm text-muted-foreground mb-1">
-                Завантаження продукції
+                Завантаження кори
               </div>
               <div className="text-2xl font-bold">
                 {loadingTotal.toFixed(2)} грн
@@ -813,7 +813,7 @@ function LoadingBagExpenseForm({
 
   const isCount = kind === "loading_count";
   const rateKey = isCount ? "loadingCountRateUah" : "productLoadingRateUah";
-  const title = isCount ? "Підрахунок завантаження" : "Завантаження продукції";
+  const title = isCount ? "Підрахунок завантаження" : "Завантаження кори";
   const setDraftAmount = isCount
     ? setDraftLoadingCountAmount
     : setDraftLoadingAmount;
@@ -999,9 +999,9 @@ export function HourlyWageSections() {
             Витрати за завантаження
           </CardTitle>
           <CardDescription>
-            Підрахунок завантаження (категорія «З/П Підрахунок завантаження») та
-            завантаження продукції: мішки × ставка. Ставки зберігаються і
-            підставляються наступного разу.
+            Підрахунок завантаження («З/П Підрахунок завантаження») та
+            завантаження кори («З/П Завантаження кори»): мішки × ставка. Ставки
+            зберігаються і підставляються наступного разу.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -1014,11 +1014,11 @@ export function HourlyWageSections() {
             </div>
           </div>
           <div className="space-y-6">
-            <h4 className="text-sm font-medium">Завантаження продукції</h4>
+            <h4 className="text-sm font-medium">Завантаження кори</h4>
             <LoadingBagExpenseForm kind="loading" />
             <div>
               <h5 className="text-sm font-medium mb-2">
-                Збережене завантаження
+                Збережене завантаження кори
               </h5>
               <HourlyWageExpenseList kind="loading" />
             </div>

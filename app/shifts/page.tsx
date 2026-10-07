@@ -70,7 +70,7 @@ const WAGE_BREAKDOWN_LABELS: Array<{
   { key: "accounting", label: "Облік витрат (погодинна)" },
   { key: "manual", label: "Сума витрат" },
   { key: "loadingCount", label: "Підрахунок завантаження" },
-  { key: "loading", label: "Завантаження продукції" },
+  { key: "loading", label: "Завантаження кори" },
 ];
 
 export default async function ShiftsPage({
@@ -112,7 +112,8 @@ export default async function ShiftsPage({
     const categoryName = expense?.category?.name;
     const isShiftWageCategory =
       categoryName === "З.П. Погодинна" ||
-      categoryName === "З/П Підрахунок завантаження";
+      categoryName === "З/П Підрахунок завантаження" ||
+      categoryName === "З/П Завантаження кори";
     if (!isShiftWageCategory) return;
 
     const description = expense.description ?? "";

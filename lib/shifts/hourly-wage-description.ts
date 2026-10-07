@@ -15,7 +15,7 @@ const DEFAULT_COMMENT: Record<HourlyWageKind, string> = {
   accounting: "погодинна",
   manual: "Вантажні роботи",
   loading_count: "підрахунок завантаження",
-  loading: "завантаження продукції",
+  loading: "завантаження кори",
 };
 
 export const buildShiftHourlyWageDescription = (

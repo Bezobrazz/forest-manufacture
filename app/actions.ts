@@ -2462,16 +2462,19 @@ export async function createRawCostRepayment(
 
 const HOURLY_WAGE_CATEGORY_NAME = "З.П. Погодинна";
 const LOADING_COUNT_CATEGORY_NAME = "З/П Підрахунок завантаження";
+const PRODUCT_LOADING_CATEGORY_NAME = "З/П Завантаження кори";
 
 const SHIFT_WAGE_EXPENSE_CATEGORY_NAMES = [
   HOURLY_WAGE_CATEGORY_NAME,
   LOADING_COUNT_CATEGORY_NAME,
+  PRODUCT_LOADING_CATEGORY_NAME,
 ] as const;
 
-const categoryNameForHourlyWageKind = (kind?: HourlyWageKind) =>
-  kind === "loading_count"
-    ? LOADING_COUNT_CATEGORY_NAME
-    : HOURLY_WAGE_CATEGORY_NAME;
+const categoryNameForHourlyWageKind = (kind?: HourlyWageKind) => {
+  if (kind === "loading_count") return LOADING_COUNT_CATEGORY_NAME;
+  if (kind === "loading") return PRODUCT_LOADING_CATEGORY_NAME;
+  return HOURLY_WAGE_CATEGORY_NAME;
+};
 
 const pickCategoryByName = (
   categories: { id: number; name: string }[],
