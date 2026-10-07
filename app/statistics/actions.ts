@@ -61,7 +61,12 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
           id,
           shift_date,
           status,
-          production:production(quantity, product_id)
+          production:production(
+            quantity,
+            product_id,
+            reward_override,
+            product:products(reward)
+          )
         `
         )
         .eq("status", "completed")

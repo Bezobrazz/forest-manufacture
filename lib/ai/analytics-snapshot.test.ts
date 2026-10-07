@@ -38,7 +38,7 @@ const baseData: StatisticsPageData = {
     {
       id: 2,
       name: "Кора фракція B",
-      reward: 5,
+      reward: 7,
       category: { id: 1, name: "Кора" },
     } as StatisticsPageData["products"][number],
   ],
@@ -145,6 +145,8 @@ test("buildAnalyticsSnapshot aggregates production and costs for period", () => 
   assert.equal(snapshot.purchases.bags, 200);
   assert.ok(snapshot.costPerBag.totalUah != null);
   assert.ok(snapshot.costPerBag.structure.length > 0);
+  // 100×5 + 50×7 = 850 / 150 ≈ 5.666...
+  assert.equal(snapshot.costPerBag.fixedRewardPerBag, Math.round((850 / 150) * 100) / 100);
 });
 
 test("enforceSnapshotSize keeps object shape", () => {

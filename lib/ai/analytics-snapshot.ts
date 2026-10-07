@@ -9,6 +9,7 @@ import {
   monthlyOverheadPerBag,
 } from "@/lib/statistics/fixed-overhead";
 import { COST_SHIFT_WAGE_CATEGORY_NAMES } from "@/lib/expenses/constants";
+import { sumProductionRewardMetrics } from "@/lib/statistics/production-reward";
 
 /** Обрізання довгих списків у snapshot (етап 4). */
 export const SNAPSHOT_LIMITS = {
@@ -65,6 +66,7 @@ export type AnalyticsSnapshot = {
     electricityPerBag: number | null;
     managementSalaryPerBag: number | null;
     packingBagUah: number;
+    /** Зважена середня винагорода за випуск закритих змін у періоді. */
     fixedRewardPerBag: number;
   };
   expenses: {
@@ -189,10 +191,9 @@ export function buildAnalyticsSnapshot(
   const productCategoryById = new Map(
     data.products.map((p) => [p.id, p.category?.name ?? "Без категорії"])
   );
-  const fixedRewardPerBag = (() => {
-    const first = data.products.find((p) => Number(p.reward ?? 0) > 0);
-    return first ? Number(first.reward ?? 0) : 0;
-  })();
+  const productRewardById = new Map(
+    data.products.map((p) => [p.id, Number(p.reward ?? 0)])
+  );
   const managementSalaryMonthlyTotal = sumManagerMonthlySalaries(data.employees);
 
   const sumProduced = (from: string, to: string) => {
@@ -293,9 +294,17 @@ export function buildAnalyticsSnapshot(
       0
     );
 
+  const getAverageRewardPerBag = (from: string, to: string) =>
+    sumProductionRewardMetrics(data.shifts, from, to, {
+      toDayKey,
+      isDayInRange,
+      productRewardById,
+    }).averagePerBag;
+
   const computeTotalCostPerBag = (from: string, to: string): number | null => {
     const hourlyWageCosts = sumHourlyWage(from, to);
     const producedQuantity = sumProduced(from, to);
+    const productionRewardPerBag = getAverageRewardPerBag(from, to);
     const managementSalaryCosts = prorateMonthlyAmountForDateRange(
       managementSalaryMonthlyTotal,
       from,
@@ -319,7 +328,7 @@ export function buildAnalyticsSnapshot(
     return (
       purchaseCostPerBag +
       tripCostPerBag +
-      fixedRewardPerBag +
+      productionRewardPerBag +
       hourlyWagePerBag +
       taxesPerBag +
       electricityPerBag +
@@ -365,6 +374,7 @@ export function buildAnalyticsSnapshot(
     producedQuantity > 0 ? costHourlyWageCosts / producedQuantity : 0;
   const managementSalaryPerBag =
     producedQuantity > 0 ? managementSalaryCosts / producedQuantity : 0;
+  const fixedRewardPerBag = getAverageRewardPerBag(costStartDay, costEndDay);
   const taxesPerBag = monthlyOverheadPerBag(
     monthlyTaxesUah,
     costAvgMonthlyProduction
@@ -389,7 +399,7 @@ export function buildAnalyticsSnapshot(
       uah: tripCostPerBag ?? 0,
     },
     {
-      label: "Винагорода на мішок",
+      label: "Винагорода на мішок (середня за випуск)",
       uah: fixedRewardPerBag,
     },
     {

@@ -55,6 +55,7 @@ import {
   averageMonthlyProductionBags,
   monthlyOverheadPerBag,
 } from "@/lib/statistics/fixed-overhead";
+import { sumProductionRewardMetrics } from "@/lib/statistics/production-reward";
 import {
   parseFixedOverheadSettings,
   parseMonthlyOverheadInput,
@@ -731,10 +732,21 @@ function StatisticsPageContent() {
       return sum + producedInShift;
     }, 0);
 
-  const fixedRewardPerBag = useMemo(() => {
-    const firstRewardProduct = products.find((product) => Number(product.reward ?? 0) > 0);
-    return firstRewardProduct ? Number(firstRewardProduct.reward ?? 0) : 0;
+  const productRewardById = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const product of products) {
+      const reward = Number(product.reward ?? 0);
+      if (Number.isFinite(reward)) map.set(product.id, reward);
+    }
+    return map;
   }, [products]);
+
+  const getProductionRewardMetricsInRange = (startDay: string, endDay: string) =>
+    sumProductionRewardMetrics(shifts, startDay, endDay, {
+      toDayKey,
+      isDayInRange,
+      productRewardById,
+    });
 
   const managementSalaryMonthlyTotal = useMemo(
     () => sumManagerMonthlySalaries(employees),
@@ -748,6 +760,10 @@ function StatisticsPageContent() {
   ): number | null => {
     const hourlyWageCosts = sumHourlyWageCostsInRange(startDay, endDay);
     const producedQuantity = sumProducedQuantityInRange(startDay, endDay);
+    const productionRewardPerBag = getProductionRewardMetricsInRange(
+      startDay,
+      endDay
+    ).averagePerBag;
     const managementSalaryCosts = prorateMonthlyAmountForDateRange(
       managementSalaryMonthlyTotal,
       startDay,
@@ -774,7 +790,7 @@ function StatisticsPageContent() {
     return (
       purchaseCostPerBag +
       tripCostPerBag +
-      fixedRewardPerBag +
+      productionRewardPerBag +
       hourlyWagePerBag +
       taxesPerBag +
       electricityPerBag +
@@ -864,6 +880,10 @@ function StatisticsPageContent() {
     );
     const purchaseCostPerBag = getAveragePurchaseCostPerBagInRange(startDay, endDay);
     const tripCostPerBag = getAverageTripCostPerBagInRange(startDay, endDay);
+    const productionRewardMetrics = getProductionRewardMetricsInRange(
+      startDay,
+      endDay
+    );
     const perBag = (amount: number) =>
       producedQuantity > 0 ? amount / producedQuantity : 0;
     const accountingWagePerBag = perBag(accountingWageCosts);
@@ -891,13 +911,14 @@ function StatisticsPageContent() {
       productLoadingWageCosts,
       loadingCountWageCosts,
       hourlyWageCosts,
+      productionRewardCosts: productionRewardMetrics.totalRewardUah,
       taxesCosts,
       electricityCosts,
       managementSalaryCosts,
       averageMonthlyProduction: periodAverageMonthlyProduction,
       purchaseCostPerBag,
       tripCostPerBag,
-      fixedRewardPerBag,
+      averageRewardPerBag: productionRewardMetrics.averagePerBag,
       accountingWagePerBag,
       productLoadingWagePerBag,
       loadingCountWagePerBag,
@@ -911,11 +932,11 @@ function StatisticsPageContent() {
   }, [
     costMetricsPeriod,
     expenses,
-    fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
     monthlyTaxesUah,
     monthlyElectricityUah,
+    productRewardById,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -947,11 +968,11 @@ function StatisticsPageContent() {
   }, [
     costMetricsPeriod,
     expenses,
-    fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
     monthlyTaxesUah,
     monthlyElectricityUah,
+    productRewardById,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -1052,7 +1073,7 @@ function StatisticsPageContent() {
   const structureTotal =
     (currentPeriodCostMetrics.purchaseCostPerBag ?? 0) +
     (currentPeriodCostMetrics.tripCostPerBag ?? 0) +
-    (currentPeriodCostMetrics.fixedRewardPerBag ?? 0) +
+    (currentPeriodCostMetrics.averageRewardPerBag ?? 0) +
     shiftWagePerBagTotal +
     (currentPeriodCostMetrics.taxesPerBag ?? 0) +
     (currentPeriodCostMetrics.electricityPerBag ?? 0) +
@@ -1070,8 +1091,8 @@ function StatisticsPageContent() {
       value: currentPeriodCostMetrics.tripCostPerBag ?? 0,
     },
     {
-      label: "Винагорода на мішок (фіксована)",
-      value: currentPeriodCostMetrics.fixedRewardPerBag ?? 0,
+      label: "Винагорода на мішок (середня за випуск)",
+      value: currentPeriodCostMetrics.averageRewardPerBag ?? 0,
     },
     {
       id: "shiftWages",
@@ -1236,11 +1257,11 @@ function StatisticsPageContent() {
     monthlyCostPerBagChartRange,
     statsDateRange,
     expenses,
-    fixedRewardPerBag,
     includeManagementSalaryInCost,
     managementSalaryMonthlyTotal,
     monthlyTaxesUah,
     monthlyElectricityUah,
+    productRewardById,
     supplierDeliveries,
     trips,
     latestPackingBagPriceUah,
@@ -1886,11 +1907,11 @@ function StatisticsPageContent() {
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
             Середня вартість мішка із закупок за період + середня вартість мішка з поїздок
-            «Сировина» за період + фіксована винагорода + З.П. змін (погодинна, завантаження
-            кори, підрахунок завантаження) на мішок + податки та електроенергія (місячна
-            сума ÷ середньомісячний випуск за останні {AVERAGE_PRODUCTION_MONTHS_BACK}{" "}
-            міс.) + оклади керівництва (за період ÷ вироблені мішки) + ціна «
-            {PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
+            «Сировина» за період + зважена середня винагорода за випуск закритих змін +
+            З.П. змін (погодинна, завантаження кори, підрахунок завантаження) на мішок +
+            податки та електроенергія (місячна сума ÷ середньомісячний випуск за останні{" "}
+            {AVERAGE_PRODUCTION_MONTHS_BACK} міс.) + оклади керівництва (за період ÷
+            вироблені мішки) + ціна «{PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -2244,9 +2265,25 @@ function StatisticsPageContent() {
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">Винагорода на мішок (фіксована)</span>
+              <span className="text-muted-foreground">
+                Винагорода за продукцію (сума за період)
+              </span>
               <span className="tabular-nums">
-                {formatNumberWithUnit(currentPeriodCostMetrics.fixedRewardPerBag, "₴")}
+                {formatNumberWithUnit(
+                  currentPeriodCostMetrics.productionRewardCosts,
+                  "₴"
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 py-2 border-b">
+              <span className="text-muted-foreground">
+                Винагорода на мішок (середня за випуск)
+              </span>
+              <span className="tabular-nums">
+                {formatNumberWithUnit(
+                  currentPeriodCostMetrics.averageRewardPerBag,
+                  "₴"
+                )}
               </span>
             </div>
             <div className="py-2 border-b space-y-1.5">
