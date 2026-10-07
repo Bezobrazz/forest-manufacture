@@ -349,7 +349,6 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
             shift.opened_at || shift.created_at || shift.shift_date
           }
           employeeCount={employeeCount}
-          totalBags={totalProduction}
           initialLoadingRates={loadingRates}
           initialExpenses={hourlyWageExpenses}
         >

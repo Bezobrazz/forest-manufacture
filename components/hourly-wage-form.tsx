@@ -63,7 +63,6 @@ type HourlyWageContextValue = {
   shiftId: number;
   shiftOpenedAt: string;
   employeeCount: number;
-  totalBags: number;
   loadingRates: ShiftLoadingRates;
   setLoadingRates: (rates: ShiftLoadingRates) => void;
   expenses: HourlyWageExpenseItem[];
@@ -94,7 +93,6 @@ interface HourlyWageProviderProps {
   shiftId: number;
   shiftOpenedAt: string;
   employeeCount: number;
-  totalBags: number;
   initialLoadingRates?: ShiftLoadingRates;
   initialExpenses: HourlyWageExpenseItem[];
   children: ReactNode;
@@ -104,7 +102,6 @@ export function HourlyWageProvider({
   shiftId,
   shiftOpenedAt,
   employeeCount,
-  totalBags,
   initialLoadingRates = DEFAULT_SHIFT_LOADING_RATES,
   initialExpenses,
   children,
@@ -147,7 +144,6 @@ export function HourlyWageProvider({
         shiftId,
         shiftOpenedAt,
         employeeCount,
-        totalBags,
         loadingRates,
         setLoadingRates,
         expenses,
@@ -542,8 +538,7 @@ function HourlyWageAccountingForm() {
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((row) => row.id !== id)));
   };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave() {
     if (rowsToSave.length === 0) {
       toast.error(
         employeeCount === 0
@@ -589,7 +584,7 @@ function HourlyWageAccountingForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <div className="space-y-4">
         {rows.map((row, index) => (
           <div
@@ -685,7 +680,8 @@ function HourlyWageAccountingForm() {
         ))}
       </div>
       <Button
-        type="submit"
+        type="button"
+        onClick={handleSave}
         disabled={calculatedAmount <= 0 || isSubmitting}
         aria-busy={isSubmitting}
         className="w-full sm:w-[340px]"
@@ -699,7 +695,7 @@ function HourlyWageAccountingForm() {
           "Зберегти облік витрат"
         )}
       </Button>
-    </form>
+    </div>
   );
 }
 
@@ -718,8 +714,7 @@ function HourlyWageManualForm() {
     setDraftManualAmount(hasManualDraft ? manualAmountNum : 0);
   }, [hasManualDraft, manualAmountNum, setDraftManualAmount]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave() {
     if (Number.isNaN(manualAmountNum) || manualAmountNum <= 0) {
       toast.error("Вкажіть суму більше нуля");
       return;
@@ -753,7 +748,7 @@ function HourlyWageManualForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="hourly-manual-amount">Сума витрат (грн)</Label>
@@ -781,7 +776,8 @@ function HourlyWageManualForm() {
         </div>
       </div>
       <Button
-        type="submit"
+        type="button"
+        onClick={handleSave}
         disabled={isSubmitting || !hasManualDraft}
         aria-busy={isSubmitting}
         className="w-full sm:w-[340px]"
@@ -795,7 +791,7 @@ function HourlyWageManualForm() {
           "Зберегти суму витрат"
         )}
       </Button>
-    </form>
+    </div>
   );
 }
 
@@ -808,7 +804,6 @@ function LoadingBagExpenseForm({
   const {
     shiftId,
     shiftOpenedAt,
-    totalBags,
     loadingRates,
     setLoadingRates,
     setDraftLoadingCountAmount,
@@ -823,15 +818,9 @@ function LoadingBagExpenseForm({
     ? setDraftLoadingCountAmount
     : setDraftLoadingAmount;
 
-  const [bags, setBags] = useState(
-    totalBags > 0 ? String(totalBags) : ""
-  );
+  const [bags, setBags] = useState("");
   const [rate, setRate] = useState(String(loadingRates[rateKey]));
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    setBags(totalBags > 0 ? String(totalBags) : "");
-  }, [totalBags]);
 
   useEffect(() => {
     setRate(String(loadingRates[rateKey]));
@@ -850,8 +839,7 @@ function LoadingBagExpenseForm({
     setDraftAmount(calculatedAmount > 0 ? calculatedAmount : 0);
   }, [calculatedAmount, setDraftAmount]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave() {
     if (!hasValidBags) {
       toast.error("Вкажіть кількість мішків більше нуля");
       return;
@@ -904,7 +892,7 @@ function LoadingBagExpenseForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor={`loading-bags-${kind}`}>Кількість мішків</Label>
@@ -913,16 +901,11 @@ function LoadingBagExpenseForm({
             type="number"
             min="0"
             step="1"
-            placeholder={totalBags > 0 ? String(totalBags) : "0"}
+            placeholder="0"
             value={bags}
             onChange={(e) => setBags(e.target.value)}
             disabled={isSubmitting}
           />
-          {totalBags > 0 && (
-            <p className="text-xs text-muted-foreground">
-              З продукції зміни: {totalBags}
-            </p>
-          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor={`loading-rate-${kind}`}>Ставка (грн/мішок)</Label>
@@ -948,7 +931,8 @@ function LoadingBagExpenseForm({
         </div>
       </div>
       <Button
-        type="submit"
+        type="button"
+        onClick={handleSave}
         disabled={calculatedAmount <= 0 || isSubmitting}
         aria-busy={isSubmitting}
         className="w-full sm:w-[340px]"
@@ -962,7 +946,7 @@ function LoadingBagExpenseForm({
           `Зберегти: ${title}`
         )}
       </Button>
-    </form>
+    </div>
   );
 }
 

@@ -284,7 +284,11 @@ export function ProductionItemsForm({
               Повернутись
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleConfirmSubmit}
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmSubmit();
+              }}
               disabled={isSubmitting}
             >
               Підтвердити сабміт
