@@ -253,7 +253,7 @@ async function insertFieldPurchaseDelivery(params: {
   lineIndex: number;
   keepinRefs: { purseId: number; categoryId: number } | null;
 }): Promise<
-  | { ok: true; crmError?: string }
+  | { ok: true; deliveryId: number; crmError?: string }
   | { ok: false; error: string }
 > {
   const {
@@ -424,6 +424,7 @@ async function insertFieldPurchaseDelivery(params: {
           console.error("keepin_payment_id update:", crmLinkError);
           return {
             ok: true,
+            deliveryId: delivery.id as number,
             crmError: `${lineLabel} (#${delivery.id}): витрату створено в CRM, але не привʼязано в ERP`,
           };
         }
@@ -434,12 +435,109 @@ async function insertFieldPurchaseDelivery(params: {
         crmError instanceof Error ? crmError.message : "невідома помилка";
       return {
         ok: true,
+        deliveryId: delivery.id as number,
         crmError: `${lineLabel} (#${delivery.id}): ${detail}`,
       };
     }
   }
 
-  return { ok: true };
+  return { ok: true, deliveryId: delivery.id as number };
+}
+
+const FINAL_CRM_RETRY_DELAY_MS = 600;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function relationName(
+  value: { name?: string } | { name?: string }[] | null | undefined
+): string {
+  if (!value) return "";
+  if (Array.isArray(value)) return value[0]?.name?.trim() ?? "";
+  return value.name?.trim() ?? "";
+}
+
+/** Фінальна хвиля sync для поставок цього submit без keepin_payment_id. */
+async function retryUnsyncedFieldDeliveryExpenses(params: {
+  supabase: ReturnType<typeof createServiceRoleClient>;
+  deliveryIds: number[];
+  day: string;
+  keepinRefs: { purseId: number; categoryId: number } | null;
+}): Promise<string[]> {
+  const { supabase, deliveryIds, day, keepinRefs } = params;
+  if (!deliveryIds.length) return [];
+
+  await sleepMs(FINAL_CRM_RETRY_DELAY_MS);
+
+  const { data: rows, error } = await supabase
+    .from("supplier_deliveries")
+    .select(
+      `
+      id, quantity, price_per_unit, actual_paid, keepin_payment_id,
+      supplier:suppliers(name),
+      product:products!supplier_deliveries_product_id_fkey(name)
+    `
+    )
+    .in("id", deliveryIds)
+    .is("keepin_payment_id", null);
+
+  if (error) {
+    console.error("Mini App final CRM retry select:", error);
+    return [`не вдалося перевірити CRM-синк: ${error.message}`];
+  }
+
+  const unsynced = rows ?? [];
+  if (!unsynced.length) return [];
+
+  const failures: string[] = [];
+  for (const row of unsynced) {
+    const deliveryId = Number(row.id);
+    const amount = resolveSupplierDeliveryPayableAmount({
+      quantity: Number(row.quantity),
+      pricePerUnit:
+        row.price_per_unit == null ? null : Number(row.price_per_unit),
+      actualPaid: row.actual_paid == null ? null : Number(row.actual_paid),
+    });
+    if (amount <= 0) continue;
+
+    try {
+      const paymentId = await syncSupplierDeliveryExpenseToKeepin({
+        deliveryId,
+        amount,
+        atYmd: day,
+        supplierName: relationName(
+          row.supplier as { name?: string } | { name?: string }[] | null
+        ),
+        productName: relationName(
+          row.product as { name?: string } | { name?: string }[] | null
+        ),
+        quantity: Number(row.quantity),
+        purseId: keepinRefs?.purseId,
+        categoryId: keepinRefs?.categoryId,
+      });
+      if (paymentId == null) {
+        failures.push(`#${deliveryId}: sync вимкнено або сума ≤ 0`);
+        continue;
+      }
+      const { error: linkError } = await supabase
+        .from("supplier_deliveries")
+        .update({ keepin_payment_id: paymentId })
+        .eq("id", deliveryId);
+      if (linkError) {
+        failures.push(
+          `#${deliveryId}: витрату створено в CRM, але не привʼязано в ERP`
+        );
+      }
+    } catch (crmError) {
+      console.error("Mini App final CRM retry:", crmError);
+      const detail =
+        crmError instanceof Error ? crmError.message : "невідома помилка";
+      failures.push(`#${deliveryId}: ${detail}`);
+    }
+  }
+
+  return failures;
 }
 
 export async function createFieldDeliveriesAndTrip(
@@ -504,7 +602,7 @@ export async function createFieldDeliveriesAndTrip(
   }
 
   let savedCount = 0;
-  const crmFailures: string[] = [];
+  const savedDeliveryIds: number[] = [];
   for (let i = 0; i < input.purchases.length; i++) {
     const result = await insertFieldPurchaseDelivery({
       supabase,
@@ -525,11 +623,16 @@ export async function createFieldDeliveriesAndTrip(
       }
       return result;
     }
-    if (result.crmError) {
-      crmFailures.push(result.crmError);
-    }
+    savedDeliveryIds.push(result.deliveryId);
     savedCount += 1;
   }
+
+  const crmFailures = await retryUnsyncedFieldDeliveryExpenses({
+    supabase,
+    deliveryIds: savedDeliveryIds,
+    day,
+    keepinRefs,
+  });
 
   const tripParsed = tripFormSchema.safeParse({
     name: DEFAULT_RAW_TRIP_NAME,

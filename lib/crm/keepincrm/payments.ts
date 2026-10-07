@@ -417,6 +417,45 @@ export async function fetchKeepinPaymentsSince(
   return merged.filter((item) => (item.at?.slice(0, 10) ?? "") >= sinceYmd);
 }
 
+/** Коментар витрати закупівлі: `Закупівля сировини #<id>: …` */
+export function supplierDeliveryExpenseCommentMarker(deliveryId: number): string {
+  return `Закупівля сировини #${deliveryId}:`;
+}
+
+export function parseSupplierDeliveryIdFromExpenseComment(
+  comment: string | null | undefined
+): number | null {
+  if (!comment) return null;
+  const match = comment.match(/Закупівля сировини #(\d+):/);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/**
+ * Шукає вже створену витрату для поставки (ідемпотентність retry/cron).
+ * Сканує платежі від (atYmd − lookbackDays).
+ */
+export async function findKeepinExpensePaymentByDeliveryId(
+  deliveryId: number,
+  atYmd: string,
+  options?: { lookbackDays?: number; maxPages?: number }
+): Promise<number | null> {
+  const lookbackDays = options?.lookbackDays ?? 3;
+  const maxPages = options?.maxPages ?? 15;
+  const marker = supplierDeliveryExpenseCommentMarker(deliveryId);
+  const since = new Date(`${atYmd.slice(0, 10)}T00:00:00.000Z`);
+  if (!Number.isFinite(since.getTime())) {
+    return null;
+  }
+  since.setUTCDate(since.getUTCDate() - Math.max(0, lookbackDays));
+  const sinceYmd = since.toISOString().slice(0, 10);
+  const payments = await fetchKeepinPaymentsSince(sinceYmd, maxPages);
+  const hit = payments.find((p) => (p.comment ?? "").includes(marker));
+  const paymentId = Number(hit?.id);
+  return Number.isFinite(paymentId) && paymentId > 0 ? paymentId : null;
+}
+
 export function isKeepinTransferListItem(
   payment: KeepinPaymentListItem,
   toPurseId: number

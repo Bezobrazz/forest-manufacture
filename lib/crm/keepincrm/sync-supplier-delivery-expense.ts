@@ -1,6 +1,7 @@
 import {
   createKeepinExpensePayment,
   deleteKeepinPayment,
+  findKeepinExpensePaymentByDeliveryId,
   isKeepinSupplierExpenseSyncEnabled,
 } from "@/lib/crm/keepincrm/payments";
 
@@ -34,6 +35,7 @@ function sleep(ms: number): Promise<void> {
 /**
  * Проводить витрату в KeepinCRM (гаманець Петрович, категорія закупівлі сировини).
  * Повертає null, якщо синхронізація вимкнена або сума ≤ 0.
+ * Ідемпотентно: якщо витрата з цим #deliveryId уже є — повертає її id без POST.
  * При тимчасових збоях API робить кілька спроб.
  */
 export async function syncSupplierDeliveryExpenseToKeepin(
@@ -48,12 +50,25 @@ export async function syncSupplierDeliveryExpenseToKeepin(
     return null;
   }
 
+  const atYmd = input.atYmd.slice(0, 10);
+  try {
+    const existingId = await findKeepinExpensePaymentByDeliveryId(
+      input.deliveryId,
+      atYmd
+    );
+    if (existingId != null) {
+      return existingId;
+    }
+  } catch (error) {
+    console.error("KeepinCRM find existing expense:", error);
+  }
+
   let lastError: unknown;
   for (let attempt = 1; attempt <= CRM_SYNC_ATTEMPTS; attempt++) {
     try {
       return await createKeepinExpensePayment({
         amount,
-        atYmd: input.atYmd,
+        atYmd,
         comment: buildSupplierDeliveryExpenseComment(input),
         purseId: input.purseId && input.purseId > 0 ? input.purseId : 0,
         categoryId:
@@ -63,6 +78,17 @@ export async function syncSupplierDeliveryExpenseToKeepin(
       lastError = error;
       if (attempt < CRM_SYNC_ATTEMPTS) {
         await sleep(CRM_SYNC_RETRY_DELAY_MS * attempt);
+        try {
+          const existingId = await findKeepinExpensePaymentByDeliveryId(
+            input.deliveryId,
+            atYmd
+          );
+          if (existingId != null) {
+            return existingId;
+          }
+        } catch {
+          // continue retry POST
+        }
       }
     }
   }
