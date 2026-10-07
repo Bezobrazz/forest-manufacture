@@ -15,6 +15,7 @@ import {
 } from "@/app/actions/crm-profitability";
 import { getStatisticsPageData } from "@/app/statistics/actions";
 import { PACKING_BAG_PRODUCT_NAME } from "@/lib/packing-bags/packing-bag-purchase";
+import { isCostShiftWageCategory } from "@/lib/expenses/constants";
 import {
   Card,
   CardContent,
@@ -698,7 +699,7 @@ function StatisticsPageContent() {
       const day = toDayKey(expense.date);
       if (!isDayInRange(day, startDay, endDay)) return sum;
       const categoryName = String(expense.category?.name ?? "").trim();
-      if (categoryName !== "З.П. Погодинна") return sum;
+      if (!isCostShiftWageCategory(categoryName)) return sum;
       return sum + Number(expense.amount ?? 0);
     }, 0);
 
@@ -1027,7 +1028,7 @@ function StatisticsPageContent() {
       value: currentPeriodCostMetrics.fixedRewardPerBag ?? 0,
     },
     {
-      label: "Погодинна З.П. на мішок",
+      label: "З.П. змін на мішок",
       value: currentPeriodCostMetrics.hourlyWagePerBag ?? 0,
     },
     {
@@ -1819,10 +1820,11 @@ function StatisticsPageContent() {
           <CardTitle>Собівартість мішка</CardTitle>
           <CardDescription>
             Середня вартість мішка із закупок за період + середня вартість мішка з поїздок
-            «Сировина» за період + фіксована винагорода + погодинна З.П. на мішок +
-            податки та електроенергія (місячна сума ÷ середньомісячний випуск за останні{" "}
-            {AVERAGE_PRODUCTION_MONTHS_BACK} міс.) + оклади керівництва (за період ÷
-            вироблені мішки) + ціна «{PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
+            «Сировина» за період + фіксована винагорода + З.П. змін (погодинна, завантаження
+            кори, підрахунок завантаження) на мішок + податки та електроенергія (місячна
+            сума ÷ середньомісячний випуск за останні {AVERAGE_PRODUCTION_MONTHS_BACK}{" "}
+            міс.) + оклади керівництва (за період ÷ вироблені мішки) + ціна «
+            {PACKING_BAG_PRODUCT_NAME}» з останньої закупівлі.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -2182,14 +2184,14 @@ function StatisticsPageContent() {
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">Погодинна З.П. (сума)</span>
+              <span className="text-muted-foreground">З.П. змін (сума)</span>
               <span className="tabular-nums">
                 {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWageCosts, "₴")}
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
               <span className="text-muted-foreground">
-                К-ть готової продукції за період (база для погодинної З.П. та окладів
+                К-ть готової продукції за період (база для З.П. змін та окладів
                 керівництва)
               </span>
               <span className="tabular-nums">
@@ -2251,7 +2253,7 @@ function StatisticsPageContent() {
               </span>
             </div>
             <div className="flex justify-between gap-2 py-2 border-b">
-              <span className="text-muted-foreground">Погодинна З.П. на мішок</span>
+              <span className="text-muted-foreground">З.П. змін на мішок</span>
               <span className="tabular-nums">
                 {formatNumberWithUnit(currentPeriodCostMetrics.hourlyWagePerBag, "₴")}
               </span>

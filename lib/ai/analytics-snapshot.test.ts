@@ -50,6 +50,16 @@ const baseData: StatisticsPageData = {
       category: { name: "З.П. Погодинна" },
     },
     {
+      amount: 500,
+      date: "2026-07-11",
+      category: { name: "З/П Завантаження кори" },
+    },
+    {
+      amount: 200,
+      date: "2026-07-12",
+      category: { name: "З/П Підрахунок завантаження" },
+    },
+    {
       amount: 1000,
       date: "2026-07-12",
       category: { name: "Паливо" },
@@ -127,7 +137,7 @@ test("buildAnalyticsSnapshot aggregates production and costs for period", () => 
   assert.equal(snapshot.production.previousTotalBags, 80);
   assert.equal(snapshot.production.shiftsCount, 1);
   assert.ok(snapshot.production.changePercent != null);
-  assert.equal(snapshot.expenses.hourlyWageUah, 3000);
+  assert.equal(snapshot.expenses.hourlyWageUah, 3700);
   assert.equal(snapshot.trips.rawCount, 1);
   assert.equal(snapshot.trips.commerceCount, 1);
   assert.equal(snapshot.trips.lossCount, 1);

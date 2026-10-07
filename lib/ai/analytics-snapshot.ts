@@ -8,6 +8,7 @@ import {
   averageMonthlyProductionBags,
   monthlyOverheadPerBag,
 } from "@/lib/statistics/fixed-overhead";
+import { isCostShiftWageCategory } from "@/lib/expenses/constants";
 
 /** Обрізання довгих списків у snapshot (етап 4). */
 export const SNAPSHOT_LIMITS = {
@@ -283,7 +284,7 @@ export function buildAnalyticsSnapshot(
       const day = toDayKey(expense.date);
       if (!isDayInRange(day, from, to)) return sum;
       const categoryName = String(expense.category?.name ?? "").trim();
-      if (categoryName !== "З.П. Погодинна") return sum;
+      if (!isCostShiftWageCategory(categoryName)) return sum;
       return sum + Number(expense.amount ?? 0);
     }, 0);
 
@@ -387,7 +388,7 @@ export function buildAnalyticsSnapshot(
       uah: fixedRewardPerBag,
     },
     {
-      label: "Погодинна З.П.",
+      label: "З.П. змін",
       uah: hourlyWagePerBag,
     },
     {
