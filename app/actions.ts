@@ -33,6 +33,7 @@ import {
   buildShiftHourlyWageDescription,
   isHourlyWageDescriptionForShift,
   parseShiftHourlyWageDescription,
+  type HourlyWageKind,
 } from "@/lib/shifts/hourly-wage-description";
 import {
   DEFAULT_SHIFT_LOADING_RATES,
@@ -2460,12 +2461,45 @@ export async function createRawCostRepayment(
 }
 
 const HOURLY_WAGE_CATEGORY_NAME = "З.П. Погодинна";
+const LOADING_COUNT_CATEGORY_NAME = "З/П Підрахунок завантаження";
+
+const SHIFT_WAGE_EXPENSE_CATEGORY_NAMES = [
+  HOURLY_WAGE_CATEGORY_NAME,
+  LOADING_COUNT_CATEGORY_NAME,
+] as const;
+
+const categoryNameForHourlyWageKind = (kind?: HourlyWageKind) =>
+  kind === "loading_count"
+    ? LOADING_COUNT_CATEGORY_NAME
+    : HOURLY_WAGE_CATEGORY_NAME;
+
+const pickCategoryByName = (
+  categories: { id: number; name: string }[],
+  name: string
+) => {
+  const matches = categories.filter((c) => c.name === name);
+  return matches.length > 0
+    ? matches.sort((a, b) => a.id - b.id)[0]
+    : null;
+};
+
+const ensureExpenseCategory = async (name: string) => {
+  const categories = (await getExpenseCategories()) as {
+    id: number;
+    name: string;
+  }[];
+  const existing = pickCategoryByName(categories, name);
+  if (existing) return existing;
+  const created = await createExpenseCategory(name, null);
+  return { id: created.id, name: created.name };
+};
 
 export async function createHourlyWageExpense(
   amount: number,
   date: string,
   description: string,
-  shiftId: number
+  shiftId: number,
+  kind?: HourlyWageKind
 ): Promise<
   | {
       ok: true;
@@ -2477,17 +2511,9 @@ export async function createHourlyWageExpense(
     if (amount <= 0) {
       return { ok: false, error: "Сума має бути більше нуля" };
     }
-    const categories = await getExpenseCategories();
-    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
-      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
+    const category = await ensureExpenseCategory(
+      categoryNameForHourlyWageKind(kind)
     );
-    let category = hourlyMatches.length > 0
-      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
-      : null;
-    if (!category) {
-      const created = await createExpenseCategory(HOURLY_WAGE_CATEGORY_NAME, null);
-      category = { id: created.id, name: created.name };
-    }
     const created = await createExpense(category.id, amount, description, date);
     revalidatePath(`/shifts/${shiftId}`);
     revalidatePath("/shifts");
@@ -2525,23 +2551,25 @@ export async function updateHourlyWageExpenseComment(
     }
 
     const supabase = await createServerClient();
-    const categories = await getExpenseCategories();
-    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
-      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
-    );
-    const category = hourlyMatches.length > 0
-      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
-      : null;
+    const categories = (await getExpenseCategories()) as {
+      id: number;
+      name: string;
+    }[];
+    const allowedCategoryIds = SHIFT_WAGE_EXPENSE_CATEGORY_NAMES.map((name) =>
+      pickCategoryByName(categories, name)
+    )
+      .filter((c): c is { id: number; name: string } => c != null)
+      .map((c) => c.id);
 
-    if (!category) {
-      return { ok: false, error: "Категорію З.П. Погодинна не знайдено" };
+    if (allowedCategoryIds.length === 0) {
+      return { ok: false, error: "Категорії витрат зміни не знайдено" };
     }
 
     const { data: existing, error: existingError } = await supabase
       .from("expenses")
       .select("id, amount, description, date, category_id")
       .eq("id", expenseId)
-      .eq("category_id", category.id)
+      .in("category_id", allowedCategoryIds)
       .maybeSingle();
 
     if (existingError) {
@@ -2600,20 +2628,22 @@ export async function getHourlyWageExpensesForShift(
 ): Promise<Array<{ id: number; amount: number; description: string; date: string }>> {
   try {
     const supabase = await createServerClient();
-    const categories = await getExpenseCategories();
-    const hourlyMatches = (categories as { id: number; name: string }[]).filter(
-      (c) => c.name === HOURLY_WAGE_CATEGORY_NAME
-    );
-    const category = hourlyMatches.length > 0
-      ? hourlyMatches.sort((a, b) => a.id - b.id)[0]
-      : null;
+    const categories = (await getExpenseCategories()) as {
+      id: number;
+      name: string;
+    }[];
+    const categoryIds = SHIFT_WAGE_EXPENSE_CATEGORY_NAMES.map((name) =>
+      pickCategoryByName(categories, name)
+    )
+      .filter((c): c is { id: number; name: string } => c != null)
+      .map((c) => c.id);
 
-    if (!category) return [];
+    if (categoryIds.length === 0) return [];
 
     const { data, error } = await supabase
       .from("expenses")
       .select("id, amount, description, date")
-      .eq("category_id", category.id)
+      .in("category_id", categoryIds)
       .ilike("description", `%Зміна #${shiftId}%`)
       .order("date", { ascending: false });
 

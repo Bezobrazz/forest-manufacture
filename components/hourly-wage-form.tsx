@@ -875,7 +875,8 @@ function LoadingBagExpenseForm({
           kind,
           `${title}, ${bagsNum} міш. × ${nextRates[rateKey]} грн`
         ),
-        shiftId
+        shiftId,
+        kind
       );
       if (result.ok) {
         addExpense(result.expense);
@@ -998,8 +999,9 @@ export function HourlyWageSections() {
             Витрати за завантаження
           </CardTitle>
           <CardDescription>
-            Підрахунок завантаження та завантаження продукції: мішки × ставка.
-            Ставки зберігаються і підставляються наступного разу.
+            Підрахунок завантаження (категорія «З/П Підрахунок завантаження») та
+            завантаження продукції: мішки × ставка. Ставки зберігаються і
+            підставляються наступного разу.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">

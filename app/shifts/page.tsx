@@ -109,9 +109,11 @@ export default async function ShiftsPage({
   const hourlyByKindByShiftId = new Map<number, Record<HourlyWageKind, number>>();
 
   expenses.forEach((expense) => {
-    const isHourlyWageCategory =
-      expense?.category?.name === "З.П. Погодинна";
-    if (!isHourlyWageCategory) return;
+    const categoryName = expense?.category?.name;
+    const isShiftWageCategory =
+      categoryName === "З.П. Погодинна" ||
+      categoryName === "З/П Підрахунок завантаження";
+    if (!isShiftWageCategory) return;
 
     const description = expense.description ?? "";
     const shiftMatch = description.match(/Зміна\s*#(\d+)/i);
