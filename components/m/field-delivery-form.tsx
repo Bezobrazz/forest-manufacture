@@ -295,7 +295,10 @@ export function FieldDeliveryForm({
         fuelPriceUahPerL: fuelPriceUah,
       });
       if (!result.ok) {
-        toast.error("Помилка", { description: result.error });
+        const isSystemFailure = result.error.includes("збій програми");
+        toast.error(isSystemFailure ? "Збій збереження" : "Помилка", {
+          description: result.error,
+        });
         return;
       }
       if (result.crmWarning) {

@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { requireMiniAppAccess } from "@/lib/telegram/mini-app-session";
 import { resolveSupplierDeliveryPayableAmount } from "@/lib/suppliers/delivery-payable-amount";
-import { syncSupplierDeliveryExpenseToKeepin } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
+import {
+  syncSupplierDeliveryExpenseDeleteToKeepin,
+  syncSupplierDeliveryExpenseToKeepin,
+} from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
 import { resolveKeepinSupplierExpenseRefs } from "@/lib/crm/keepincrm/payments";
 import { calculateTripMetrics } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
@@ -243,6 +246,170 @@ async function syncSupplierAdvanceFromLedger(
   await supabase.from("suppliers").update({ advance }).eq("id", supplierId);
 }
 
+async function adjustWarehouseInventory(params: {
+  supabase: ReturnType<typeof createServiceRoleClient>;
+  warehouseId: number;
+  productId: number;
+  delta: number;
+}): Promise<void> {
+  const { supabase, warehouseId, productId, delta } = params;
+  if (!Number.isFinite(delta) || delta === 0) return;
+
+  const { error: rpcError } = await supabase.rpc(
+    "update_warehouse_inventory_on_delete",
+    {
+      p_warehouse_id: warehouseId,
+      p_product_id: productId,
+      p_quantity: delta,
+    }
+  );
+  if (!rpcError) return;
+
+  const { data: currentInventory } = await supabase
+    .from("warehouse_inventory")
+    .select("quantity")
+    .eq("warehouse_id", warehouseId)
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (currentInventory) {
+    const newQuantity = Math.max(
+      0,
+      Number(currentInventory.quantity) + delta
+    );
+    await supabase
+      .from("warehouse_inventory")
+      .update({
+        quantity: newQuantity,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("warehouse_id", warehouseId)
+      .eq("product_id", productId);
+    return;
+  }
+
+  if (delta > 0) {
+    await supabase.from("warehouse_inventory").insert({
+      warehouse_id: warehouseId,
+      product_id: productId,
+      quantity: delta,
+      updated_at: new Date().toISOString(),
+    });
+  }
+}
+
+/** Відкат закупівель Mini App, якщо поїздка/наступна закупівля не збереглись. */
+async function rollbackFieldPurchaseDeliveries(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  deliveryIds: number[]
+): Promise<void> {
+  const uniqueIds = [...new Set(deliveryIds.filter((id) => id > 0))];
+  if (!uniqueIds.length) return;
+
+  const supplierIds = new Set<number>();
+
+  for (const deliveryId of uniqueIds) {
+    const { data: delivery, error } = await supabase
+      .from("supplier_deliveries")
+      .select(
+        "id, quantity, product_id, warehouse_id, supplier_id, material_product_id, material_quantity, keepin_payment_id"
+      )
+      .eq("id", deliveryId)
+      .maybeSingle();
+
+    if (error || !delivery) {
+      console.error("rollbackFieldPurchaseDeliveries load:", deliveryId, error);
+      continue;
+    }
+
+    const supplierId = Number(delivery.supplier_id);
+    if (Number.isFinite(supplierId) && supplierId > 0) {
+      supplierIds.add(supplierId);
+    }
+
+    try {
+      await syncSupplierDeliveryExpenseDeleteToKeepin(
+        delivery.keepin_payment_id as number | null
+      );
+    } catch (crmError) {
+      console.error(
+        "rollbackFieldPurchaseDeliveries CRM:",
+        deliveryId,
+        crmError
+      );
+    }
+
+    const { data: inventoryRows } = await supabase
+      .from("inventory_transactions")
+      .select("id, product_id, quantity, transaction_type, warehouse_id")
+      .eq("reference_id", deliveryId)
+      .in("transaction_type", ["income", "shipment"]);
+
+    let hadMaterialShipment = false;
+    for (const tx of inventoryRows ?? []) {
+      const qty = Number(tx.quantity);
+      const warehouseId = Number(tx.warehouse_id ?? delivery.warehouse_id);
+      const productId = Number(tx.product_id);
+      if (!Number.isFinite(qty) || !warehouseId || !productId) continue;
+
+      if (tx.transaction_type === "shipment") {
+        hadMaterialShipment = true;
+      }
+
+      // income: було +, відкат −; shipment: було −, відкат +
+      const delta =
+        tx.transaction_type === "income" ? -Math.abs(qty) : Math.abs(qty);
+      await adjustWarehouseInventory({
+        supabase,
+        warehouseId,
+        productId,
+        delta,
+      });
+      await supabase.from("inventory_transactions").delete().eq("id", tx.id);
+    }
+
+    const materialQty = Number(delivery.material_quantity ?? 0);
+    const rawQty = Number(delivery.quantity ?? 0);
+    // materials_balance оновлюється лише після успішного shipment — відкат теж лише тоді
+    if (
+      hadMaterialShipment &&
+      materialQty > 0 &&
+      Number.isFinite(supplierId) &&
+      supplierId > 0
+    ) {
+      const { data: supplierRow } = await supabase
+        .from("suppliers")
+        .select("materials_balance")
+        .eq("id", supplierId)
+        .maybeSingle();
+      const currentBalance = Number(supplierRow?.materials_balance ?? 0);
+      // insert: balance += (materialQty - rawQty); reverse that
+      await supabase
+        .from("suppliers")
+        .update({
+          materials_balance: currentBalance - (materialQty - rawQty),
+        })
+        .eq("id", supplierId);
+    }
+
+    const { error: deleteError } = await supabase
+      .from("supplier_deliveries")
+      .delete()
+      .eq("id", deliveryId);
+    if (deleteError) {
+      console.error(
+        "rollbackFieldPurchaseDeliveries delete:",
+        deliveryId,
+        deleteError
+      );
+    }
+  }
+
+  for (const supplierId of supplierIds) {
+    await syncSupplierAdvanceFromLedger(supabase, supplierId);
+  }
+}
+
 async function insertFieldPurchaseDelivery(params: {
   supabase: ReturnType<typeof createServiceRoleClient>;
   accessId: string;
@@ -252,9 +419,11 @@ async function insertFieldPurchaseDelivery(params: {
   day: string;
   lineIndex: number;
   keepinRefs: { purseId: number; categoryId: number } | null;
+  /** CRM лише після успішної поїздки — щоб не лишати orphan payments при rollback. */
+  syncCrm?: boolean;
 }): Promise<
   | { ok: true; deliveryId: number; crmError?: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; deliveryId?: number }
 > {
   const {
     supabase,
@@ -265,6 +434,7 @@ async function insertFieldPurchaseDelivery(params: {
     day,
     lineIndex,
     keepinRefs,
+    syncCrm = true,
   } = params;
   const lineLabel = `Закупівля #${lineIndex + 1}`;
 
@@ -342,6 +512,7 @@ async function insertFieldPurchaseDelivery(params: {
     if (txError) {
       return {
         ok: false,
+        deliveryId: delivery.id as number,
         error: `${lineLabel}: збережено, але не вдалося списати матеріали зі складу`,
       };
     }
@@ -402,42 +573,44 @@ async function insertFieldPurchaseDelivery(params: {
       .eq("id", delivery.id);
     await syncSupplierAdvanceFromLedger(supabase, purchase.supplierId);
 
-    try {
-      const paymentId = await syncSupplierDeliveryExpenseToKeepin({
-        deliveryId: delivery.id as number,
-        amount: purchaseAmount,
-        atYmd: day,
-        supplierName:
-          (delivery as { supplier?: { name?: string } }).supplier?.name ?? "",
-        productName:
-          (delivery as { product?: { name?: string } }).product?.name ?? "",
-        quantity: purchase.quantity,
-        purseId: keepinRefs?.purseId,
-        categoryId: keepinRefs?.categoryId,
-      });
-      if (paymentId != null) {
-        const { error: crmLinkError } = await supabase
-          .from("supplier_deliveries")
-          .update({ keepin_payment_id: paymentId })
-          .eq("id", delivery.id);
-        if (crmLinkError) {
-          console.error("keepin_payment_id update:", crmLinkError);
-          return {
-            ok: true,
-            deliveryId: delivery.id as number,
-            crmError: `${lineLabel} (#${delivery.id}): витрату створено в CRM, але не привʼязано в ERP`,
-          };
+    if (syncCrm) {
+      try {
+        const paymentId = await syncSupplierDeliveryExpenseToKeepin({
+          deliveryId: delivery.id as number,
+          amount: purchaseAmount,
+          atYmd: day,
+          supplierName:
+            (delivery as { supplier?: { name?: string } }).supplier?.name ?? "",
+          productName:
+            (delivery as { product?: { name?: string } }).product?.name ?? "",
+          quantity: purchase.quantity,
+          purseId: keepinRefs?.purseId,
+          categoryId: keepinRefs?.categoryId,
+        });
+        if (paymentId != null) {
+          const { error: crmLinkError } = await supabase
+            .from("supplier_deliveries")
+            .update({ keepin_payment_id: paymentId })
+            .eq("id", delivery.id);
+          if (crmLinkError) {
+            console.error("keepin_payment_id update:", crmLinkError);
+            return {
+              ok: true,
+              deliveryId: delivery.id as number,
+              crmError: `${lineLabel} (#${delivery.id}): витрату створено в CRM, але не привʼязано в ERP`,
+            };
+          }
         }
+      } catch (crmError) {
+        console.error("KeepinCRM from Mini App:", crmError);
+        const detail =
+          crmError instanceof Error ? crmError.message : "невідома помилка";
+        return {
+          ok: true,
+          deliveryId: delivery.id as number,
+          crmError: `${lineLabel} (#${delivery.id}): ${detail}`,
+        };
       }
-    } catch (crmError) {
-      console.error("KeepinCRM from Mini App:", crmError);
-      const detail =
-        crmError instanceof Error ? crmError.message : "невідома помилка";
-      return {
-        ok: true,
-        deliveryId: delivery.id as number,
-        crmError: `${lineLabel} (#${delivery.id}): ${detail}`,
-      };
     }
   }
 
@@ -594,46 +767,7 @@ export async function createFieldDeliveriesAndTrip(
     TYPE_DEFAULTS[vehicle.type as "van" | "truck"] ?? TYPE_DEFAULTS.van;
   const day = input.deliveryDate.slice(0, 10);
 
-  let keepinRefs: { purseId: number; categoryId: number } | null = null;
-  try {
-    keepinRefs = await resolveKeepinSupplierExpenseRefs();
-  } catch (error) {
-    console.error("KeepinCRM refs resolve (Mini App):", error);
-  }
-
-  let savedCount = 0;
-  const savedDeliveryIds: number[] = [];
-  for (let i = 0; i < input.purchases.length; i++) {
-    const result = await insertFieldPurchaseDelivery({
-      supabase,
-      accessId: auth.access.id,
-      purchase: input.purchases[i],
-      productId: input.productId,
-      warehouseId: input.warehouseId,
-      day,
-      lineIndex: i,
-      keepinRefs,
-    });
-    if (!result.ok) {
-      if (savedCount > 0) {
-        return {
-          ok: false,
-          error: `${result.error}. Збережено закупівель: ${savedCount}, поїздку не створено`,
-        };
-      }
-      return result;
-    }
-    savedDeliveryIds.push(result.deliveryId);
-    savedCount += 1;
-  }
-
-  const crmFailures = await retryUnsyncedFieldDeliveryExpenses({
-    supabase,
-    deliveryIds: savedDeliveryIds,
-    day,
-    keepinRefs,
-  });
-
+  // Поїздку валідуємо ДО будь-яких записів у БД — інакше можливі orphan-закупівлі.
   const tripParsed = tripFormSchema.safeParse({
     name: DEFAULT_RAW_TRIP_NAME,
     trip_start_date: day,
@@ -665,10 +799,7 @@ export async function createFieldDeliveriesAndTrip(
       first.end_odometer_km?.[0] ??
       first.vehicle_id?.[0] ??
       tripParsed.error.message;
-    return {
-      ok: false,
-      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${msg}`,
-    };
+    return { ok: false, error: msg };
   }
 
   const d = tripParsed.data;
@@ -678,10 +809,56 @@ export async function createFieldDeliveriesAndTrip(
   } catch (err) {
     return {
       ok: false,
-      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${
-        err instanceof Error ? err.message : "помилка розрахунку"
-      }`,
+      error: err instanceof Error ? err.message : "Помилка розрахунку поїздки",
     };
+  }
+
+  let keepinRefs: { purseId: number; categoryId: number } | null = null;
+  try {
+    keepinRefs = await resolveKeepinSupplierExpenseRefs();
+  } catch (error) {
+    console.error("KeepinCRM refs resolve (Mini App):", error);
+  }
+
+  const savedDeliveryIds: number[] = [];
+  const USER_SAVE_FAILURE_MESSAGE =
+    "Внесіть дані ще раз — стався збій програми. Нічого не збережено.";
+
+  const failAndRollback = async (technicalError: string) => {
+    console.error("Mini App save failed, rolling back:", technicalError, {
+      deliveryIds: savedDeliveryIds,
+    });
+    try {
+      await rollbackFieldPurchaseDeliveries(supabase, savedDeliveryIds);
+    } catch (rollbackError) {
+      console.error("Mini App rollback after failure:", rollbackError);
+      return {
+        ok: false as const,
+        error:
+          "Внесіть дані ще раз — стався збій програми. Перевірте вкладку «Операції», чи немає дубля.",
+      };
+    }
+    return { ok: false as const, error: USER_SAVE_FAILURE_MESSAGE };
+  };
+
+  for (let i = 0; i < input.purchases.length; i++) {
+    const result = await insertFieldPurchaseDelivery({
+      supabase,
+      accessId: auth.access.id,
+      purchase: input.purchases[i],
+      productId: input.productId,
+      warehouseId: input.warehouseId,
+      day,
+      lineIndex: i,
+      keepinRefs,
+      syncCrm: false,
+    });
+    if (result.deliveryId) {
+      savedDeliveryIds.push(result.deliveryId);
+    }
+    if (!result.ok) {
+      return failAndRollback(result.error);
+    }
   }
 
   const { error: tripError } = await supabase.from("trips").insert({
@@ -722,11 +899,18 @@ export async function createFieldDeliveriesAndTrip(
   });
 
   if (tripError) {
-    return {
-      ok: false,
-      error: `Закупівлі збережено (${savedCount}), поїздку — ні: ${tripError.message}`,
-    };
+    return failAndRollback(
+      `Не вдалося зберегти поїздку: ${tripError.message}`
+    );
   }
+
+  // CRM лише після успішної пари «закупівлі + поїздка».
+  const crmFailures = await retryUnsyncedFieldDeliveryExpenses({
+    supabase,
+    deliveryIds: savedDeliveryIds,
+    day,
+    keepinRefs,
+  });
 
   await notifyFieldDeliveriesSubmitted({
     accessName: auth.access.display_name,
@@ -750,7 +934,7 @@ export async function createFieldDeliveriesAndTrip(
   if (crmFailures.length > 0) {
     return {
       ok: true,
-      crmWarning: `Закупівлі збережено, але в KeepinCRM не проведено: ${crmFailures.join("; ")}`,
+      crmWarning: `Закупівлі і поїздку збережено, але в KeepinCRM не проведено: ${crmFailures.join("; ")}`,
     };
   }
 
