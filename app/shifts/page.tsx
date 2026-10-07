@@ -21,9 +21,12 @@ import { ShiftDatePicker } from "@/components/shift-date-picker";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
+import {
+  parseShiftHourlyWageKind,
+  type HourlyWageKind,
+} from "@/lib/shifts/hourly-wage-description";
 
 import {
-  ArrowLeft,
   Calendar,
   Clock,
   Plus,
@@ -34,6 +37,41 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type ShiftWageBreakdown = {
+  shiftId: number;
+  productionReward: number;
+  accounting: number;
+  manual: number;
+  loadingCount: number;
+  loading: number;
+  total: number;
+};
+
+const emptyHourlyByKind = (): Record<HourlyWageKind, number> => ({
+  accounting: 0,
+  manual: 0,
+  loading_count: 0,
+  loading: 0,
+});
+
+const WAGE_BREAKDOWN_LABELS: Array<{
+  key: keyof Pick<
+    ShiftWageBreakdown,
+    | "productionReward"
+    | "accounting"
+    | "manual"
+    | "loadingCount"
+    | "loading"
+  >;
+  label: string;
+}> = [
+  { key: "productionReward", label: "Винагорода за продукцію" },
+  { key: "accounting", label: "Облік витрат (погодинна)" },
+  { key: "manual", label: "Сума витрат" },
+  { key: "loadingCount", label: "Підрахунок завантаження" },
+  { key: "loading", label: "Завантаження продукції" },
+];
 
 export default async function ShiftsPage({
   searchParams,
@@ -68,6 +106,7 @@ export default async function ShiftsPage({
   const completedShiftIds = new Set(detailedShifts.map((shift) => shift.id));
 
   const hourlyExpensesByShiftId = new Map<number, number>();
+  const hourlyByKindByShiftId = new Map<number, Record<HourlyWageKind, number>>();
 
   expenses.forEach((expense) => {
     const isHourlyWageCategory =
@@ -81,12 +120,50 @@ export default async function ShiftsPage({
     const shiftId = Number.parseInt(shiftMatch[1], 10);
     if (!completedShiftIds.has(shiftId)) return;
 
+    const amount = Number(expense.amount ?? 0);
     const currentAmount = hourlyExpensesByShiftId.get(shiftId) ?? 0;
-    hourlyExpensesByShiftId.set(
-      shiftId,
-      currentAmount + Number(expense.amount ?? 0),
-    );
+    hourlyExpensesByShiftId.set(shiftId, currentAmount + amount);
+
+    const kind = parseShiftHourlyWageKind(description, shiftId);
+    const byKind = hourlyByKindByShiftId.get(shiftId) ?? emptyHourlyByKind();
+    byKind[kind] += amount;
+    hourlyByKindByShiftId.set(shiftId, byKind);
   });
+
+  const buildShiftWageBreakdown = (
+    shift: (typeof detailedShifts)[number],
+  ): ShiftWageBreakdown => {
+    let productionReward = 0;
+    if (shift.production && shift.production.length > 0) {
+      shift.production.forEach((item) => {
+        const rewardPerUnit = Number(
+          item.reward_override ?? item.product.reward ?? 0,
+        );
+        if (rewardPerUnit > 0) {
+          productionReward += item.quantity * rewardPerUnit;
+        }
+      });
+    }
+
+    const byKind = hourlyByKindByShiftId.get(shift.id) ?? emptyHourlyByKind();
+    const accounting = byKind.accounting;
+    const manual = byKind.manual;
+    const loadingCount = byKind.loading_count;
+    const loading = byKind.loading;
+    const hourlyTotal =
+      hourlyExpensesByShiftId.get(shift.id) ??
+      accounting + manual + loadingCount + loading;
+
+    return {
+      shiftId: shift.id,
+      productionReward,
+      accounting,
+      manual,
+      loadingCount,
+      loading,
+      total: productionReward + hourlyTotal,
+    };
+  };
 
   // Функція для отримання дня тижня з дати
   const getDayOfWeek = (dateString: string) => {
@@ -126,6 +203,7 @@ export default async function ShiftsPage({
       day: string;
       date: string;
       shifts: typeof detailedShifts;
+      breakdowns: ShiftWageBreakdown[];
       totalWages: number;
     }
   > = {};
@@ -155,21 +233,8 @@ export default async function ShiftsPage({
 
     if (!isInRange) return;
 
-    let shiftWages = 0;
-    if (shift.production && shift.production.length > 0) {
-      shift.production.forEach((item) => {
-        const rewardPerUnit = Number(
-          item.reward_override ?? item.product.reward ?? 0,
-        );
-        if (rewardPerUnit > 0) {
-          shiftWages += item.quantity * rewardPerUnit;
-        }
-      });
-    }
-
-    shiftWages += hourlyExpensesByShiftId.get(shift.id) ?? 0;
-
-    weeklyTotalWages += shiftWages;
+    const breakdown = buildShiftWageBreakdown(shift);
+    weeklyTotalWages += breakdown.total;
 
     if (shift.production && shift.production.length > 0) {
       shift.production.forEach((item) => {
@@ -184,12 +249,14 @@ export default async function ShiftsPage({
         day: dayOfWeek,
         date: shiftDate.toISOString(),
         shifts: [],
+        breakdowns: [],
         totalWages: 0,
       };
     }
 
     shiftsByDay[dateKey].shifts.push(shift);
-    shiftsByDay[dateKey].totalWages += shiftWages;
+    shiftsByDay[dateKey].breakdowns.push(breakdown);
+    shiftsByDay[dateKey].totalWages += breakdown.total;
   });
 
   const sortedDays = Object.keys(shiftsByDay).sort().reverse();
@@ -320,23 +387,76 @@ export default async function ShiftsPage({
             {sortedDays.length > 0 ? (
               <div className="mt-4">
                 <h4 className="text-sm font-medium mb-2">Деталі по днях</h4>
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {sortedDays.map((dateKey) => {
                     const dayData = shiftsByDay[dateKey];
                     return (
                       <div
                         key={dateKey}
-                        className="flex items-center justify-between py-2 border-b last:border-0"
+                        className="rounded-lg border bg-muted/30 p-3 space-y-3"
                       >
-                        <div>
-                          <div className="font-medium">{dayData.day}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatDate(dayData.date)}
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{dayData.day}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatDate(dayData.date)}
+                            </div>
+                          </div>
+                          <div className="font-medium tabular-nums">
+                            {formatNumberWithUnit(dayData.totalWages, "грн", {
+                              maximumFractionDigits: 2,
+                            })}
                           </div>
                         </div>
-                        <div className="font-medium">
-                          {formatNumberWithUnit(dayData.totalWages, "грн", {
-                            maximumFractionDigits: 2,
+
+                        <div className="space-y-3">
+                          {dayData.breakdowns.map((breakdown) => {
+                            const parts = WAGE_BREAKDOWN_LABELS.filter(
+                              ({ key }) => breakdown[key] > 0,
+                            );
+                            return (
+                              <div
+                                key={breakdown.shiftId}
+                                className="rounded-md border bg-background p-3 space-y-2"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <Link
+                                    href={`/shifts/${breakdown.shiftId}`}
+                                    className="font-medium text-primary hover:underline"
+                                  >
+                                    Зміна #{breakdown.shiftId}
+                                  </Link>
+                                  <div className="font-medium tabular-nums">
+                                    {formatNumberWithUnit(breakdown.total, "грн", {
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </div>
+                                </div>
+                                {parts.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {parts.map(({ key, label }) => (
+                                      <div
+                                        key={key}
+                                        className="flex items-center justify-between gap-3 text-sm text-muted-foreground"
+                                      >
+                                        <span>{label}</span>
+                                        <span className="tabular-nums">
+                                          {formatNumberWithUnit(
+                                            breakdown[key],
+                                            "грн",
+                                            { maximumFractionDigits: 2 },
+                                          )}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">
+                                    Немає нарахувань за цю зміну
+                                  </p>
+                                )}
+                              </div>
+                            );
                           })}
                         </div>
                       </div>
@@ -417,22 +537,8 @@ export default async function ShiftsPage({
                         );
                         if (!shiftDetail) return null;
 
-                        let shiftWages = 0;
-                        if (
-                          shiftDetail.production &&
-                          shiftDetail.production.length > 0
-                        ) {
-                          shiftDetail.production.forEach((item) => {
-                            const rewardPerUnit = Number(
-                              item.reward_override ?? item.product.reward ?? 0,
-                            );
-                            if (rewardPerUnit > 0) {
-                              shiftWages += item.quantity * rewardPerUnit;
-                            }
-                          });
-                        }
-
-                        shiftWages += hourlyExpensesByShiftId.get(shift.id) ?? 0;
+                        const shiftWages =
+                          buildShiftWageBreakdown(shiftDetail).total;
 
                         if (shiftWages > 0) {
                           return (
