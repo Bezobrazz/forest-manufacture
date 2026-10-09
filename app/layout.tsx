@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
 import { ConditionalFooter } from "@/components/conditional-footer";
+import { ConditionalHeader } from "@/components/conditional-header";
 import { PackingBagLowStockBanner } from "@/components/packing-bag-low-stock-banner";
 import { RuntimeErrorHandler } from "@/components/runtime-error-handler";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className="flex flex-col min-h-screen">
         <RuntimeErrorHandler />
         <PackingBagLowStockBanner />
+        <ConditionalHeader />
         <main className="flex-1">{children}</main>
         <ConditionalFooter />
         <Toaster />
