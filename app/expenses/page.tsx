@@ -7,6 +7,7 @@ import {
   Plus,
   DollarSign,
   Trash2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Calendar,
@@ -277,6 +278,7 @@ function ExpensesPageContent() {
     from: undefined,
     to: undefined,
   });
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
 
@@ -1428,182 +1430,229 @@ function ExpensesPageContent() {
           <TabsTrigger value="dubrovytsia">Баланс Дубровиця</TabsTrigger>
         </TabsList>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant={period === "day" ? "default" : "outline"}
-            onClick={() => {
-              setPeriod("day");
-              setDateRange({ from: undefined, to: undefined });
-            }}
-          >
-            День
-          </Button>
-          <Button
-            variant={period === "week" ? "default" : "outline"}
-            onClick={() => {
-              setPeriod("week");
-              setDateRange({ from: undefined, to: undefined });
-            }}
-          >
-            Тиждень
-          </Button>
-          <Button
-            variant={period === "month" ? "default" : "outline"}
-            onClick={() => {
-              setPeriod("month");
-              setDateRange({ from: undefined, to: undefined });
-            }}
-          >
-            Місяць
-          </Button>
-          <Button
-            variant={period === "year" ? "default" : "outline"}
-            onClick={() => {
-              setPeriod("year");
-              setDateRange({ from: undefined, to: undefined });
-            }}
-          >
-            Рік
-          </Button>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={dateRange.from ? "default" : "outline"}
-                className={cn(
-                  "justify-start text-left font-normal",
-                  !dateRange.from && "text-muted-foreground"
-                )}
-              >
-                <Calendar className="mr-2 h-4 w-4" />
-                {dateRange.from ? (
-                  dateRange.to ? (
-                    <>
-                      {formatDate(dateRange.from.toISOString())} -{" "}
-                      {formatDate(dateRange.to.toISOString())}
-                    </>
-                  ) : (
-                    formatDate(dateRange.from.toISOString())
-                  )
-                ) : (
-                  <span className="text-black">Виберіть період</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <CalendarComponent
-                initialFocus
-                mode="range"
-                defaultMonth={dateRange.from}
-                selected={dateRange}
-                onSelect={(range) => {
-                  if (range) {
-                    setDateRange({
-                      from: range.from,
-                      to: range.to || range.from,
-                    });
-                    if (range.from) {
-                      setPeriod("custom");
-                    }
-                  } else {
-                    setDateRange({ from: undefined, to: undefined });
-                  }
-                }}
-                numberOfMonths={2}
-                locale={uk}
-                weekStartsOn={1}
-              />
-            </PopoverContent>
-          </Popover>
-
-          {activeTab === "expenses" && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={selectedCategories.length > 0 ? "default" : "outline"}
-                className="justify-start text-left font-normal"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mr-2 h-4 w-4"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M7 12h10" />
-                  <path d="M10 18h4" />
-                </svg>
-                {selectedCategories.length > 0
-                  ? `Категорії (${selectedCategories.length})`
-                  : "Всі категорії"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-4" align="start">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Категорії</h4>
-                  {selectedCategories.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedCategories([])}
-                    >
-                      Скинути
-                    </Button>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {sortedCategoryFilterOptions.map((option) => (
-                    <div
-                      key={option.id}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={`category-filter-${option.id}`}
-                        checked={selectedCategories.includes(option.id)}
-                        onCheckedChange={(value) => {
-                          const isChecked = value === true;
-                          if (isChecked) {
-                            setSelectedCategories([
-                              ...selectedCategories,
-                              option.id,
-                            ]);
-                          } else {
-                            setSelectedCategories(
-                              selectedCategories.filter(
-                                (id) => id !== option.id
-                              )
-                            );
-                          }
-                        }}
-                        className="border-black data-[state=checked]:bg-black data-[state=checked]:text-white"
-                      />
-                      <label
-                        htmlFor={`category-filter-${option.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {option.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-          )}
-        </div>
+      <div className="space-y-2">
         {activeTab === "expenses" && (
-          <div className="text-2xl font-bold">
+          <div className="text-2xl font-bold md:hidden">
             {formatNumberWithUnit(totalExpenses, "₴")}
           </div>
         )}
+
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 w-full justify-between px-3 text-xs font-medium text-muted-foreground md:hidden"
+          aria-expanded={isFiltersOpen}
+          onClick={() => setIsFiltersOpen((open) => !open)}
+        >
+          <span>
+            {isFiltersOpen
+              ? "Сховати фільтри"
+              : `Фільтри · ${
+                  dateRange.from && dateRange.to
+                    ? `${formatDate(dateRange.from.toISOString())} – ${formatDate(dateRange.to.toISOString())}`
+                    : period === "day"
+                      ? "День"
+                      : period === "week"
+                        ? "Тиждень"
+                        : period === "month"
+                          ? "Місяць"
+                          : period === "year"
+                            ? "Рік"
+                            : "Період"
+                }`}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 transition-transform",
+              isFiltersOpen && "rotate-180"
+            )}
+          />
+        </Button>
+
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2",
+            !isFiltersOpen && "max-md:hidden"
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={period === "day" ? "default" : "outline"}
+              onClick={() => {
+                setPeriod("day");
+                setDateRange({ from: undefined, to: undefined });
+              }}
+            >
+              День
+            </Button>
+            <Button
+              variant={period === "week" ? "default" : "outline"}
+              onClick={() => {
+                setPeriod("week");
+                setDateRange({ from: undefined, to: undefined });
+              }}
+            >
+              Тиждень
+            </Button>
+            <Button
+              variant={period === "month" ? "default" : "outline"}
+              onClick={() => {
+                setPeriod("month");
+                setDateRange({ from: undefined, to: undefined });
+              }}
+            >
+              Місяць
+            </Button>
+            <Button
+              variant={period === "year" ? "default" : "outline"}
+              onClick={() => {
+                setPeriod("year");
+                setDateRange({ from: undefined, to: undefined });
+              }}
+            >
+              Рік
+            </Button>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={dateRange.from ? "default" : "outline"}
+                  className={cn(
+                    "justify-start text-left font-normal",
+                    !dateRange.from && "text-muted-foreground"
+                  )}
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {dateRange.from ? (
+                    dateRange.to ? (
+                      <>
+                        {formatDate(dateRange.from.toISOString())} -{" "}
+                        {formatDate(dateRange.to.toISOString())}
+                      </>
+                    ) : (
+                      formatDate(dateRange.from.toISOString())
+                    )
+                  ) : (
+                    <span className="text-black">Виберіть період</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange.from}
+                  selected={dateRange}
+                  onSelect={(range) => {
+                    if (range) {
+                      setDateRange({
+                        from: range.from,
+                        to: range.to || range.from,
+                      });
+                      if (range.from) {
+                        setPeriod("custom");
+                      }
+                    } else {
+                      setDateRange({ from: undefined, to: undefined });
+                    }
+                  }}
+                  numberOfMonths={2}
+                  locale={uk}
+                  weekStartsOn={1}
+                />
+              </PopoverContent>
+            </Popover>
+
+            {activeTab === "expenses" && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={
+                      selectedCategories.length > 0 ? "default" : "outline"
+                    }
+                    className="justify-start text-left font-normal"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-2 h-4 w-4"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M7 12h10" />
+                      <path d="M10 18h4" />
+                    </svg>
+                    {selectedCategories.length > 0
+                      ? `Категорії (${selectedCategories.length})`
+                      : "Всі категорії"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-4" align="start">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Категорії</h4>
+                      {selectedCategories.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedCategories([])}
+                        >
+                          Скинути
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {sortedCategoryFilterOptions.map((option) => (
+                        <div
+                          key={option.id}
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={`category-filter-${option.id}`}
+                            checked={selectedCategories.includes(option.id)}
+                            onCheckedChange={(value) => {
+                              const isChecked = value === true;
+                              if (isChecked) {
+                                setSelectedCategories([
+                                  ...selectedCategories,
+                                  option.id,
+                                ]);
+                              } else {
+                                setSelectedCategories(
+                                  selectedCategories.filter(
+                                    (id) => id !== option.id
+                                  )
+                                );
+                              }
+                            }}
+                            className="border-black data-[state=checked]:bg-black data-[state=checked]:text-white"
+                          />
+                          <label
+                            htmlFor={`category-filter-${option.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            {option.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+          {activeTab === "expenses" && (
+            <div className="hidden text-2xl font-bold md:block">
+              {formatNumberWithUnit(totalExpenses, "₴")}
+            </div>
+          )}
+        </div>
       </div>
 
       <TabsContent value="expenses" className="space-y-8 mt-0">
