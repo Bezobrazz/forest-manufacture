@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Building2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -15,6 +16,11 @@ import { getBankTransactions } from "@/app/actions/bank-transactions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +43,7 @@ import type {
   BankTransaction,
   PrivatAccount,
 } from "@/lib/bank/privatbank/types";
-import { dateToYYYYMMDD, formatDate, formatNumberWithUnit } from "@/lib/utils";
+import { cn, dateToYYYYMMDD, formatDate, formatNumberWithUnit } from "@/lib/utils";
 import { toast } from "sonner";
 
 type BankTransactionsSectionProps = {
@@ -67,6 +73,7 @@ export function BankTransactionsSection({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isMovementOpen, setIsMovementOpen] = useState(false);
 
   const loadTransactions = useCallback(async () => {
     setIsLoading(true);
@@ -242,48 +249,53 @@ export function BankTransactionsSection({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Надходження
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">
-              +{formatNumberWithUnit(totals.incoming, "₴")}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Списання
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-700">
-              −{formatNumberWithUnit(totals.outgoing, "₴")}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Баланс руху
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totals.net >= 0 ? "+" : "−"}
-              {formatNumberWithUnit(Math.abs(totals.net), "₴")}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {transactions.length} операцій за період
-            </p>
-          </CardContent>
-        </Card>
+      {/* Desktop: завжди видно */}
+      <div className="hidden md:grid gap-4 md:grid-cols-3">
+        <MovementSummaryCards
+          incoming={totals.incoming}
+          outgoing={totals.outgoing}
+          net={totals.net}
+          transactionsCount={transactions.length}
+        />
       </div>
+
+      {/* Mobile: згорнуто за тонкою кнопкою */}
+      <Collapsible
+        open={isMovementOpen}
+        onOpenChange={setIsMovementOpen}
+        className="md:hidden space-y-2"
+      >
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 w-full justify-between px-3 text-xs font-medium text-muted-foreground"
+            aria-expanded={isMovementOpen}
+          >
+            <span>
+              {isMovementOpen
+                ? "Сховати рух коштів"
+                : "Показати рух коштів за період"}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 transition-transform",
+                isMovementOpen && "rotate-180"
+              )}
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2">
+          <div className="grid gap-2">
+            <MovementSummaryCards
+              incoming={totals.incoming}
+              outgoing={totals.outgoing}
+              net={totals.net}
+              transactionsCount={transactions.length}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {isLoading ? (
         <Card>
@@ -347,6 +359,63 @@ export function BankTransactionsSection({
         </>
       )}
     </div>
+  );
+}
+
+function MovementSummaryCards({
+  incoming,
+  outgoing,
+  net,
+  transactionsCount,
+}: {
+  incoming: number;
+  outgoing: number;
+  net: number;
+  transactionsCount: number;
+}) {
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Надходження
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-emerald-700">
+            +{formatNumberWithUnit(incoming, "₴")}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Списання
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-red-700">
+            −{formatNumberWithUnit(outgoing, "₴")}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Баланс руху
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            {net >= 0 ? "+" : "−"}
+            {formatNumberWithUnit(Math.abs(net), "₴")}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {transactionsCount} операцій за період
+          </p>
+        </CardContent>
+      </Card>
+    </>
   );
 }
 
