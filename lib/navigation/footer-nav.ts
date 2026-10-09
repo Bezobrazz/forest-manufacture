@@ -79,6 +79,10 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
             href: "/expenses?tab=bank",
             label: "Банківські транзакції",
           },
+          {
+            href: "/expenses?tab=dubrovytsia",
+            label: "Баланс Дубровиця",
+          },
         ],
       },
       { label: "Постачальники", href: "/suppliers" },

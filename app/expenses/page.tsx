@@ -68,12 +68,19 @@ import { PreviousPageButton } from "@/components/previous-page-button";
 import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
 import { DebtsSection } from "@/components/debts/debts-section";
 import { BankTransactionsSection } from "@/components/bank-transactions/bank-transactions-section";
+import { DubrovytsiaBalanceSection } from "@/components/dubrovytsia-balance/dubrovytsia-balance-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
-const EXPENSES_PAGE_TABS = ["expenses", "transfers", "debts", "bank"] as const;
+const EXPENSES_PAGE_TABS = [
+  "expenses",
+  "transfers",
+  "debts",
+  "bank",
+  "dubrovytsia",
+] as const;
 
 const FILTER_PURCHASE = -1;
 const FILTER_WAGES = -2;
@@ -1416,6 +1423,7 @@ function ExpensesPageContent() {
           <TabsTrigger value="transfers">Переміщення коштів</TabsTrigger>
           <TabsTrigger value="debts">Борги</TabsTrigger>
           <TabsTrigger value="bank">Банківські транзакції</TabsTrigger>
+          <TabsTrigger value="dubrovytsia">Баланс Дубровиця</TabsTrigger>
         </TabsList>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1803,6 +1811,10 @@ function ExpensesPageContent() {
             endDate={periodBounds.end}
           />
         )}
+      </TabsContent>
+
+      <TabsContent value="dubrovytsia" className="mt-0">
+        {activeTab === "dubrovytsia" && <DubrovytsiaBalanceSection />}
       </TabsContent>
       </Tabs>
     </div>
