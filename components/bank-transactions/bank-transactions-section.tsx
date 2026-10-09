@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
+  ArrowRight,
   ArrowUpRight,
   Building2,
   ChevronLeft,
@@ -15,12 +16,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type {
   BankAccountBalance,
   BankTransaction,
@@ -36,6 +47,11 @@ type BankTransactionsSectionProps = {
 
 const TX_PER_PAGE = 10;
 const ALL_ACCOUNTS = "__all__";
+
+const COMMENT_TAGS = [
+  "Гроші на сировину",
+  "Гроші на заробітну плату",
+] as const;
 
 export function BankTransactionsSection({
   startDate,
@@ -336,70 +352,150 @@ export function BankTransactionsSection({
 
 function TransactionCard({ tx }: { tx: BankTransaction }) {
   const isCredit = tx.type === "C";
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [comment, setComment] = useState("");
+
+  const handleOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setComment("");
+    }
+  };
+
+  const handleSubmit = () => {
+    // Наступний крок: відправка в CRM / локальне збереження
+    handleOpenChange(false);
+  };
 
   return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">
-                {formatDate(`${tx.date}T12:00:00`)}
-              </span>
-              <Badge variant={isCredit ? "default" : "secondary"}>
-                {isCredit ? (
-                  <span className="inline-flex items-center gap-1">
-                    <ArrowDownLeft className="h-3 w-3" />
-                    Надходження
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3" />
-                    Списання
-                  </span>
-                )}
-              </Badge>
-              {tx.accountLabel ? (
-                <Badge variant="outline" className="max-w-[180px] truncate">
-                  <Building2 className="mr-1 h-3 w-3 shrink-0" />
-                  {tx.accountLabel}
+    <>
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">
+                  {formatDate(`${tx.date}T12:00:00`)}
+                </span>
+                <Badge variant={isCredit ? "default" : "secondary"}>
+                  {isCredit ? (
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowDownLeft className="h-3 w-3" />
+                      Надходження
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowUpRight className="h-3 w-3" />
+                      Списання
+                    </span>
+                  )}
                 </Badge>
+                {tx.accountLabel ? (
+                  <Badge variant="outline" className="max-w-[180px] truncate">
+                    <Building2 className="mr-1 h-3 w-3 shrink-0" />
+                    {tx.accountLabel}
+                  </Badge>
+                ) : null}
+              </div>
+
+              {tx.counterpartName ? (
+                <p className="text-sm font-medium truncate">
+                  {tx.counterpartName}
+                </p>
               ) : null}
+
+              {tx.purpose ? (
+                <p className="text-sm text-muted-foreground line-clamp-2">
+                  {tx.purpose}
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {tx.documentNumber ? <span>№ {tx.documentNumber}</span> : null}
+                {tx.counterpartEdrpou ? (
+                  <span>ЄДРПОУ {tx.counterpartEdrpou}</span>
+                ) : null}
+                {tx.currency && tx.currency !== "UAH" ? (
+                  <span>{tx.currency}</span>
+                ) : null}
+              </div>
             </div>
 
-            {tx.counterpartName ? (
-              <p className="text-sm font-medium truncate">
-                {tx.counterpartName}
-              </p>
-            ) : null}
+            <div className="flex items-center gap-2 shrink-0 self-start">
+              <div
+                className={`text-lg font-bold ${
+                  isCredit ? "text-emerald-700" : "text-red-700"
+                }`}
+              >
+                {isCredit ? "+" : "−"}
+                {formatNumberWithUnit(tx.amountUah, "₴")}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Обробити транзакцію"
+                onClick={() => setIsDialogOpen(true)}
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-            {tx.purpose ? (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {tx.purpose}
-              </p>
-            ) : null}
+      <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Коментар до операції</DialogTitle>
+            <DialogDescription>
+              {formatDate(`${tx.date}T12:00:00`)} ·{" "}
+              {isCredit ? "+" : "−"}
+              {formatNumberWithUnit(tx.amountUah, "₴")}
+              {tx.counterpartName ? ` · ${tx.counterpartName}` : ""}
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {tx.documentNumber ? <span>№ {tx.documentNumber}</span> : null}
-              {tx.counterpartEdrpou ? (
-                <span>ЄДРПОУ {tx.counterpartEdrpou}</span>
-              ) : null}
-              {tx.currency && tx.currency !== "UAH" ? (
-                <span>{tx.currency}</span>
-              ) : null}
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {COMMENT_TAGS.map((tag) => {
+                const isActive = comment === tag;
+                return (
+                  <Button
+                    key={tag}
+                    type="button"
+                    size="sm"
+                    variant={isActive ? "default" : "outline"}
+                    onClick={() => setComment(tag)}
+                  >
+                    {tag}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={`bank-tx-comment-${tx.id}`}>Коментар</Label>
+              <Textarea
+                id={`bank-tx-comment-${tx.id}`}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Введіть коментар або оберіть тег"
+                rows={3}
+              />
             </div>
           </div>
 
-          <div
-            className={`text-lg font-bold shrink-0 ${
-              isCredit ? "text-emerald-700" : "text-red-700"
-            }`}
-          >
-            {isCredit ? "+" : "−"}
-            {formatNumberWithUnit(tx.amountUah, "₴")}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+              Скасувати
+            </Button>
+            <Button type="button" onClick={handleSubmit}>
+              Відправити
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
