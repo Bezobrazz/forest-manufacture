@@ -75,6 +75,10 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
           { href: "/expenses?tab=expenses", label: "Витрати" },
           { href: "/expenses?tab=transfers", label: "Переміщення коштів" },
           { href: "/expenses?tab=debts", label: "Борги" },
+          {
+            href: "/expenses?tab=bank",
+            label: "Банківські транзакції",
+          },
         ],
       },
       { label: "Постачальники", href: "/suppliers" },

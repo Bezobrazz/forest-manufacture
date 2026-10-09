@@ -67,12 +67,13 @@ import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { FundTransfersSection } from "@/components/fund-transfers/fund-transfers-section";
 import { DebtsSection } from "@/components/debts/debts-section";
+import { BankTransactionsSection } from "@/components/bank-transactions/bank-transactions-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQueryTab } from "@/hooks/use-query-tab";
 
 type PeriodFilter = "year" | "month" | "week" | "day" | "custom";
 
-const EXPENSES_PAGE_TABS = ["expenses", "transfers", "debts"] as const;
+const EXPENSES_PAGE_TABS = ["expenses", "transfers", "debts", "bank"] as const;
 
 const FILTER_PURCHASE = -1;
 const FILTER_WAGES = -2;
@@ -356,20 +357,26 @@ function ExpensesPageContent() {
   const toLocalDateOnly = (d: Date) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
-  const isDateInRange = (date: Date) => {
-    let startDate: Date;
-    let endDate: Date;
+  const periodBounds = useMemo(() => {
     if (dateRange.from && dateRange.to) {
-      startDate = new Date(dateRange.from);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(dateRange.to);
-      endDate.setHours(23, 59, 59, 999);
-    } else {
-      startDate = getStartDate(period);
-      endDate = getEndDate(period);
+      const start = new Date(dateRange.from);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(dateRange.to);
+      end.setHours(23, 59, 59, 999);
+      return { start, end };
     }
+    return {
+      start: getStartDate(period),
+      end: getEndDate(period),
+    };
+  }, [dateRange.from, dateRange.to, period]);
+
+  const isDateInRange = (date: Date) => {
     const t = toLocalDateOnly(date);
-    return t >= toLocalDateOnly(startDate) && t <= toLocalDateOnly(endDate);
+    return (
+      t >= toLocalDateOnly(periodBounds.start) &&
+      t <= toLocalDateOnly(periodBounds.end)
+    );
   };
 
   const parseDate = (value: string): Date => {
@@ -1404,10 +1411,11 @@ function ExpensesPageContent() {
         onValueChange={(value) => setActiveTab(value as ExpensesPageTab)}
         className="space-y-6"
       >
-        <TabsList>
+        <TabsList className="flex h-auto flex-wrap gap-1">
           <TabsTrigger value="expenses">Витрати</TabsTrigger>
           <TabsTrigger value="transfers">Переміщення коштів</TabsTrigger>
           <TabsTrigger value="debts">Борги</TabsTrigger>
+          <TabsTrigger value="bank">Банківські транзакції</TabsTrigger>
         </TabsList>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1785,6 +1793,15 @@ function ExpensesPageContent() {
       <TabsContent value="debts" className="mt-0">
         {activeTab === "debts" && (
           <DebtsSection isDateInRange={isDateInRange} />
+        )}
+      </TabsContent>
+
+      <TabsContent value="bank" className="mt-0">
+        {activeTab === "bank" && (
+          <BankTransactionsSection
+            startDate={periodBounds.start}
+            endDate={periodBounds.end}
+          />
         )}
       </TabsContent>
       </Tabs>
