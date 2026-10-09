@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { getBankTransactions } from "@/app/actions/bank-transactions";
+import { submitBankTransactionToDubrovytsia } from "@/app/actions/dubrovytsia-balance";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +59,14 @@ const COMMENT_TAGS = [
   "Гроші на сировину",
   "Гроші на заробітну плату",
 ] as const;
+
+function defaultAmountComment(amount: number): string {
+  return formatNumberWithUnit(amount, "₴");
+}
+
+function commentWithTag(tag: string, amount: number): string {
+  return `${tag}\n${defaultAmountComment(amount)}`;
+}
 
 export function BankTransactionsSection({
   startDate,
@@ -421,19 +430,56 @@ function MovementSummaryCards({
 
 function TransactionCard({ tx }: { tx: BankTransaction }) {
   const isCredit = tx.type === "C";
+  const amountComment = defaultAmountComment(tx.amountUah);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useState(amountComment);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleOpenChange = (open: boolean) => {
+    if (isSubmitting && open) return;
     setIsDialogOpen(open);
-    if (!open) {
-      setComment("");
+    if (open) {
+      setComment(amountComment);
     }
   };
 
-  const handleSubmit = () => {
-    // Наступний крок: відправка в CRM / локальне збереження
-    handleOpenChange(false);
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const result = await submitBankTransactionToDubrovytsia({
+        bankTransactionId: tx.id,
+        amount: tx.amountUah,
+        currency: tx.currency || "UAH",
+        transactionType: tx.type,
+        transactionDate: tx.date,
+        counterpartName: tx.counterpartName,
+        purpose: tx.purpose,
+        comment,
+        accountIban: tx.accountIban,
+        accountLabel: tx.accountLabel,
+      });
+
+      if (!result.ok) {
+        toast.error("Не відправлено", { description: result.error });
+        return;
+      }
+
+      toast.success("Додано до балансу Дубровиця", {
+        description: result.telegramSent
+          ? "Повідомлення надіслано в Telegram"
+          : "Запис збережено, але Telegram не надіслано",
+      });
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error("submitBankTransactionToDubrovytsia:", error);
+      toast.error("Помилка", {
+        description:
+          error instanceof Error ? error.message : "Не вдалося відправити",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -506,7 +552,7 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
                 variant="outline"
                 aria-label="Обробити транзакцію"
                 className="h-full min-h-[7.5rem] w-full rounded-md"
-                onClick={() => setIsDialogOpen(true)}
+                onClick={() => handleOpenChange(true)}
               >
                 <ArrowRight className="h-7 w-7 sm:h-8 sm:w-8" />
               </Button>
@@ -518,7 +564,7 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
       <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Коментар до операції</DialogTitle>
+            <DialogTitle>На баланс Дубровиця</DialogTitle>
             <DialogDescription>
               {formatDate(`${tx.date}T12:00:00`)} ·{" "}
               {isCredit ? "+" : "−"}
@@ -530,14 +576,16 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {COMMENT_TAGS.map((tag) => {
-                const isActive = comment === tag;
+                const tagged = commentWithTag(tag, tx.amountUah);
+                const isActive = comment === tagged;
                 return (
                   <Button
                     key={tag}
                     type="button"
                     size="sm"
                     variant={isActive ? "default" : "outline"}
-                    onClick={() => setComment(tag)}
+                    disabled={isSubmitting}
+                    onClick={() => setComment(tagged)}
                   >
                     {tag}
                   </Button>
@@ -551,18 +599,36 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
                 id={`bank-tx-comment-${tx.id}`}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Введіть коментар або оберіть тег"
+                placeholder="Сума підставляється автоматично"
                 rows={3}
+                disabled={isSubmitting}
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
+            >
               Скасувати
             </Button>
-            <Button type="button" onClick={handleSubmit}>
-              Відправити
+            <Button
+              type="button"
+              onClick={() => void handleSubmit()}
+              disabled={isSubmitting || !comment.trim()}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Відправлення…
+                </>
+              ) : (
+                "Відправити"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
