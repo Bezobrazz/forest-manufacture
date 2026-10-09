@@ -20,7 +20,7 @@ import { NavigationButton } from "@/components/navigation-button";
 import { ShiftDatePicker } from "@/components/shift-date-picker";
 import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
-import { formatDate, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
+import { formatDate, formatDateTime, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 import {
   parseShiftHourlyWageKind,
   type HourlyWageKind,
@@ -510,7 +510,7 @@ export default async function ShiftsPage({
                   <CardDescription className="flex items-center gap-2">
                     <Calendar className="h-3 w-3" />
                     <span>
-                      {formatDate(
+                      {formatDateTime(
                         shift.opened_at || shift.created_at || shift.shift_date,
                       )}
                     </span>
@@ -529,7 +529,7 @@ export default async function ShiftsPage({
                     {shift.status === "completed" && shift.completed_at && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
-                        <span>Завершено: {formatDate(shift.completed_at)}</span>
+                        <span>Завершено: {formatDateTime(shift.completed_at)}</span>
                       </div>
                     )}
 

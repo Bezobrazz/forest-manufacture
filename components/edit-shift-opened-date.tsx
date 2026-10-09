@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateShiftOpenedAt } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -11,9 +13,11 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Pencil, Calendar as CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils";
+import { Loader2, Pencil } from "lucide-react";
+import {
+  getKyivDateTimeParts,
+  kyivCalendarDate,
+} from "@/lib/datetime/kyiv";
 import { uk } from "date-fns/locale";
 import type { Shift } from "@/lib/types";
 
@@ -21,29 +25,28 @@ interface EditShiftOpenedDateProps {
   shift: Shift;
 }
 
+const pad = (value: number) => String(value).padStart(2, "0");
+
+const initialOpenedSource = (shift: Shift) =>
+  shift.opened_at || shift.created_at;
+
 export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  // Правильно ініціалізуємо дату, щоб уникнути проблем з часовими поясами
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => {
-    if (!shift.opened_at) return undefined;
-    
-    // Створюємо дату з UTC
-    const utcDate = new Date(shift.opened_at);
-    // Використовуємо UTC методи для отримання компонентів, щоб уникнути зміщення
-    const year = utcDate.getUTCFullYear();
-    const month = utcDate.getUTCMonth();
-    const day = utcDate.getUTCDate();
-    
-    // Створюємо нову дату в локальному часовому поясі з тими ж компонентами
-    // Використовуємо локальний конструктор, щоб календарь показував правильну дату
-    return new Date(year, month, day);
+  const openedSource = initialOpenedSource(shift);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() =>
+    openedSource ? kyivCalendarDate(openedSource) : undefined,
+  );
+  const [openedTime, setOpenedTime] = useState(() => {
+    const parts = openedSource ? getKyivDateTimeParts(openedSource) : undefined;
+    if (!parts) return "09:00";
+    return `${pad(parts.hour)}:${pad(parts.minute)}`;
   });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!selectedDate) {
       toast.error("Помилка", {
         description: "Необхідно вибрати дату відкриття",
@@ -56,20 +59,18 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
     try {
       const formData = new FormData();
       formData.append("shift_id", shift.id.toString());
-      
-      // Використовуємо локальні методи для отримання дати, щоб уникнути проблем з часовими поясами
+
       const year = selectedDate.getFullYear();
       const month = (selectedDate.getMonth() + 1).toString().padStart(2, "0");
       const day = selectedDate.getDate().toString().padStart(2, "0");
-      const dateString = `${year}-${month}-${day}`;
-      
-      formData.append("opened_at", dateString);
+      formData.append("opened_at", `${year}-${month}-${day}`);
+      formData.append("opened_time", openedTime);
 
       const result = await updateShiftOpenedAt(formData);
 
       if (result.success) {
-        toast.success("Дату відкриття оновлено", {
-          description: "Дату відкриття зміни успішно оновлено",
+        toast.success("Час відкриття оновлено", {
+          description: "Дату й час відкриття зміни успішно оновлено",
         });
         setIsOpen(false);
         router.refresh();
@@ -78,9 +79,9 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
           description: result.error,
         });
       }
-    } catch (error) {
+    } catch {
       toast.error("Помилка", {
-        description: "Сталася помилка при оновленні дати відкриття",
+        description: "Сталася помилка при оновленні часу відкриття",
       });
     } finally {
       setIsPending(false);
@@ -94,7 +95,7 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
           variant="ghost"
           size="sm"
           className="h-auto p-1 text-muted-foreground hover:text-foreground"
-          title="Редагувати дату відкриття"
+          title="Редагувати дату й час відкриття"
         >
           <Pencil className="h-3 w-3" />
         </Button>
@@ -115,17 +116,40 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
               initialFocus
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="opened_time">Час відкриття (Київ)</Label>
+            <Input
+              id="opened_time"
+              type="time"
+              value={openedTime}
+              onChange={(e) => setOpenedTime(e.target.value)}
+              required
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setIsOpen(false)}
+              disabled={isPending}
             >
               Скасувати
             </Button>
-            <Button type="submit" size="sm" disabled={isPending || !selectedDate}>
-              {isPending ? "Збереження..." : "Зберегти"}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isPending || !selectedDate}
+              aria-busy={isPending}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Збереження…
+                </>
+              ) : (
+                "Зберегти"
+              )}
             </Button>
           </div>
         </form>
@@ -133,4 +157,3 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
     </Popover>
   );
 }
-

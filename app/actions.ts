@@ -28,6 +28,7 @@ import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
+import { kyivWallTimeToIso } from "@/lib/datetime/kyiv";
 import { parseShiftEmployeeCount } from "@/lib/shifts/employee-count";
 import {
   buildShiftHourlyWageDescription,
@@ -1278,14 +1279,6 @@ export async function completeShift(shiftId: number) {
   }
 }
 
-const shiftDateToOpenedAt = (shiftDate: string) => {
-  const dateParts = shiftDate.split("-");
-  const year = parseInt(dateParts[0], 10);
-  const month = parseInt(dateParts[1], 10) - 1;
-  const day = parseInt(dateParts[2], 10);
-  return new Date(year, month, day, 9, 0, 0, 0).toISOString();
-};
-
 export async function createShift(formData: FormData) {
   try {
     const supabase = await createServerClient();
@@ -1305,7 +1298,7 @@ export async function createShift(formData: FormData) {
     const insertData = {
       shift_date: shift_date as string,
       notes: (notes as string) || null,
-      opened_at: shiftDateToOpenedAt(shift_date as string),
+      opened_at: new Date().toISOString(),
       employee_count: employeeCount,
     };
 
@@ -1366,7 +1359,7 @@ export async function createShiftWithEmployees(
       const insertData = {
         shift_date: shift_date as string,
         notes: (notes as string) || null,
-        opened_at: shiftDateToOpenedAt(shift_date as string),
+        opened_at: new Date().toISOString(),
         employee_count: parseShiftEmployeeCount(employeeIds.length) ?? 5,
       };
 
@@ -1425,6 +1418,7 @@ export async function updateShiftOpenedAt(formData: FormData) {
 
     const shiftId = formData.get("shift_id");
     const opened_at = formData.get("opened_at");
+    const openedTime = formData.get("opened_time");
 
     if (!shiftId) {
       return { success: false, error: "Необхідно вказати ID зміни" };
@@ -1434,20 +1428,27 @@ export async function updateShiftOpenedAt(formData: FormData) {
       return { success: false, error: "Необхідно вказати дату відкриття" };
     }
 
-    // Конвертуємо дату в формат ISO з часом
-    // Створюємо дату з компонентів, щоб уникнути проблем з часовими поясами
     const dateParts = (opened_at as string).split("-");
-    const year = parseInt(dateParts[0]);
-    const month = parseInt(dateParts[1]) - 1; // Місяці в JavaScript починаються з 0
-    const day = parseInt(dateParts[2]);
-    
-    // Створюємо дату в локальному часовому поясі з часом 09:00
-    const openedDate = new Date(year, month, day, 9, 0, 0, 0);
+    const year = Number.parseInt(dateParts[0], 10);
+    const month = Number.parseInt(dateParts[1], 10);
+    const day = Number.parseInt(dateParts[2], 10);
+
+    let hours = 9;
+    let minutes = 0;
+    if (typeof openedTime === "string" && /^\d{1,2}:\d{2}$/.test(openedTime)) {
+      const [h, m] = openedTime.split(":").map((part) => Number.parseInt(part, 10));
+      if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+        hours = h;
+        minutes = m;
+      }
+    }
+
+    const openedAtIso = kyivWallTimeToIso(year, month, day, hours, minutes);
 
     try {
       const { data, error } = await supabase
         .from("shifts")
-        .update({ opened_at: openedDate.toISOString() })
+        .update({ opened_at: openedAtIso })
         .eq("id", Number.parseInt(shiftId as string))
         .select();
 

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { formatKyivDateTime } from "@/lib/datetime/kyiv";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -26,45 +27,7 @@ export function formatDateTime(dateString: string): string {
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return dateString;
 
-  let day = date.getUTCDate();
-  let month = date.getUTCMonth();
-  let year = date.getUTCFullYear();
-  let hours = date.getUTCHours();
-  let minutes = date.getUTCMinutes();
-
-  const isUkrainianDST = () => {
-    const year = date.getUTCFullYear();
-    const marchLastSunday = new Date(Date.UTC(year, 2, 31));
-    marchLastSunday.setUTCDate(31 - marchLastSunday.getUTCDay());
-    const octoberLastSunday = new Date(Date.UTC(year, 9, 31));
-    octoberLastSunday.setUTCDate(31 - octoberLastSunday.getUTCDay());
-    return date >= marchLastSunday && date < octoberLastSunday;
-  };
-
-  const offsetHours = isUkrainianDST() ? 3 : 2;
-  hours = hours + offsetHours;
-
-  if (hours >= 24) {
-    hours = hours - 24;
-    day = day + 1;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    if (day > daysInMonth) {
-      day = 1;
-      month = month + 1;
-      if (month > 11) {
-        month = 0;
-        year = year + 1;
-      }
-    }
-  }
-
-  const dayStr = day.toString().padStart(2, "0");
-  const monthStr = (month + 1).toString().padStart(2, "0");
-  const yearStr = year.toString();
-  const hoursStr = hours.toString().padStart(2, "0");
-  const minutesStr = minutes.toString().padStart(2, "0");
-
-  return `${dayStr}.${monthStr}.${yearStr} ${hoursStr}:${minutesStr}`;
+  return formatKyivDateTime(date);
 }
 
 export function getWeekNumber(date: Date): number {
