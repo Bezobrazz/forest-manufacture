@@ -1260,6 +1260,7 @@ function ExpensesPageContent() {
           </p>
         </div>
 
+        {activeTab === "expenses" && (
         <div className="flex flex-wrap flex-col w-full sm:flex-row sm:w-auto gap-2">
           <Dialog>
             <DialogTrigger asChild>
@@ -1411,6 +1412,7 @@ function ExpensesPageContent() {
             </DialogContent>
           </Dialog>
         </div>
+        )}
       </div>
 
       <Tabs
