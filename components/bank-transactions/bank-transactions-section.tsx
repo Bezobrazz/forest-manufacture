@@ -439,9 +439,9 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
   return (
     <>
       <Card>
-        <CardContent className="py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1 min-w-0">
+        <CardContent className="p-0">
+          <div className="flex items-stretch gap-0">
+            <div className="min-w-0 flex-1 space-y-1 p-4 pr-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">
                   {formatDate(`${tx.date}T12:00:00`)}
@@ -459,13 +459,14 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
                     </span>
                   )}
                 </Badge>
-                {tx.accountLabel ? (
-                  <Badge variant="outline" className="max-w-[180px] truncate">
-                    <Building2 className="mr-1 h-3 w-3 shrink-0" />
-                    {tx.accountLabel}
-                  </Badge>
-                ) : null}
               </div>
+
+              {tx.accountLabel ? (
+                <Badge variant="outline" className="max-w-full truncate">
+                  <Building2 className="mr-1 h-3 w-3 shrink-0" />
+                  {tx.accountLabel}
+                </Badge>
+              ) : null}
 
               {tx.counterpartName ? (
                 <p className="text-sm font-medium truncate">
@@ -488,25 +489,26 @@ function TransactionCard({ tx }: { tx: BankTransaction }) {
                   <span>{tx.currency}</span>
                 ) : null}
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-start">
               <div
-                className={`text-lg font-bold ${
+                className={`pt-2 text-lg font-bold ${
                   isCredit ? "text-emerald-700" : "text-red-700"
                 }`}
               >
                 {isCredit ? "+" : "−"}
                 {formatNumberWithUnit(tx.amountUah, "₴")}
               </div>
+            </div>
+
+            <div className="flex w-[4.5rem] shrink-0 border-l p-2 sm:w-24">
               <Button
                 type="button"
                 variant="outline"
-                size="icon"
                 aria-label="Обробити транзакцію"
+                className="h-full min-h-[7.5rem] w-full rounded-md"
                 onClick={() => setIsDialogOpen(true)}
               >
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-7 w-7 sm:h-8 sm:w-8" />
               </Button>
             </div>
           </div>
