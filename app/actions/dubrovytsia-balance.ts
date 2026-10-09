@@ -178,7 +178,6 @@ export async function submitBankTransactionToDubrovytsia(
     }
 
     const entry = inserted as DubrovytsiaBalanceEntry;
-    const typeLabel = transactionType === "C" ? "Надходження" : "Списання";
     const amountLabel = formatNumberWithUnit(amount, "₴");
     const dateLabel = formatDate(`${input.transactionDate}T12:00:00`);
 
@@ -186,21 +185,10 @@ export async function submitBankTransactionToDubrovytsia(
       `🏛 <b>Баланс Дубровиця</b>`,
       ``,
       `Сума: <b>${escapeTelegramHtml(amountLabel)}</b>`,
-      `Тип: ${escapeTelegramHtml(typeLabel)}`,
+      `Тип: ⬇️ Вхідна транзакція`,
       `Дата: <b>${escapeTelegramHtml(dateLabel)}</b>`,
       `Коментар: ${escapeTelegramHtml(comment)}`,
-      input.counterpartName?.trim()
-        ? `Контрагент: ${escapeTelegramHtml(input.counterpartName.trim())}`
-        : null,
-      input.accountLabel?.trim()
-        ? `Рахунок: ${escapeTelegramHtml(input.accountLabel.trim())}`
-        : null,
-      input.purpose?.trim()
-        ? `Призначення: ${escapeTelegramHtml(input.purpose.trim().slice(0, 200))}`
-        : null,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].join("\n");
 
     let telegramSent = false;
     try {
