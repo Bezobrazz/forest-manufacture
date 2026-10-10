@@ -130,8 +130,8 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
     if (a.status === "active" && b.status !== "active") return -1;
     if (a.status !== "active" && b.status === "active") return 1;
     // Якщо обидві активні або обидві завершені, сортуємо за датою (новіші першими)
-    const dateA = a.opened_at || a.created_at || a.shift_date;
-    const dateB = b.opened_at || b.created_at || b.shift_date;
+    const dateA = a.opened_at || a.shift_date || a.created_at;
+    const dateB = b.opened_at || b.shift_date || b.created_at;
     return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
   const recentShifts = sortedShifts.slice(0, 3);
@@ -616,8 +616,8 @@ export function HomePageClient({ initialData }: HomePageClientProps) {
                       <span>
                         {formatDateTime(
                           shift.opened_at ||
-                            shift.created_at ||
-                            shift.shift_date
+                            shift.shift_date ||
+                            shift.created_at
                         )}
                       </span>
                     </CardDescription>

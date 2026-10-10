@@ -702,7 +702,7 @@ export default function HomePage() {
                       <Calendar className="h-3 w-3" />
                       <span>
                         {formatDateTime(
-                          shift.opened_at || shift.created_at || shift.shift_date
+                          shift.opened_at || shift.shift_date || shift.created_at
                         )}
                       </span>
                     </CardDescription>

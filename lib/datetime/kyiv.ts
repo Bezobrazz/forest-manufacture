@@ -83,3 +83,33 @@ export const getKyivDateTimeParts = (iso: string): KyivParts | undefined => {
   if (Number.isNaN(date.getTime())) return undefined;
   return readKyivParts(date);
 };
+
+export const getKyivDateString = (date: Date = new Date()): string => {
+  const parts = readKyivParts(date);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+};
+
+/** YYYY-MM-DD у Europe/Kyiv; для вже date-only рядка повертає як є. */
+export const toKyivDateString = (value: string): string => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parts = getKyivDateTimeParts(value);
+  if (!parts) return value.slice(0, 10);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+};
+
+/**
+ * Відкриття зміни: у поточний київський день — фактичний now,
+ * в інший день — умовні 09:00 Europe/Kyiv.
+ */
+export const resolveShiftOpenedAt = (
+  shiftDate: string,
+  now: Date = new Date(),
+): string => {
+  if (shiftDate === getKyivDateString(now)) {
+    return now.toISOString();
+  }
+  const [year, month, day] = shiftDate
+    .split("-")
+    .map((part) => Number.parseInt(part, 10));
+  return kyivWallTimeToIso(year, month, day, 9, 0);
+};

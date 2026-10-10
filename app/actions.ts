@@ -28,7 +28,11 @@ import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import { isBarkFinishedProductName } from "@/lib/production/barkFinishedProduct";
 import { parseProductionFormData } from "@/lib/production/parseProductionForm";
 import { getDateRangeForPeriod, dateToYYYYMMDD } from "@/lib/utils";
-import { kyivWallTimeToIso } from "@/lib/datetime/kyiv";
+import {
+  getKyivDateString,
+  kyivWallTimeToIso,
+  resolveShiftOpenedAt,
+} from "@/lib/datetime/kyiv";
 import { parseShiftEmployeeCount } from "@/lib/shifts/employee-count";
 import {
   buildShiftHourlyWageDescription,
@@ -1298,7 +1302,7 @@ export async function createShift(formData: FormData) {
     const insertData = {
       shift_date: shift_date as string,
       notes: (notes as string) || null,
-      opened_at: new Date().toISOString(),
+      opened_at: resolveShiftOpenedAt(shift_date as string),
       employee_count: employeeCount,
     };
 
@@ -1359,7 +1363,7 @@ export async function createShiftWithEmployees(
       const insertData = {
         shift_date: shift_date as string,
         notes: (notes as string) || null,
-        opened_at: new Date().toISOString(),
+        opened_at: resolveShiftOpenedAt(shift_date as string),
         employee_count: parseShiftEmployeeCount(employeeIds.length) ?? 5,
       };
 
@@ -1432,10 +1436,16 @@ export async function updateShiftOpenedAt(formData: FormData) {
     const year = Number.parseInt(dateParts[0], 10);
     const month = Number.parseInt(dateParts[1], 10);
     const day = Number.parseInt(dateParts[2], 10);
+    const openedDateKey = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const isToday = openedDateKey === getKyivDateString();
 
     let hours = 9;
     let minutes = 0;
-    if (typeof openedTime === "string" && /^\d{1,2}:\d{2}$/.test(openedTime)) {
+    if (
+      isToday &&
+      typeof openedTime === "string" &&
+      /^\d{1,2}:\d{2}$/.test(openedTime)
+    ) {
       const [h, m] = openedTime.split(":").map((part) => Number.parseInt(part, 10));
       if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
         hours = h;
@@ -1443,12 +1453,17 @@ export async function updateShiftOpenedAt(formData: FormData) {
       }
     }
 
-    const openedAtIso = kyivWallTimeToIso(year, month, day, hours, minutes);
+    const openedAtIso = isToday
+      ? kyivWallTimeToIso(year, month, day, hours, minutes)
+      : resolveShiftOpenedAt(openedDateKey);
 
     try {
       const { data, error } = await supabase
         .from("shifts")
-        .update({ opened_at: openedAtIso })
+        .update({
+          opened_at: openedAtIso,
+          shift_date: openedDateKey,
+        })
         .eq("id", Number.parseInt(shiftId as string))
         .select();
 

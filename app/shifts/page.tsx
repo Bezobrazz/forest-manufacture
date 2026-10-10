@@ -22,6 +22,10 @@ import { QuickActionsButton } from "@/components/quick-actions-button";
 import { PreviousPageButton } from "@/components/previous-page-button";
 import { formatDate, formatDateTime, getWeekNumber, formatNumberWithUnit } from "@/lib/utils";
 import {
+  getShiftAccountingDateKey,
+  getShiftAccountingLocalDate,
+} from "@/lib/shifts/accounting-date";
+import {
   parseShiftHourlyWageKind,
   type HourlyWageKind,
 } from "@/lib/shifts/hourly-wage-description";
@@ -168,36 +172,35 @@ export default async function ShiftsPage({
     };
   };
 
-  // Функція для отримання дня тижня з дати
   const getDayOfWeek = (dateString: string) => {
-    const date = new Date(dateString);
+    const [year, month, day] = dateString
+      .slice(0, 10)
+      .split("-")
+      .map((part) => Number.parseInt(part, 10));
+    const date = new Date(year, month - 1, day);
     const days = [
-      "Субота", // 0 (буде використовуватись для getDay() === 6)
-      "Неділя", // 1
-      "Понеділок", // 2
-      "Вівторок", // 3
-      "Середа", // 4
-      "Четвер", // 5
-      "П'ятниця", // 6
+      "Субота",
+      "Неділя",
+      "Понеділок",
+      "Вівторок",
+      "Середа",
+      "Четвер",
+      "П'ятниця",
     ];
-    // Для getDay(): 0 — неділя, 1 — понеділок, ..., 5 — п'ятниця, 6 — субота
-    // Але для відображення тижня — субота перша, п'ятниця остання
-    // Тому для getDay() використовуємо days[(date.getDay() + 1) % 7]
     return days[(date.getDay() + 1) % 7];
   };
 
   const filteredShifts = shifts.filter((shift) => {
-    const shiftDate = new Date(
-      shift.opened_at || shift.created_at || shift.shift_date,
-    );
+    const openDateKey = getShiftAccountingDateKey(shift);
+    const shiftDate = getShiftAccountingLocalDate(shift);
 
-    if (useDateRange && startDate && endDate) {
-      return shiftDate >= startDate && shiftDate <= endDate;
-    } else {
-      const shiftWeek = getWeekNumber(shiftDate);
-      const shiftYear = shiftDate.getFullYear();
-      return shiftWeek === currentWeek && shiftYear === currentYear;
+    if (useDateRange && params.startDate && params.endDate) {
+      return openDateKey >= params.startDate && openDateKey <= params.endDate;
     }
+
+    const shiftWeek = getWeekNumber(shiftDate);
+    const shiftYear = shiftDate.getFullYear();
+    return shiftWeek === currentWeek && shiftYear === currentYear;
   });
 
   const shiftsByDay: Record<
@@ -217,17 +220,15 @@ export default async function ShiftsPage({
   detailedShifts.forEach((shift) => {
     if (!shift) return;
 
-    const shiftDate = new Date(
-      shift.opened_at || shift.created_at || shift.shift_date,
-    );
-    const dayOfWeek = getDayOfWeek(
-      shift.opened_at || shift.created_at || shift.shift_date,
-    );
+    const openDateKey = getShiftAccountingDateKey(shift);
+    const shiftDate = getShiftAccountingLocalDate(shift);
+    const dayOfWeek = getDayOfWeek(openDateKey);
 
     let isInRange = false;
 
-    if (useDateRange && startDate && endDate) {
-      isInRange = shiftDate >= startDate && shiftDate <= endDate;
+    if (useDateRange && params.startDate && params.endDate) {
+      isInRange =
+        openDateKey >= params.startDate && openDateKey <= params.endDate;
     } else {
       const weekNumber = getWeekNumber(shiftDate);
       const year = shiftDate.getFullYear();
@@ -245,7 +246,7 @@ export default async function ShiftsPage({
       });
     }
 
-    const dateKey = shiftDate.toISOString().split("T")[0];
+    const dateKey = openDateKey;
 
     if (!shiftsByDay[dateKey]) {
       shiftsByDay[dateKey] = {
@@ -511,7 +512,7 @@ export default async function ShiftsPage({
                     <Calendar className="h-3 w-3" />
                     <span>
                       {formatDateTime(
-                        shift.opened_at || shift.created_at || shift.shift_date,
+                        shift.opened_at || shift.shift_date || shift.created_at,
                       )}
                     </span>
                   </CardDescription>

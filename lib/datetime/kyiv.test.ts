@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   formatKyivDateTime,
+  getKyivDateString,
   kyivWallTimeToIso,
+  resolveShiftOpenedAt,
+  toKyivDateString,
 } from "@/lib/datetime/kyiv";
 import { formatDateTime } from "@/lib/utils";
+import { getShiftAccountingDateKey } from "@/lib/shifts/accounting-date";
 
 test("kyivWallTimeToIso round-trips wall clock in Europe/Kyiv", () => {
   const summer = kyivWallTimeToIso(2026, 10, 8, 15, 13);
@@ -30,4 +34,28 @@ test("formatDateTime keeps invalid values unchanged", () => {
     formatKyivDateTime(new Date("2026-10-09T12:14:28.088Z")),
     "09.10.2026 15:14",
   );
+});
+
+test("resolveShiftOpenedAt uses now for today and 09:00 for other days", () => {
+  const now = new Date("2026-10-10T12:30:00.000Z");
+  const today = getKyivDateString(now);
+  assert.equal(today, "2026-10-10");
+  assert.equal(resolveShiftOpenedAt(today, now), now.toISOString());
+  assert.equal(
+    resolveShiftOpenedAt("2026-10-08", now),
+    "2026-10-08T06:00:00.000Z",
+  );
+  assert.equal(formatDateTime(resolveShiftOpenedAt("2026-10-08", now)), "08.10.2026 09:00");
+});
+
+test("shift accounting date follows opened_at in Kyiv, not close time", () => {
+  assert.equal(
+    getShiftAccountingDateKey({
+      opened_at: "2026-10-08T06:00:00.000Z",
+      created_at: "2026-10-09T12:13:34.249Z",
+      shift_date: "2026-10-08",
+    }),
+    "2026-10-08",
+  );
+  assert.equal(toKyivDateString("2026-10-08T21:30:00.000Z"), "2026-10-09");
 });

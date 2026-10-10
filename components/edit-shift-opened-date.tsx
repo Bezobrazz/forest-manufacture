@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateShiftOpenedAt } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,12 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { Loader2, Pencil } from "lucide-react";
 import {
+  getKyivDateString,
   getKyivDateTimeParts,
   kyivCalendarDate,
+  toKyivDateString,
 } from "@/lib/datetime/kyiv";
+import { dateToYYYYMMDD } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import type { Shift } from "@/lib/types";
 
@@ -28,7 +31,7 @@ interface EditShiftOpenedDateProps {
 const pad = (value: number) => String(value).padStart(2, "0");
 
 const initialOpenedSource = (shift: Shift) =>
-  shift.opened_at || shift.created_at;
+  shift.opened_at || shift.created_at || shift.shift_date;
 
 export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
   const router = useRouter();
@@ -38,11 +41,29 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() =>
     openedSource ? kyivCalendarDate(openedSource) : undefined,
   );
-  const [openedTime, setOpenedTime] = useState(() => {
-    const parts = openedSource ? getKyivDateTimeParts(openedSource) : undefined;
+  const todayKey = getKyivDateString();
+  const selectedDateKey = selectedDate ? dateToYYYYMMDD(selectedDate) : "";
+  const isToday = selectedDateKey === todayKey;
+
+  const initialTime = useMemo(() => {
+    if (!openedSource) return "09:00";
+    const openDay = toKyivDateString(openedSource);
+    if (openDay !== todayKey) return "09:00";
+    const parts = getKyivDateTimeParts(openedSource);
     if (!parts) return "09:00";
     return `${pad(parts.hour)}:${pad(parts.minute)}`;
-  });
+  }, [openedSource, todayKey]);
+
+  const [openedTime, setOpenedTime] = useState(initialTime);
+
+  const handleSelectDate = (date: Date | undefined) => {
+    if (!date) return;
+    setSelectedDate(date);
+    const key = dateToYYYYMMDD(date);
+    if (key !== todayKey) {
+      setOpenedTime("09:00");
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,12 +80,11 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
     try {
       const formData = new FormData();
       formData.append("shift_id", shift.id.toString());
-
-      const year = selectedDate.getFullYear();
-      const month = (selectedDate.getMonth() + 1).toString().padStart(2, "0");
-      const day = selectedDate.getDate().toString().padStart(2, "0");
-      formData.append("opened_at", `${year}-${month}-${day}`);
-      formData.append("opened_time", openedTime);
+      formData.append("opened_at", dateToYYYYMMDD(selectedDate));
+      formData.append(
+        "opened_time",
+        dateToYYYYMMDD(selectedDate) === todayKey ? openedTime : "09:00",
+      );
 
       const result = await updateShiftOpenedAt(formData);
 
@@ -107,11 +127,7 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
             <CalendarComponent
               mode="single"
               selected={selectedDate}
-              onSelect={(date) => {
-                if (date) {
-                  setSelectedDate(date);
-                }
-              }}
+              onSelect={handleSelectDate}
               locale={uk}
               initialFocus
             />
@@ -121,10 +137,16 @@ export function EditShiftOpenedDate({ shift }: EditShiftOpenedDateProps) {
             <Input
               id="opened_time"
               type="time"
-              value={openedTime}
+              value={isToday ? openedTime : "09:00"}
               onChange={(e) => setOpenedTime(e.target.value)}
+              disabled={!isToday}
               required
             />
+            {!isToday && (
+              <p className="text-xs text-muted-foreground">
+                Для дня, відмінного від сьогодні, час відкриття — 09:00
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button

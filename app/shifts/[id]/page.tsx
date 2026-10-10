@@ -312,8 +312,8 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
                         Зміна відкрита:{" "}
                         {formatDateTime(
                           shift.opened_at ||
-                            shift.created_at ||
-                            shift.shift_date
+                            shift.shift_date ||
+                            shift.created_at
                         )}
                       </span>
                       {isOwner && <EditShiftOpenedDate shift={shift} />}
@@ -346,7 +346,7 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
         <HourlyWageProvider
           shiftId={shift.id}
           shiftOpenedAt={
-            shift.opened_at || shift.created_at || shift.shift_date
+            shift.opened_at || shift.shift_date || shift.created_at
           }
           employeeCount={employeeCount}
           initialLoadingRates={loadingRates}
