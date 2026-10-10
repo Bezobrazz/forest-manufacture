@@ -285,6 +285,14 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     [debts, isDateInRange]
   );
 
+  const filteredAdditionalDebts = useMemo(
+    () =>
+      (rawDeliveryDebt?.additionalDebts ?? []).filter((debt) =>
+        isDateInRange(parseDebtDate(debt.date_from))
+      ),
+    [rawDeliveryDebt, isDateInRange]
+  );
+
   const filteredRepayments = useMemo(() => {
     const debtRows: RepaymentHistoryItem[] = debts.flatMap((debt) =>
       debt.repayments.map((repayment) => ({
@@ -333,10 +341,20 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     [activeDebts]
   );
 
-  const periodNewDebtsTotal = useMemo(
-    () => filteredNewDebts.reduce((sum, debt) => sum + debt.amount, 0),
-    [filteredNewDebts]
-  );
+  const periodNewDebtsTotal = useMemo(() => {
+    const manualTotal = filteredNewDebts.reduce(
+      (sum, debt) => sum + debt.amount,
+      0
+    );
+    const additionalTotal = filteredAdditionalDebts.reduce(
+      (sum, debt) => sum + debt.amount,
+      0
+    );
+    return manualTotal + additionalTotal;
+  }, [filteredNewDebts, filteredAdditionalDebts]);
+
+  const periodNewDebtsCount =
+    filteredNewDebts.length + filteredAdditionalDebts.length;
 
   const periodRepaymentsTotal = useMemo(
     () => filteredRepayments.reduce((sum, row) => sum + row.amount, 0),
@@ -627,7 +645,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
               {formatNumberWithUnit(periodNewDebtsTotal, "₴")}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {filteredNewDebts.length} записів
+              {periodNewDebtsCount} записів
             </p>
           </CardContent>
         </Card>
@@ -700,6 +718,15 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                               "₴"
                             )}
                           </p>
+                          {rawDeliveryDebt.additionalDebtsAmountUah > 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              з них додаткові борги доставки{" "}
+                              {formatNumberWithUnit(
+                                rawDeliveryDebt.additionalDebtsAmountUah,
+                                "₴"
+                              )}
+                            </p>
+                          ) : null}
                         </div>
                         <Button
                           size="sm"
@@ -711,15 +738,56 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                       </div>
                       <div className="flex items-start justify-between gap-2 sm:gap-3">
                         <p className="text-sm text-muted-foreground min-w-0 flex-1 break-words">
-                          Витрати на рейси сировини.{" "}
+                          Витрати на рейси сировини
+                          {rawDeliveryDebt.additionalDebtsAmountUah > 0
+                            ? " та додаткові борги доставки"
+                            : ""}
+                          .{" "}
                           <Link
-                            href="/trips"
+                            href="/trips?tab=raw"
                             className="text-foreground underline-offset-4 hover:underline"
                           >
                             Відкрити поїздки
                           </Link>
                         </p>
                       </div>
+                      {rawDeliveryDebt.additionalDebts.length > 0 ? (
+                        <div className="space-y-2 border-t pt-3">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Додаткові борги доставки
+                          </p>
+                          {rawDeliveryDebt.additionalDebts.map((debt) => (
+                            <div
+                              key={debt.id}
+                              className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
+                            >
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-medium">
+                                    {debt.vehicle_name?.trim() || "Транспорт"}
+                                  </span>
+                                  <Badge variant="outline">
+                                    Борг доставки
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {debt.date_from === debt.date_to
+                                    ? formatDate(debt.date_from)
+                                    : `${formatDate(debt.date_from)} — ${formatDate(debt.date_to)}`}
+                                </p>
+                                {debt.comment ? (
+                                  <p className="text-xs text-muted-foreground break-words">
+                                    {debt.comment}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <span className="text-sm font-semibold tabular-nums shrink-0">
+                                {formatNumberWithUnit(debt.amount, "₴")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </CardContent>
                 </Card>

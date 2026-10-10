@@ -129,12 +129,35 @@ function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel
 }
 ```
 
-## 14. Vercel Hobby (free tier)
+## 14. Form Layout & Mobile
+
+Форми мають бути **акуратні, симетричні** і зручні на мобільному.
+
+### Верстка полів
+
+- Не розкидати інпути з різними фіксованими ширинами (`w-[160px]`, `w-[200px]` тощо) у `flex-wrap` «як вийде».
+- Використовувати CSS Grid з однаковими комірками: напр. `grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4`.
+- Усі контролі в рядку форми — однакова висота (`h-10`) і `w-full` у своїй комірці (`min-w-0`).
+- Кнопка submit: на мобільному `w-full`, на ширших екранах `sm:w-auto` і вирівнювання вправо (`justify-end`).
+
+### Мобільна адаптація
+
+- Спочатку 1 колонка; більше колонок лише з `sm` / `md` / `xl`, коли поля реально вміщуються.
+- Календар range: 1 місяць на вузькому екрані, 2 — на ширшому; popover не має виходити за край viewport.
+- Таблиці під формою / у картках: обгортка з `overflow-x-auto` за потреби.
+- Не ламати навмисні сусідні блоки (напр. картки «Залишок» і «Погасити» поруч з `sm:grid-cols-2`) лише заради внутрішньої сітки форми — адаптується сама форма, не батьківський layout без потреби.
+
+### Референс
+
+- `components/trips/raw-additional-debt-form.tsx` (блок «Додатковий борг доставки»)
+- форма «Погасити доставку» на `app/trips/page.tsx`
+
+## 15. Vercel Hobby (free tier)
 
 - Cron Jobs на безкоштовному тарифі: не пропонувати частіші за один запуск на 24 години; cron зовнішніх інтеграцій лише як резервне звірення, не основний канал даних.
 - Частота синхронізації з CRM — через webhook (push) на бекенд; добовий cron — лише reconcile на випадок пропуску подій.
 
-## 15. Page Tabs & Footer Navigation
+## 16. Page Tabs & Footer Navigation
 
 Кожна нова **вкладка сторінки** (page-level `Tabs` / секція навігації сторінки) **обов’язково** додається в футер для швидкої навігації.
 
@@ -151,7 +174,7 @@ function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel
 
 Не залишати нову вкладку лише в UI сторінки без пункту у футері.
 
-## 16. Supabase Migrations (remote DB)
+## 17. Supabase Migrations (remote DB)
 
 Коли фіча потребує зміни схеми БД:
 
@@ -163,7 +186,7 @@ function FormSubmitButton({ label, pendingLabel }: { label: string; pendingLabel
 
 Переважний спосіб: виконати SQL з міграційного файлу через `pg` (з `ssl: { rejectUnauthorized: false }` за потреби) або `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"` лише коли історія міграцій узгоджена; для однієї нової колонки — точковий `ALTER` з файлу міграції безпечніший за повний push усіх pending.
 
-## 17. KeepinCRM — черга відвантажень
+## 18. KeepinCRM — черга відвантажень
 
 Синхронізація угод на сторінці відвантажень бере **лише** угоди з етапу **id=5** («Доставка ОПТ»).
 

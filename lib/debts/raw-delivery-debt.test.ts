@@ -37,6 +37,31 @@ describe("buildRawDeliveryDebtByVehicle", () => {
     assert.equal(result.vehicles[1]?.remainingAmountUah, 400);
     assert.equal(result.unallocatedRepaidUah, 150);
   });
+
+  it("adds additional debts to the matching vehicle remaining", () => {
+    const result = buildRawDeliveryDebtByVehicle({
+      trips: [
+        {
+          vehicle_id: "truck",
+          vehicle_name: "Рено Магнум",
+          total_costs_uah: 1000,
+        },
+      ],
+      repayments: [{ vehicle_id: "truck", amount: 200 }],
+      additionalDebts: [
+        { vehicle_id: "truck", amount: 150 },
+        { vehicle_id: "van", vehicle_name: "Рено Мастер", amount: 80 },
+      ],
+    });
+
+    assert.equal(result.vehicles.length, 2);
+    const truck = result.vehicles.find((v) => v.vehicleId === "truck");
+    const van = result.vehicles.find((v) => v.vehicleId === "van");
+    assert.equal(truck?.totalCostsUah, 1150);
+    assert.equal(truck?.remainingAmountUah, 950);
+    assert.equal(van?.totalCostsUah, 80);
+    assert.equal(van?.remainingAmountUah, 80);
+  });
 });
 
 describe("buildRawDeliveryDebtSummary", () => {

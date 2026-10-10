@@ -11,11 +11,17 @@ import {
   updateRawRepayment,
 } from "@/app/actions";
 import {
+  deleteRawAdditionalDebt,
+  getRawAdditionalDebts,
+  type RawAdditionalDebtItem,
+} from "@/app/actions/raw-additional-debt";
+import {
   getTrips,
   getTripsForExport,
   type TripListItem,
 } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
+import { RawAdditionalDebtForm } from "@/components/trips/raw-additional-debt-form";
 import {
   Card,
   CardContent,
@@ -203,6 +209,14 @@ function TripsPageContent() {
   );
   const [repaymentSubmitting, setRepaymentSubmitting] = useState(false);
   const [repaymentsList, setRepaymentsList] = useState<RawRepaymentItem[]>([]);
+  const [additionalDebtsList, setAdditionalDebtsList] = useState<
+    RawAdditionalDebtItem[]
+  >([]);
+  const [deleteAdditionalDebtId, setDeleteAdditionalDebtId] = useState<
+    number | null
+  >(null);
+  const [deleteAdditionalDebtSubmitting, setDeleteAdditionalDebtSubmitting] =
+    useState(false);
   const [editingRepayment, setEditingRepayment] =
     useState<RawRepaymentItem | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -221,6 +235,11 @@ function TripsPageContent() {
   const repaymentsSum = useMemo(
     () => repaymentsList.reduce((s, r) => s + r.amount, 0),
     [repaymentsList],
+  );
+
+  const additionalDebtsSum = useMemo(
+    () => additionalDebtsList.reduce((s, r) => s + r.amount, 0),
+    [additionalDebtsList],
   );
 
   const repaymentTotalPages = Math.max(
@@ -314,8 +333,14 @@ function TripsPageContent() {
       setRepaymentsList,
     );
 
+  const refetchAdditionalDebts = () =>
+    getRawAdditionalDebts(repaymentDateFrom, repaymentDateTo).then(
+      setAdditionalDebtsList,
+    );
+
   useEffect(() => {
     refetchRepayments();
+    refetchAdditionalDebts();
   }, [repaymentDateFrom, repaymentDateTo]);
 
   useEffect(() => {
@@ -440,16 +465,24 @@ function TripsPageContent() {
   }, [rawTripsAll, repaymentPeriodFilter, repaymentYear]);
 
   const rawRepaymentTotals = useMemo(() => {
-    if (rawTripsForRepaymentBlock.length === 0) return null;
-    let sumTotalCostsUah = 0;
+    const hasTrips = rawTripsForRepaymentBlock.length > 0;
+    const hasAdditional = additionalDebtsSum > 0;
+    if (!hasTrips && !hasAdditional) return null;
+    let sumTripCostsUah = 0;
     let sumBags = 0;
     for (const t of rawTripsForRepaymentBlock) {
-      sumTotalCostsUah += t.total_costs_uah ?? 0;
+      sumTripCostsUah += t.total_costs_uah ?? 0;
       sumBags += t.bags_count ?? 0;
     }
-    const avgCostPerBagUah = sumBags > 0 ? sumTotalCostsUah / sumBags : null;
-    return { sumTotalCostsUah, sumBags, avgCostPerBagUah };
-  }, [rawTripsForRepaymentBlock]);
+    const sumTotalCostsUah = sumTripCostsUah + additionalDebtsSum;
+    const avgCostPerBagUah = sumBags > 0 ? sumTripCostsUah / sumBags : null;
+    return {
+      sumTripCostsUah,
+      sumTotalCostsUah,
+      sumBags,
+      avgCostPerBagUah,
+    };
+  }, [rawTripsForRepaymentBlock, additionalDebtsSum]);
 
   const vehicleNamesById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -468,12 +501,18 @@ function TripsPageContent() {
         total_costs_uah: t.total_costs_uah,
       })),
       repayments: repaymentsList,
+      additionalDebts: additionalDebtsList.map((d) => ({
+        vehicle_id: d.vehicle_id,
+        vehicle_name: d.vehicle_name,
+        amount: d.amount,
+      })),
       vehicleNames: vehicleNamesById,
     });
   }, [
     rawRepaymentTotals,
     rawTripsForRepaymentBlock,
     repaymentsList,
+    additionalDebtsList,
     vehicleNamesById,
   ]);
 
@@ -1072,6 +1111,86 @@ function TripsPageContent() {
                       </div>
                     </div>
                   )}
+                  <Accordion
+                    type="single"
+                    collapsible
+                    className="mt-4 w-full"
+                  >
+                    <AccordionItem
+                      value="additional-debt"
+                      className="rounded-lg border px-4"
+                    >
+                      <AccordionTrigger className="hover:no-underline">
+                        Додатковий борг доставки
+                        {additionalDebtsList.length > 0 &&
+                          ` (${additionalDebtsList.length})`}
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-4">
+                        <RawAdditionalDebtForm
+                          vehicles={vehicles}
+                          onCreated={() => {
+                            refetchAdditionalDebts();
+                          }}
+                        />
+                        {additionalDebtsList.length > 0 && (
+                          <div className="overflow-x-auto -mx-1 px-1">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="whitespace-nowrap">
+                                    Дата
+                                  </TableHead>
+                                  <TableHead className="whitespace-nowrap">
+                                    Транспорт
+                                  </TableHead>
+                                  <TableHead className="text-right whitespace-nowrap">
+                                    Сума
+                                  </TableHead>
+                                  <TableHead>Коментар</TableHead>
+                                  <TableHead className="w-[60px] text-right">
+                                    Дії
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {additionalDebtsList.map((item) => (
+                                  <TableRow key={item.id}>
+                                    <TableCell className="tabular-nums whitespace-nowrap">
+                                      {item.date_from === item.date_to
+                                        ? formatDate(item.date_from)
+                                        : `${formatDate(item.date_from)} — ${formatDate(item.date_to)}`}
+                                    </TableCell>
+                                    <TableCell className="max-w-[140px] truncate">
+                                      {item.vehicle_name?.trim() || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums font-medium whitespace-nowrap">
+                                      {formatUah(item.amount)}
+                                    </TableCell>
+                                    <TableCell className="max-w-[180px] truncate text-muted-foreground">
+                                      {item.comment?.trim() || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={() =>
+                                          setDeleteAdditionalDebtId(item.id)
+                                        }
+                                        aria-label="Видалити додатковий борг доставки"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                   {rawRepaymentTotals && (
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <div className="rounded-lg border bg-muted/40 p-4">
@@ -1136,6 +1255,24 @@ function TripsPageContent() {
                           Залишилось погасити
                         </h3>
                         <div className="space-y-2 text-sm">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              Витрати на рейси
+                            </span>
+                            <span className="tabular-nums font-medium">
+                              {formatUah(rawRepaymentTotals.sumTripCostsUah)}
+                            </span>
+                          </div>
+                          {additionalDebtsSum > 0 && (
+                            <div className="flex justify-between gap-2">
+                              <span className="text-muted-foreground">
+                                Додаткові борги доставки
+                              </span>
+                              <span className="tabular-nums font-medium">
+                                {formatUah(additionalDebtsSum)}
+                              </span>
+                            </div>
+                          )}
                           <div className="flex justify-between gap-2">
                             <span className="text-muted-foreground">
                               Всього витрат
@@ -1213,7 +1350,7 @@ function TripsPageContent() {
                           Погасити доставку
                         </h3>
                         <form
-                          className="flex flex-wrap items-end gap-4"
+                          className="space-y-4"
                           onSubmit={async (e) => {
                             e.preventDefault();
                             const amount = Number(repaymentAmount);
@@ -1249,99 +1386,110 @@ function TripsPageContent() {
                             }
                           }}
                         >
-                          <div className="space-y-1.5 min-w-[180px]">
-                            <Label
-                              htmlFor="repayment-vehicle"
-                              className="text-xs text-muted-foreground"
-                            >
-                              Транспорт
-                            </Label>
-                            <Select
-                              value={repaymentVehicleId || undefined}
-                              onValueChange={setRepaymentVehicleId}
-                              disabled={repaymentSubmitting}
-                            >
-                              <SelectTrigger
-                                id="repayment-vehicle"
-                                className="w-[200px]"
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5 min-w-0">
+                              <Label
+                                htmlFor="repayment-vehicle"
+                                className="text-xs text-muted-foreground"
                               >
-                                <SelectValue placeholder="Оберіть авто" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {vehicles.map((v) => (
-                                  <SelectItem key={v.id} value={v.id}>
-                                    {v.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                Транспорт
+                              </Label>
+                              <Select
+                                value={repaymentVehicleId || undefined}
+                                onValueChange={setRepaymentVehicleId}
+                                disabled={repaymentSubmitting}
+                              >
+                                <SelectTrigger
+                                  id="repayment-vehicle"
+                                  className="h-10 w-full"
+                                >
+                                  <SelectValue placeholder="Оберіть авто" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {vehicles.map((v) => (
+                                    <SelectItem key={v.id} value={v.id}>
+                                      {v.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5 min-w-0">
+                              <Label
+                                htmlFor="repayment-date"
+                                className="text-xs text-muted-foreground"
+                              >
+                                Дата
+                              </Label>
+                              <Input
+                                id="repayment-date"
+                                type="date"
+                                value={repaymentDate}
+                                onChange={(e) =>
+                                  setRepaymentDate(e.target.value)
+                                }
+                                disabled={repaymentSubmitting}
+                                className="h-10 w-full"
+                              />
+                            </div>
+                            <div className="space-y-1.5 min-w-0">
+                              <Label
+                                htmlFor="repayment-amount"
+                                className="text-xs text-muted-foreground"
+                              >
+                                Сума погашення (грн)
+                              </Label>
+                              <Input
+                                id="repayment-amount"
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                value={repaymentAmount}
+                                onChange={(e) =>
+                                  setRepaymentAmount(e.target.value)
+                                }
+                                disabled={repaymentSubmitting}
+                                className="h-10 w-full"
+                              />
+                            </div>
+                            <div className="space-y-1.5 min-w-0">
+                              <Label
+                                htmlFor="repayment-comment"
+                                className="text-xs text-muted-foreground"
+                              >
+                                Коментар
+                              </Label>
+                              <Input
+                                id="repayment-comment"
+                                value={repaymentComment}
+                                onChange={(e) =>
+                                  setRepaymentComment(e.target.value)
+                                }
+                                placeholder="Необов'язково"
+                                disabled={repaymentSubmitting}
+                                className="h-10 w-full"
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label
-                              htmlFor="repayment-date"
-                              className="text-xs text-muted-foreground"
-                            >
-                              Дата
-                            </Label>
-                            <Input
-                              id="repayment-date"
-                              type="date"
-                              value={repaymentDate}
-                              onChange={(e) => setRepaymentDate(e.target.value)}
+                          <div className="flex justify-stretch sm:justify-end">
+                            <Button
+                              type="submit"
                               disabled={repaymentSubmitting}
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label
-                              htmlFor="repayment-amount"
-                              className="text-xs text-muted-foreground"
+                              aria-busy={repaymentSubmitting}
+                              className="h-10 w-full sm:w-auto"
                             >
-                              Сума погашення (грн)
-                            </Label>
-                            <Input
-                              id="repayment-amount"
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              placeholder="0.00"
-                              value={repaymentAmount}
-                              onChange={(e) =>
-                                setRepaymentAmount(e.target.value)
-                              }
-                              disabled={repaymentSubmitting}
-                            />
+                              {repaymentSubmitting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Збереження…
+                                </>
+                              ) : (
+                                "Погасити"
+                              )}
+                            </Button>
                           </div>
-                          <div className="space-y-1.5 min-w-[200px] flex-1">
-                            <Label
-                              htmlFor="repayment-comment"
-                              className="text-xs text-muted-foreground"
-                            >
-                              Коментар
-                            </Label>
-                            <Input
-                              id="repayment-comment"
-                              value={repaymentComment}
-                              onChange={(e) =>
-                                setRepaymentComment(e.target.value)
-                              }
-                              placeholder="Необов'язково"
-                              disabled={repaymentSubmitting}
-                            />
-                          </div>
-                          <Button
-                            type="submit"
-                            disabled={repaymentSubmitting}
-                            aria-busy={repaymentSubmitting}
-                          >
-                            {repaymentSubmitting ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Збереження…
-                              </>
-                            ) : (
-                              "Погасити"
-                            )}
-                          </Button>
                         </form>
                       </div>
                     </div>
@@ -1684,6 +1832,63 @@ function TripsPageContent() {
                           }}
                         >
                           {deleteSubmitting ? "Видалення…" : "Видалити"}
+                        </Button>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <AlertDialog
+                    open={deleteAdditionalDebtId !== null}
+                    onOpenChange={(open) => {
+                      if (!open) setDeleteAdditionalDebtId(null);
+                    }}
+                  >
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Видалити додатковий борг доставки?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Цю дію не можна скасувати. Борг зникне із залишку
+                          погашення та зі сторінки Витрати → Борги.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                        <Button
+                          variant="destructive"
+                          disabled={deleteAdditionalDebtSubmitting}
+                          aria-busy={deleteAdditionalDebtSubmitting}
+                          onClick={async () => {
+                            if (deleteAdditionalDebtId === null) return;
+                            const idToDelete = deleteAdditionalDebtId;
+                            setDeleteAdditionalDebtSubmitting(true);
+                            try {
+                              const result =
+                                await deleteRawAdditionalDebt(idToDelete);
+                              if (!result.ok) {
+                                toast.error(result.error);
+                                return;
+                              }
+                              toast.success("Додатковий борг доставки видалено");
+                              setDeleteAdditionalDebtId(null);
+                              setAdditionalDebtsList((prev) =>
+                                prev.filter((d) => d.id !== idToDelete),
+                              );
+                            } catch {
+                              toast.error("Помилка при видаленні");
+                            } finally {
+                              setDeleteAdditionalDebtSubmitting(false);
+                            }
+                          }}
+                        >
+                          {deleteAdditionalDebtSubmitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Видалення…
+                            </>
+                          ) : (
+                            "Видалити"
+                          )}
                         </Button>
                       </AlertDialogFooter>
                     </AlertDialogContent>

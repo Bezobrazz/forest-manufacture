@@ -61,6 +61,11 @@ export function buildRawDeliveryDebtByVehicle(input: {
     vehicle_id: string | null;
     amount: number;
   }>;
+  additionalDebts?: Array<{
+    vehicle_id: string;
+    vehicle_name?: string | null;
+    amount: number;
+  }>;
   vehicleNames?: Record<string, string>;
 }): RawDeliveryDebtByVehicle {
   const costsByVehicle = new Map<string, number>();
@@ -77,6 +82,15 @@ export function buildRawDeliveryDebtByVehicle(input: {
     );
     if (trip.vehicle_name) {
       namesByVehicle.set(id, trip.vehicle_name);
+    }
+  }
+
+  for (const debt of input.additionalDebts ?? []) {
+    const id = debt.vehicle_id;
+    if (!id) continue;
+    costsByVehicle.set(id, (costsByVehicle.get(id) ?? 0) + (debt.amount ?? 0));
+    if (debt.vehicle_name) {
+      namesByVehicle.set(id, debt.vehicle_name);
     }
   }
 
