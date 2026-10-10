@@ -6,8 +6,11 @@ import {
   type RawAdditionalDebtItem,
 } from "@/app/actions/raw-additional-debt";
 import { getTrips } from "@/app/trips/actions";
+import { getVehicles } from "@/app/vehicles/actions";
 import {
+  buildRawDeliveryDebtByVehicle,
   buildRawDeliveryDebtSummary,
+  type RawDeliveryDebtByVehicle,
   type RawDeliveryDebtSummary,
 } from "@/lib/debts/raw-delivery-debt";
 
@@ -16,13 +19,15 @@ export type RawDeliveryDebtData = RawDeliveryDebtSummary & {
   additionalDebts: RawAdditionalDebtItem[];
   additionalDebtsAmountUah: number;
   tripCostsUah: number;
+  byVehicle: RawDeliveryDebtByVehicle;
 };
 
 export async function getRawDeliveryDebt(): Promise<RawDeliveryDebtData> {
-  const [trips, repayments, additionalDebts] = await Promise.all([
+  const [trips, repayments, additionalDebts, vehicles] = await Promise.all([
     getTrips(),
     getRawRepayments(),
     getRawAdditionalDebts(),
+    getVehicles(),
   ]);
 
   const rawTrips = trips.filter((trip) => trip.trip_type === "raw");
@@ -41,6 +46,29 @@ export async function getRawDeliveryDebt(): Promise<RawDeliveryDebtData> {
   const totalCostsUah = tripCostsUah + additionalDebtsAmountUah;
   const repaidAmountUah = repayments.reduce((sum, row) => sum + row.amount, 0);
 
+  const vehicleNames: Record<string, string> = {};
+  for (const vehicle of vehicles) {
+    vehicleNames[vehicle.id] = vehicle.name;
+  }
+
+  const byVehicle = buildRawDeliveryDebtByVehicle({
+    trips: rawTrips.map((trip) => ({
+      vehicle_id: trip.vehicle_id,
+      vehicle_name: trip.vehicle?.name ?? vehicleNames[trip.vehicle_id] ?? null,
+      total_costs_uah: trip.total_costs_uah,
+    })),
+    repayments: repayments.map((row) => ({
+      vehicle_id: row.vehicle_id,
+      amount: row.amount,
+    })),
+    additionalDebts: additionalDebts.map((row) => ({
+      vehicle_id: row.vehicle_id,
+      vehicle_name: row.vehicle_name,
+      amount: row.amount,
+    })),
+    vehicleNames,
+  });
+
   return {
     ...buildRawDeliveryDebtSummary({
       totalCostsUah,
@@ -52,5 +80,6 @@ export async function getRawDeliveryDebt(): Promise<RawDeliveryDebtData> {
     additionalDebts,
     additionalDebtsAmountUah,
     tripCostsUah,
+    byVehicle,
   };
 }

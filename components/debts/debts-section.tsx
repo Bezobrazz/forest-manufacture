@@ -61,7 +61,10 @@ import {
   getDebtRemainingOriginal,
   type DebtCurrency,
 } from "@/lib/debts/currency";
-import { RAW_DELIVERY_DEBT_TITLE } from "@/lib/debts/raw-delivery-debt";
+import {
+  RAW_DELIVERY_DEBT_TITLE,
+  RAW_UNALLOCATED_VEHICLE_LABEL,
+} from "@/lib/debts/raw-delivery-debt";
 import { cn, dateToYYYYMMDD, formatDate, formatNumberWithUnit } from "@/lib/utils";
 import { uk } from "date-fns/locale";
 import { toast } from "sonner";
@@ -92,7 +95,12 @@ type RepaymentHistoryItem =
 
 type RepaymentTarget =
   | { kind: "debt"; debt: DebtWithRepayments }
-  | { kind: "raw-delivery"; remainingAmount: number };
+  | {
+      kind: "raw-delivery";
+      remainingAmount: number;
+      vehicleId?: string;
+      vehicleName?: string;
+    };
 
 type DeleteRepaymentTarget = {
   kind: "debt" | "raw-delivery";
@@ -148,6 +156,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
   }>({ isOpen: false, target: null });
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentComment, setRepaymentComment] = useState("");
+  const [repaymentVehicleId, setRepaymentVehicleId] = useState("");
   const [repaymentDate, setRepaymentDate] = useState<Date | undefined>(() => new Date());
   const [repaymentDatePickerOpen, setRepaymentDatePickerOpen] = useState(false);
   const [isRepaymentPending, setIsRepaymentPending] = useState(false);
@@ -440,19 +449,36 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
     setRepaymentDate(new Date());
   };
 
-  const openRawDeliveryRepaymentDialog = () => {
+  const openRawDeliveryRepaymentDialog = (vehicleId?: string) => {
     if (!rawDeliveryDebt) return;
+    const vehicleRow = vehicleId
+      ? rawDeliveryDebt.byVehicle.vehicles.find((row) => row.vehicleId === vehicleId)
+      : null;
+    const remainingAmount = vehicleRow
+      ? Math.max(0, vehicleRow.remainingAmountUah)
+      : rawDeliveryDebt.remainingAmountUah;
     setRepaymentDialog({
       isOpen: true,
       target: {
         kind: "raw-delivery",
-        remainingAmount: rawDeliveryDebt.remainingAmountUah,
+        remainingAmount,
+        vehicleId: vehicleRow?.vehicleId,
+        vehicleName: vehicleRow?.vehicleName,
       },
     });
-    setRepaymentAmount(rawDeliveryDebt.remainingAmountUah.toFixed(2));
+    setRepaymentAmount(remainingAmount > 0 ? remainingAmount.toFixed(2) : "");
     setRepaymentComment("");
+    setRepaymentVehicleId(vehicleRow?.vehicleId ?? "");
     setRepaymentDate(new Date());
   };
+
+  const rawVehicleDebtRows = useMemo(
+    () =>
+      (rawDeliveryDebt?.byVehicle.vehicles ?? []).filter(
+        (row) => row.totalCostsUah > 0 || row.repaidAmountUah > 0
+      ),
+    [rawDeliveryDebt]
+  );
 
   const openEditDebtDialog = (debt: DebtWithRepayments) => {
     setEditDebtDialog({ isOpen: true, debt });
@@ -535,10 +561,15 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
           toast.error("Помилка", { description: "Оберіть дату" });
           return;
         }
+        if (!repaymentVehicleId.trim()) {
+          toast.error("Помилка", { description: "Оберіть транспорт" });
+          return;
+        }
         const result = await createRawCostRepayment(
           dateToYYYYMMDD(repaymentDate),
           amount,
-          repaymentComment
+          repaymentComment,
+          repaymentVehicleId
         );
         if (!result.ok) {
           toast.error("Помилка", { description: result.error });
@@ -742,7 +773,7 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                           {rawDeliveryDebt.additionalDebtsAmountUah > 0
                             ? " та додаткові борги доставки"
                             : ""}
-                          .{" "}
+                          {" "}по кожному транспорту.{" "}
                           <Link
                             href="/trips?tab=raw"
                             className="text-foreground underline-offset-4 hover:underline"
@@ -751,6 +782,69 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                           </Link>
                         </p>
                       </div>
+                      {rawVehicleDebtRows.length > 0 ? (
+                        <div className="space-y-2 border-t pt-3">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            По транспорту
+                          </p>
+                          {rawVehicleDebtRows.map((row) => {
+                            const remaining = Math.max(0, row.remainingAmountUah);
+                            return (
+                              <div
+                                key={row.vehicleId}
+                                className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
+                              >
+                                <div className="min-w-0 space-y-0.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-medium">
+                                      {row.vehicleName}
+                                    </span>
+                                    <Badge variant="outline">Доставка</Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Загалом{" "}
+                                    {formatNumberWithUnit(row.totalCostsUah, "₴")}{" "}
+                                    · погашено{" "}
+                                    {formatNumberWithUnit(row.repaidAmountUah, "₴")}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-sm font-semibold tabular-nums">
+                                    {formatNumberWithUnit(remaining, "₴")}
+                                  </span>
+                                  {remaining > 0 ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        openRawDeliveryRepaymentDialog(
+                                          row.vehicleId
+                                        )
+                                      }
+                                    >
+                                      Повернути
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {rawDeliveryDebt.byVehicle.unallocatedRepaidUah > 0 ? (
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2">
+                              <span className="text-sm text-muted-foreground">
+                                {RAW_UNALLOCATED_VEHICLE_LABEL}
+                              </span>
+                              <span className="text-sm tabular-nums text-muted-foreground">
+                                погашено{" "}
+                                {formatNumberWithUnit(
+                                  rawDeliveryDebt.byVehicle.unallocatedRepaidUah,
+                                  "₴"
+                                )}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {rawDeliveryDebt.additionalDebts.length > 0 ? (
                         <div className="space-y-2 border-t pt-3">
                           <p className="text-xs font-medium text-muted-foreground">
@@ -962,7 +1056,16 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {item.kind === "raw-delivery"
-                            ? RAW_DELIVERY_DEBT_TITLE
+                            ? (() => {
+                                const repayment =
+                                  rawDeliveryDebt?.repayments.find(
+                                    (row) => row.id === item.id
+                                  );
+                                const vehicleLabel =
+                                  repayment?.vehicle_name?.trim() ||
+                                  RAW_UNALLOCATED_VEHICLE_LABEL;
+                                return `${RAW_DELIVERY_DEBT_TITLE} · ${vehicleLabel}`;
+                              })()
                             : item.debt.counterparty}
                         </p>
                         <div className="text-lg font-bold">
@@ -1367,7 +1470,10 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
       <Dialog
         open={repaymentDialog.isOpen}
         onOpenChange={(open) => {
-          if (!open) setRepaymentDialog({ isOpen: false, target: null });
+          if (!open) {
+            setRepaymentDialog({ isOpen: false, target: null });
+            setRepaymentVehicleId("");
+          }
         }}
       >
         <DialogContent>
@@ -1381,7 +1487,11 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
             </DialogTitle>
             <DialogDescription>
               {repaymentDialog.target?.kind === "raw-delivery"
-                ? `${RAW_DELIVERY_DEBT_TITLE} · залишок ${formatNumberWithUnit(
+                ? `${
+                    repaymentDialog.target.vehicleName
+                      ? repaymentDialog.target.vehicleName
+                      : RAW_DELIVERY_DEBT_TITLE
+                  } · залишок ${formatNumberWithUnit(
                     repaymentDialog.target.remainingAmount,
                     "₴"
                   )}`
@@ -1403,6 +1513,56 @@ export function DebtsSection({ isDateInRange }: DebtsSectionProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {repaymentDialog.target?.kind === "raw-delivery" ? (
+              <div className="space-y-2">
+                <Label>Транспорт</Label>
+                <Select
+                  value={repaymentVehicleId || undefined}
+                  onValueChange={(vehicleId) => {
+                    setRepaymentVehicleId(vehicleId);
+                    const row = rawDeliveryDebt?.byVehicle.vehicles.find(
+                      (item) => item.vehicleId === vehicleId
+                    );
+                    if (!row) return;
+                    const remaining = Math.max(0, row.remainingAmountUah);
+                    setRepaymentDialog((prev) =>
+                      prev.target?.kind === "raw-delivery"
+                        ? {
+                            ...prev,
+                            target: {
+                              kind: "raw-delivery",
+                              remainingAmount: remaining,
+                              vehicleId: row.vehicleId,
+                              vehicleName: row.vehicleName,
+                            },
+                          }
+                        : prev
+                    );
+                    setRepaymentAmount(
+                      remaining > 0 ? remaining.toFixed(2) : ""
+                    );
+                  }}
+                  disabled={isRepaymentPending}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder="Оберіть авто" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rawVehicleDebtRows.map((row) => (
+                      <SelectItem key={row.vehicleId} value={row.vehicleId}>
+                        {row.vehicleName}
+                        {row.remainingAmountUah > 0
+                          ? ` · ${formatNumberWithUnit(
+                              Math.max(0, row.remainingAmountUah),
+                              "₴"
+                            )}`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Дата</Label>
               <Popover
