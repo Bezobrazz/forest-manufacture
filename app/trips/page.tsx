@@ -21,6 +21,7 @@ import {
   type TripListItem,
 } from "@/app/trips/actions";
 import { getVehicles, type Vehicle } from "@/app/vehicles/actions";
+import { RawAdditionalDebtEditDialog } from "@/components/trips/raw-additional-debt-edit-dialog";
 import { RawAdditionalDebtForm } from "@/components/trips/raw-additional-debt-form";
 import {
   Card,
@@ -212,6 +213,8 @@ function TripsPageContent() {
   const [additionalDebtsList, setAdditionalDebtsList] = useState<
     RawAdditionalDebtItem[]
   >([]);
+  const [editingAdditionalDebt, setEditingAdditionalDebt] =
+    useState<RawAdditionalDebtItem | null>(null);
   const [deleteAdditionalDebtId, setDeleteAdditionalDebtId] = useState<
     number | null
   >(null);
@@ -1170,17 +1173,30 @@ function TripsPageContent() {
                                       {item.comment?.trim() || "—"}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                        onClick={() =>
-                                          setDeleteAdditionalDebtId(item.id)
-                                        }
-                                        aria-label="Видалити додатковий борг доставки"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <div className="flex justify-end gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          onClick={() =>
+                                            setEditingAdditionalDebt(item)
+                                          }
+                                          aria-label="Редагувати додатковий борг доставки"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive hover:text-destructive"
+                                          onClick={() =>
+                                            setDeleteAdditionalDebtId(item.id)
+                                          }
+                                          aria-label="Видалити додатковий борг доставки"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -1836,6 +1852,16 @@ function TripsPageContent() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  <RawAdditionalDebtEditDialog
+                    debt={editingAdditionalDebt}
+                    vehicles={vehicles}
+                    onOpenChange={(open) => {
+                      if (!open) setEditingAdditionalDebt(null);
+                    }}
+                    onUpdated={() => {
+                      refetchAdditionalDebts();
+                    }}
+                  />
                   <AlertDialog
                     open={deleteAdditionalDebtId !== null}
                     onOpenChange={(open) => {

@@ -101,39 +101,84 @@ export async function getRawAdditionalDebts(
   }
 }
 
-export async function createRawAdditionalDebt(input: {
+type RawAdditionalDebtPayload = {
   vehicleId: string;
   amount: number;
   dateFrom: string;
   dateTo?: string;
   comment?: string;
-}): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
-  try {
-    const vehicleId = input.vehicleId?.trim();
-    if (!vehicleId) {
-      return { ok: false, error: "Оберіть транспорт" };
-    }
+};
 
-    const amount = parseAmount(input.amount);
-    const dateFrom = parseYmd(input.dateFrom, "дата");
-    const dateTo = input.dateTo?.trim()
+function parseDebtPayload(input: RawAdditionalDebtPayload):
+  | {
+      ok: true;
+      vehicleId: string;
+      amount: number;
+      dateFrom: string;
+      dateTo: string;
+      comment: string | null;
+    }
+  | { ok: false; error: string } {
+  const vehicleId = input.vehicleId?.trim();
+  if (!vehicleId) {
+    return { ok: false, error: "Оберіть транспорт" };
+  }
+
+  let amount: number;
+  try {
+    amount = parseAmount(input.amount);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Некоректна сума",
+    };
+  }
+
+  let dateFrom: string;
+  let dateTo: string;
+  try {
+    dateFrom = parseYmd(input.dateFrom, "дата");
+    dateTo = input.dateTo?.trim()
       ? parseYmd(input.dateTo, "дата кінця")
       : dateFrom;
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Некоректна дата",
+    };
+  }
 
-    if (dateTo < dateFrom) {
-      return { ok: false, error: "Дата кінця не може бути раніше дати початку" };
-    }
+  if (dateTo < dateFrom) {
+    return { ok: false, error: "Дата кінця не може бути раніше дати початку" };
+  }
 
-    const todayYmd = dateToYYYYMMDD(new Date());
-    if (dateFrom > todayYmd) {
-      return { ok: false, error: "Дата не може бути в майбутньому" };
-    }
+  const todayYmd = dateToYYYYMMDD(new Date());
+  if (dateFrom > todayYmd) {
+    return { ok: false, error: "Дата не може бути в майбутньому" };
+  }
+
+  return {
+    ok: true,
+    vehicleId,
+    amount,
+    dateFrom,
+    dateTo,
+    comment: normalizeComment(input.comment),
+  };
+}
+
+export async function createRawAdditionalDebt(
+  input: RawAdditionalDebtPayload
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    const parsed = parseDebtPayload(input);
+    if (!parsed.ok) return parsed;
 
     const supabase = await createServerClient();
     const { data: vehicle, error: vehicleError } = await supabase
       .from("vehicles")
       .select("id")
-      .eq("id", vehicleId)
+      .eq("id", parsed.vehicleId)
       .maybeSingle();
 
     if (vehicleError || !vehicle) {
@@ -143,11 +188,11 @@ export async function createRawAdditionalDebt(input: {
     const { data, error } = await supabase
       .from("raw_additional_debts")
       .insert({
-        vehicle_id: vehicleId,
-        amount,
-        date_from: dateFrom,
-        date_to: dateTo,
-        comment: normalizeComment(input.comment),
+        vehicle_id: parsed.vehicleId,
+        amount: parsed.amount,
+        date_from: parsed.dateFrom,
+        date_to: parsed.dateTo,
+        comment: parsed.comment,
       })
       .select("id")
       .single();
@@ -162,6 +207,59 @@ export async function createRawAdditionalDebt(input: {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Помилка при збереженні боргу";
+    return { ok: false, error: message };
+  }
+}
+
+export async function updateRawAdditionalDebt(
+  id: number,
+  input: RawAdditionalDebtPayload
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!id || !Number.isFinite(id)) {
+      return { ok: false, error: "Некоректний ідентифікатор" };
+    }
+
+    const parsed = parseDebtPayload(input);
+    if (!parsed.ok) return parsed;
+
+    const supabase = await createServerClient();
+    const { data: vehicle, error: vehicleError } = await supabase
+      .from("vehicles")
+      .select("id")
+      .eq("id", parsed.vehicleId)
+      .maybeSingle();
+
+    if (vehicleError || !vehicle) {
+      return { ok: false, error: "Транспорт не знайдено" };
+    }
+
+    const { data, error } = await supabase
+      .from("raw_additional_debts")
+      .update({
+        vehicle_id: parsed.vehicleId,
+        amount: parsed.amount,
+        date_from: parsed.dateFrom,
+        date_to: parsed.dateTo,
+        comment: parsed.comment,
+      })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error updating raw additional debt:", error);
+      throw error;
+    }
+    if (!data) {
+      return { ok: false, error: "Борг не знайдено" };
+    }
+
+    revalidateDebtPaths();
+    return { ok: true };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Помилка при оновленні боргу";
     return { ok: false, error: message };
   }
 }
