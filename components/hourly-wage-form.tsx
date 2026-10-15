@@ -951,80 +951,119 @@ function LoadingBagExpenseForm({
   );
 }
 
-export function HourlyWageSections() {
+export function HourlyWageSections({
+  hasProduction = false,
+}: {
+  hasProduction?: boolean;
+}) {
+  const expensesLocked = !hasProduction;
+
   return (
-    <>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Clock className="h-5 w-5 text-primary" />
-            Облік витрат
-          </CardTitle>
-          <CardDescription>
-            Години × ставка × кількість працівників. Окремий запис у З.П. Погодинна.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <HourlyWageAccountingForm />
-          <div>
-            <h4 className="text-sm font-medium mb-2">Збережений облік</h4>
-            <HourlyWageExpenseList kind="accounting" />
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6">
+      {expensesLocked ? (
+        <div className="rounded-lg border border-dashed bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          Спочатку збережіть продукцію («Зберегти всю продукцію»), щоб активувати
+          блоки витрат.
+        </div>
+      ) : null}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-primary" />
-            Сума витрат
-          </CardTitle>
-          <CardDescription>
-            Окрема сума, наприклад за вантажні роботи. Не змішується з погодинним обліком.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <HourlyWageManualForm />
-          <div>
-            <h4 className="text-sm font-medium mb-2">Збережені суми</h4>
-            <HourlyWageExpenseList kind="manual" />
-          </div>
-        </CardContent>
-      </Card>
+      <fieldset
+        disabled={expensesLocked}
+        className={
+          expensesLocked
+            ? "m-0 min-w-0 space-y-6 border-0 p-0 opacity-60 pointer-events-none select-none"
+            : "m-0 min-w-0 space-y-6 border-0 p-0"
+        }
+      >
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              Облік витрат
+            </CardTitle>
+            <CardDescription>
+              Години × ставка × кількість працівників. Окремий запис у З.П.
+              Погодинна.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <HourlyWageAccountingForm />
+            <div>
+              <h4 className="text-sm font-medium mb-2">Збережений облік</h4>
+              <HourlyWageExpenseList kind="accounting" />
+            </div>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" />
-            Витрати за завантаження
-          </CardTitle>
-          <CardDescription>
-            Підрахунок завантаження («З/П Підрахунок завантаження») та
-            завантаження кори («З/П Завантаження кори»): мішки × ставка. Ставки
-            зберігаються і підставляються наступного разу.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          <div className="space-y-6">
-            <h4 className="text-sm font-medium">Підрахунок завантаження</h4>
-            <LoadingBagExpenseForm kind="loading_count" />
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Сума витрат
+            </CardTitle>
+            <CardDescription>
+              Окрема сума, наприклад за вантажні роботи. Не змішується з
+              погодинним обліком.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <HourlyWageManualForm />
             <div>
-              <h5 className="text-sm font-medium mb-2">Збережений підрахунок</h5>
-              <HourlyWageExpenseList kind="loading_count" />
+              <h4 className="text-sm font-medium mb-2">Збережені суми</h4>
+              <HourlyWageExpenseList kind="manual" />
             </div>
-          </div>
-          <div className="space-y-6">
-            <h4 className="text-sm font-medium">Завантаження кори</h4>
-            <LoadingBagExpenseForm kind="loading" />
-            <div>
-              <h5 className="text-sm font-medium mb-2">
-                Збережене завантаження кори
-              </h5>
-              <HourlyWageExpenseList kind="loading" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              Витрати за завантаження
+            </CardTitle>
+            <CardDescription>
+              Підрахунок завантаження («З/П Підрахунок завантаження») та
+              завантаження кори («З/П Завантаження кори»): мішки × ставка.
+              Ставки зберігаються і підставляються наступного разу.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:gap-6">
+            <div className="rounded-lg border bg-background p-4 space-y-6 shadow-sm">
+              <div>
+                <h4 className="text-base font-semibold">Завантаження кори</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Категорія «З/П Завантаження кори»
+                </p>
+              </div>
+              <LoadingBagExpenseForm kind="loading" />
+              <div>
+                <h5 className="text-sm font-medium mb-2">
+                  Збережене завантаження кори
+                </h5>
+                <HourlyWageExpenseList kind="loading" />
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    </>
+
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-6">
+              <div>
+                <h4 className="text-base font-semibold">
+                  Підрахунок завантаження
+                </h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Категорія «З/П Підрахунок завантаження»
+                </p>
+              </div>
+              <LoadingBagExpenseForm kind="loading_count" />
+              <div>
+                <h5 className="text-sm font-medium mb-2">
+                  Збережений підрахунок
+                </h5>
+                <HourlyWageExpenseList kind="loading_count" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </fieldset>
+    </div>
   );
 }

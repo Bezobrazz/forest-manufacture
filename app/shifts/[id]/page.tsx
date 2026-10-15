@@ -530,7 +530,9 @@ export default async function ShiftPage({ params }: ShiftPageProps) {
           </CardContent>
         </Card>
 
-        <HourlyWageSections />
+        <HourlyWageSections
+          hasProduction={(shift.production?.length ?? 0) > 0}
+        />
         </HourlyWageProvider>
 
         <div className="grid gap-6 md:grid-cols-1">

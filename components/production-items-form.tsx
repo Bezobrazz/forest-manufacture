@@ -259,14 +259,21 @@ export function ProductionItemsForm({
         )}
 
         {shift.status === "active" && (
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin shrink-0 mr-2" />
-              ) : null}
-              Зберегти всю продукцію
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin shrink-0" />
+                Збереження…
+              </>
+            ) : (
+              "Зберегти всю продукцію"
+            )}
+          </Button>
         )}
       </form>
 
