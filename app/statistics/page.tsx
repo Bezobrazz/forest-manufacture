@@ -131,6 +131,10 @@ import {
   suggestedSellingPriceFromEurPerBag,
   suggestedSellingPriceUah,
 } from "@/lib/exchange/nbu-rates";
+import {
+  readNbuEurRateForToday,
+  writeNbuEurRateForToday,
+} from "@/lib/exchange/nbu-eur-daily-client";
 
 const STATISTICS_PAGE_TABS = ["cost", "production", "profitability", "ai"] as const;
 type StatisticsPageTab = (typeof STATISTICS_PAGE_TABS)[number];
@@ -326,8 +330,20 @@ function StatisticsPageContent() {
       setNbuRatesLoading(true);
       setNbuRatesError(null);
 
+      const cached = readNbuEurRateForToday();
+      if (cached) {
+        if (!cancelled) {
+          setEurUahRate(cached.rate);
+          setNbuExchangeDate(cached.exchangeDate);
+          setNbuRatesLoading(false);
+        }
+        return;
+      }
+
       try {
-        const response = await fetch("/api/exchange-rate/nbu");
+        const response = await fetch("/api/exchange-rate/nbu", {
+          cache: "no-store",
+        });
         const data = (await response.json()) as {
           ok?: boolean;
           eur?: { rate?: number; exchangeDate?: string | null };
@@ -341,6 +357,10 @@ function StatisticsPageContent() {
         if (!cancelled) {
           setEurUahRate(data.eur.rate);
           setNbuExchangeDate(data.eur.exchangeDate ?? null);
+          writeNbuEurRateForToday(
+            data.eur.rate,
+            data.eur.exchangeDate ?? null
+          );
         }
       } catch (error) {
         if (!cancelled) {

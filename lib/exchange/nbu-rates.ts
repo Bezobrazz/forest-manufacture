@@ -1,5 +1,27 @@
-const nbuCurrencyUrl = (currencyCode: string) =>
-  `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&json`;
+import { getKyivDateString } from "@/lib/datetime/kyiv";
+
+/** NBU `date` query: YYYYMMDD (київський календарний день). */
+export function toNbuDateParam(dateYmd: string): string {
+  return dateYmd.replaceAll("-", "");
+}
+
+/** Курс НБУ беремо на завтра (київський день) — зазвичай вже опублікований і актуальніший. */
+export function nbuRateDateYmd(now: Date = new Date()): string {
+  const [year, month, day] = getKyivDateString(now)
+    .split("-")
+    .map((part) => Number.parseInt(part, 10));
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  const y = next.getUTCFullYear();
+  const m = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(next.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export const nbuCurrencyUrl = (
+  currencyCode: string,
+  dateYmd: string = nbuRateDateYmd()
+) =>
+  `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&date=${toNbuDateParam(dateYmd)}&json`;
 
 export const SUGGESTED_PRICE_MARKUP_PERCENT = 35;
 export const SUGGESTED_EUR_PER_BAG = 0.06;
@@ -37,7 +59,7 @@ async function fetchNbuCurrencyRate(
   currencyCode: string
 ): Promise<NbuRateSnapshot> {
   const response = await fetch(nbuCurrencyUrl(currencyCode), {
-    next: { revalidate: 3600 },
+    cache: "no-store",
   });
 
   if (!response.ok) {

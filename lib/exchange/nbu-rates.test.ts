@@ -4,10 +4,29 @@ import {
   SUGGESTED_PRICE_MARKUP_PERCENT,
   convertUahToEur,
   convertEurToUah,
+  nbuCurrencyUrl,
+  nbuRateDateYmd,
   parseNbuRate,
   suggestedSellingPriceFromEurPerBag,
   suggestedSellingPriceUah,
+  toNbuDateParam,
 } from "./nbu-rates";
+
+test("toNbuDateParam formats YYYY-MM-DD as YYYYMMDD", () => {
+  assert.equal(toNbuDateParam("2026-10-18"), "20261018");
+});
+
+test("nbuRateDateYmd is Kyiv calendar tomorrow", () => {
+  // 18.10.2026 12:00 UTC ≈ ще 18-е в Києві (UTC+3)
+  assert.equal(nbuRateDateYmd(new Date("2026-10-18T12:00:00.000Z")), "2026-10-19");
+});
+
+test("nbuCurrencyUrl requests explicit Kyiv calendar date", () => {
+  assert.equal(
+    nbuCurrencyUrl("EUR", "2026-10-19"),
+    "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=EUR&date=20261019&json"
+  );
+});
 
 test("parseNbuRate extracts currency row", () => {
   const result = parseNbuRate(
