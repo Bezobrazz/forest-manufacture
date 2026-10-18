@@ -14,7 +14,19 @@ import { tripFormSchema } from "@/lib/trips/schemas";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
 import { sendTelegramMessage } from "@/lib/telegram";
 import type { Vehicle } from "@/app/vehicles/actions";
-import type { Product, Supplier, Warehouse } from "@/lib/types";
+import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
+import {
+  mapPlanningOrderRowToCrmShape,
+  mergeShipmentQueueByGlobalRank,
+  type ShipmentPlanningOrderDb,
+} from "@/lib/shipments/local-shipment";
+import type {
+  CrmOrderWithDetails,
+  Inventory,
+  Product,
+  Supplier,
+  Warehouse,
+} from "@/lib/types";
 
 const DEFAULT_RAW_DRIVER_PAY_UAH = 1000;
 const DEFAULT_RAW_TRIP_NAME = "Доставка сировини";
@@ -1107,4 +1119,118 @@ export async function getMiniAppOperations(
   });
 
   return { ok: true, operations, trips };
+}
+
+export async function getMiniAppFinishedInventory(): Promise<
+  | { ok: true; inventory: Inventory[] }
+  | { ok: false; error: string }
+> {
+  const auth = await requireMiniAppAccess();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const supabase = createServiceRoleClient();
+
+  const { data: oldInventoryData, error: oldInventoryError } = await supabase
+    .from("inventory")
+    .select("*, product:products(*, category:product_categories(*))")
+    .order("id");
+
+  if (oldInventoryError) {
+    console.error("getMiniAppFinishedInventory legacy:", oldInventoryError);
+  }
+
+  const { data: mainWarehouseData } = await supabase
+    .from("warehouses")
+    .select("id")
+    .ilike("name", "%main%")
+    .limit(1)
+    .maybeSingle();
+
+  let warehouseInventoryData: any[] = [];
+  if (mainWarehouseData?.id != null) {
+    const { data, error } = await supabase
+      .from("warehouse_inventory")
+      .select(
+        "id, product_id, quantity, updated_at, product:products(*, category:product_categories(*))"
+      )
+      .eq("warehouse_id", mainWarehouseData.id)
+      .order("id");
+
+    if (error) {
+      console.error("getMiniAppFinishedInventory warehouse:", error);
+    } else if (data) {
+      warehouseInventoryData = data;
+    }
+  }
+
+  const legacyRows = !oldInventoryError && oldInventoryData ? oldInventoryData : [];
+
+  return {
+    ok: true,
+    inventory: mergeInventoryForDisplay(legacyRows, warehouseInventoryData),
+  };
+}
+
+export async function getMiniAppShipmentQueue(): Promise<
+  | { ok: true; queue: CrmOrderWithDetails[] }
+  | { ok: false; error: string }
+> {
+  const auth = await requireMiniAppAccess();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const supabase = createServiceRoleClient();
+
+  const { data: planningRows, error: planningErr } = await supabase
+    .from("shipment_planning_orders")
+    .select(
+      `
+      *,
+      items:shipment_planning_order_items(
+        *,
+        product:products(
+          *,
+          category:product_categories(*)
+        )
+      )
+    `
+    )
+    .order("queue_rank", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (planningErr) {
+    console.error("getMiniAppShipmentQueue planning:", planningErr);
+  }
+
+  const { data, error } = await supabase
+    .from("crm_orders")
+    .select(
+      `
+      *,
+      customer:crm_customers(*),
+      items:crm_order_items(
+        *,
+        product:products(
+          *,
+          category:product_categories(*)
+        )
+      )
+    `
+    )
+    .order("queue_rank", { ascending: true })
+    .order("crm_created_at", { ascending: true });
+
+  if (error) {
+    console.error("getMiniAppShipmentQueue:", error);
+    return { ok: false, error: "Не вдалося завантажити чергу відвантаження" };
+  }
+
+  const localOrders = (planningRows ?? []).map((row) =>
+    mapPlanningOrderRowToCrmShape(row as ShipmentPlanningOrderDb)
+  );
+  const crmOrders = (data ?? []) as CrmOrderWithDetails[];
+
+  return {
+    ok: true,
+    queue: mergeShipmentQueueByGlobalRank(localOrders, crmOrders),
+  };
 }
