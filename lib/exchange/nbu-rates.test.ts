@@ -7,6 +7,7 @@ import {
   nbuCurrencyUrl,
   nbuRateDateYmd,
   parseNbuRate,
+  shiftKyivDateYmd,
   suggestedSellingPriceFromEurPerBag,
   suggestedSellingPriceUah,
   toNbuDateParam,
@@ -21,10 +22,19 @@ test("nbuRateDateYmd is Kyiv calendar tomorrow", () => {
   assert.equal(nbuRateDateYmd(new Date("2026-10-18T12:00:00.000Z")), "2026-10-19");
 });
 
+test("shiftKyivDateYmd moves calendar day", () => {
+  assert.equal(shiftKyivDateYmd("2026-10-19", -1), "2026-10-18");
+  assert.equal(shiftKyivDateYmd("2026-10-19", 1), "2026-10-20");
+});
+
 test("nbuCurrencyUrl requests explicit Kyiv calendar date", () => {
   assert.equal(
     nbuCurrencyUrl("EUR", "2026-10-19"),
     "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=EUR&date=20261019&json"
+  );
+  assert.equal(
+    nbuCurrencyUrl("EUR"),
+    "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=EUR&json"
   );
 });
 
@@ -42,6 +52,10 @@ test("parseNbuRate extracts currency row", () => {
     exchangeDate: "10.06.2026",
     source: "nbu",
   });
+});
+
+test("parseNbuRate returns null for empty NBU payload", () => {
+  assert.equal(parseNbuRate([], "EUR"), null);
 });
 
 test("suggestedSellingPriceUah adds markup and rounds up", () => {

@@ -1,6 +1,6 @@
 import { getKyivDateString } from "@/lib/datetime/kyiv";
 
-/** v3: курс НБУ на київський «завтра». */
+/** v3: курс НБУ на київський «завтра» (з fallback на сервері). */
 export const NBU_EUR_DAILY_STORAGE_KEY = "statistics:nbu-eur-rate:v3";
 
 export type CachedNbuEurRate = {
@@ -10,19 +10,12 @@ export type CachedNbuEurRate = {
   fetchedOn: string;
 };
 
-export function readNbuEurRateForToday(
-  now: Date = new Date()
-): CachedNbuEurRate | null {
-  if (typeof window === "undefined") return null;
-
+function parseCachedNbuEurRate(raw: string): CachedNbuEurRate | null {
   try {
-    const raw = window.localStorage.getItem(NBU_EUR_DAILY_STORAGE_KEY);
-    if (!raw) return null;
-
     const cached = JSON.parse(raw) as Partial<CachedNbuEurRate>;
     const rate = Number(cached.rate);
     if (
-      cached.fetchedOn !== getKyivDateString(now) ||
+      typeof cached.fetchedOn !== "string" ||
       !Number.isFinite(rate) ||
       rate <= 0
     ) {
@@ -38,6 +31,29 @@ export function readNbuEurRateForToday(
   } catch {
     return null;
   }
+}
+
+/** Будь-який валідний збережений курс (у т.ч. вчорашній). */
+export function readStoredNbuEurRate(): CachedNbuEurRate | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(NBU_EUR_DAILY_STORAGE_KEY);
+    if (!raw) return null;
+    return parseCachedNbuEurRate(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function readNbuEurRateForToday(
+  now: Date = new Date()
+): CachedNbuEurRate | null {
+  const cached = readStoredNbuEurRate();
+  if (!cached || cached.fetchedOn !== getKyivDateString(now)) {
+    return null;
+  }
+  return cached;
 }
 
 export function writeNbuEurRateForToday(

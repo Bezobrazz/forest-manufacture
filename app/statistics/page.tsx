@@ -133,6 +133,7 @@ import {
 } from "@/lib/exchange/nbu-rates";
 import {
   readNbuEurRateForToday,
+  readStoredNbuEurRate,
   writeNbuEurRateForToday,
 } from "@/lib/exchange/nbu-eur-daily-client";
 
@@ -364,11 +365,20 @@ function StatisticsPageContent() {
         }
       } catch (error) {
         if (!cancelled) {
-          setEurUahRate(null);
-          setNbuExchangeDate(null);
-          setNbuRatesError(
-            error instanceof Error ? error.message : "Не вдалося отримати курс євро"
-          );
+          const fallback = readStoredNbuEurRate();
+          if (fallback) {
+            setEurUahRate(fallback.rate);
+            setNbuExchangeDate(fallback.exchangeDate);
+            setNbuRatesError(null);
+          } else {
+            setEurUahRate(null);
+            setNbuExchangeDate(null);
+            setNbuRatesError(
+              error instanceof Error
+                ? error.message
+                : "Не вдалося отримати курс євро"
+            );
+          }
         }
       } finally {
         if (!cancelled) {

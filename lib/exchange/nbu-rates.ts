@@ -5,23 +5,32 @@ export function toNbuDateParam(dateYmd: string): string {
   return dateYmd.replaceAll("-", "");
 }
 
-/** Курс НБУ беремо на завтра (київський день) — зазвичай вже опублікований і актуальніший. */
-export function nbuRateDateYmd(now: Date = new Date()): string {
-  const [year, month, day] = getKyivDateString(now)
+export function shiftKyivDateYmd(dateYmd: string, days: number): string {
+  const [year, month, day] = dateYmd
     .split("-")
     .map((part) => Number.parseInt(part, 10));
-  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  const next = new Date(Date.UTC(year, month - 1, day + days));
   const y = next.getUTCFullYear();
   const m = String(next.getUTCMonth() + 1).padStart(2, "0");
   const d = String(next.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
+/** Бажана дата курсу — київський завтра (часто вже опублікований). */
+export function nbuRateDateYmd(now: Date = new Date()): string {
+  return shiftKyivDateYmd(getKyivDateString(now), 1);
+}
+
 export const nbuCurrencyUrl = (
   currencyCode: string,
-  dateYmd: string = nbuRateDateYmd()
-) =>
-  `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}&date=${toNbuDateParam(dateYmd)}&json`;
+  dateYmd?: string | null
+) => {
+  const base = `https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${currencyCode}`;
+  if (dateYmd) {
+    return `${base}&date=${toNbuDateParam(dateYmd)}&json`;
+  }
+  return `${base}&json`;
+};
 
 export const SUGGESTED_PRICE_MARKUP_PERCENT = 35;
 export const SUGGESTED_EUR_PER_BAG = 0.06;
@@ -42,7 +51,9 @@ export function parseNbuRate(
   rows: NbuRateRow[],
   currencyCode: string
 ): NbuRateSnapshot | null {
-  const row = rows.find((item) => item.cc === currencyCode);
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const row = rows.find((item) => item.cc === currencyCode) ?? rows[0];
   if (!row) return null;
 
   const rate = Number(row.rate);
@@ -55,42 +66,71 @@ export function parseNbuRate(
   };
 }
 
-async function fetchNbuCurrencyRate(
-  currencyCode: string
-): Promise<NbuRateSnapshot> {
-  const response = await fetch(nbuCurrencyUrl(currencyCode), {
+async function fetchNbuCurrencyRateOnce(
+  currencyCode: string,
+  dateYmd?: string | null
+): Promise<NbuRateSnapshot | null> {
+  const response = await fetch(nbuCurrencyUrl(currencyCode, dateYmd), {
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(`NBU API responded with ${response.status} for ${currencyCode}`);
+    return null;
   }
 
   const data = (await response.json()) as NbuRateRow[];
-  const snapshot = parseNbuRate(data, currencyCode);
+  return parseNbuRate(data, currencyCode);
+}
 
-  if (!snapshot) {
-    throw new Error(`NBU API returned no valid ${currencyCode} rate`);
+/**
+ * Порядок: завтра → сьогодні → «поточний» без дати → вчора.
+ * Порожня відповідь НБУ (напр. завтра ще не опубліковане) не є помилкою.
+ */
+async function fetchNbuCurrencyRate(
+  currencyCode: string,
+  now: Date = new Date()
+): Promise<NbuRateSnapshot> {
+  const today = getKyivDateString(now);
+  const candidates: Array<string | null> = [
+    shiftKyivDateYmd(today, 1),
+    today,
+    null,
+    shiftKyivDateYmd(today, -1),
+  ];
+
+  for (const dateYmd of candidates) {
+    try {
+      const snapshot = await fetchNbuCurrencyRateOnce(currencyCode, dateYmd);
+      if (snapshot) return snapshot;
+    } catch {
+      // спробувати наступний кандидат
+    }
   }
 
-  return snapshot;
+  throw new Error(`NBU API returned no valid ${currencyCode} rate`);
 }
 
-export async function fetchNbuEurRate(): Promise<NbuRateSnapshot> {
-  return fetchNbuCurrencyRate("EUR");
+export async function fetchNbuEurRate(
+  now: Date = new Date()
+): Promise<NbuRateSnapshot> {
+  return fetchNbuCurrencyRate("EUR", now);
 }
 
-export async function fetchNbuUsdRate(): Promise<NbuRateSnapshot> {
-  return fetchNbuCurrencyRate("USD");
+export async function fetchNbuUsdRate(
+  now: Date = new Date()
+): Promise<NbuRateSnapshot> {
+  return fetchNbuCurrencyRate("USD", now);
 }
 
-export async function fetchNbuDebtCurrencyRates(): Promise<{
+export async function fetchNbuDebtCurrencyRates(
+  now: Date = new Date()
+): Promise<{
   USD: NbuRateSnapshot;
   EUR: NbuRateSnapshot;
 }> {
   const [usd, eur] = await Promise.all([
-    fetchNbuUsdRate(),
-    fetchNbuEurRate(),
+    fetchNbuUsdRate(now),
+    fetchNbuEurRate(now),
   ]);
   return { USD: usd, EUR: eur };
 }
