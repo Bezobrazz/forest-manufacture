@@ -12,7 +12,10 @@ import { resolveKeepinSupplierExpenseRefs } from "@/lib/crm/keepincrm/payments";
 import { calculateTripMetrics } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
-import { sendTelegramMessage } from "@/lib/telegram";
+import {
+  getTelegramWorkBotToken,
+  sendTelegramChatMessage,
+} from "@/lib/telegram/bot";
 import type { Vehicle } from "@/app/vehicles/actions";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import {
@@ -88,8 +91,11 @@ async function notifyFieldDeliveriesSubmitted(params: {
     (params.endOdometerKm - params.startOdometerKm) * 100
   ) / 100;
 
+  const title =
+    params.purchases.length === 1 ? "Закупівлю додано" : "Закупівлі додано";
+
   const message = [
-    `📦 <b>Mini App: закупівлі і поїздка</b>`,
+    `📦 <b>${title}</b>`,
     ``,
     `Хто: <b>${escapeTelegramHtml(params.accessName)}</b>`,
     `Дата: <b>${escapeTelegramHtml(params.day)}</b>`,
@@ -111,9 +117,25 @@ async function notifyFieldDeliveriesSubmitted(params: {
   ].join("\n");
 
   try {
-    const sent = await sendTelegramMessage(message);
+    const botToken = getTelegramWorkBotToken();
+    const chatId = process.env.TELEGRAM_WORK_NOTIFY_CHAT_ID?.trim() || null;
+    if (!botToken) {
+      console.error(
+        "Mini App Telegram notify failed: TELEGRAM_BOT_WORK_TOKEN missing"
+      );
+      return;
+    }
+    if (!chatId) {
+      console.error(
+        "Mini App Telegram notify failed: TELEGRAM_WORK_NOTIFY_CHAT_ID missing"
+      );
+      return;
+    }
+    const sent = await sendTelegramChatMessage(botToken, chatId, message);
     if (!sent) {
-      console.error("Mini App Telegram notify failed: sendTelegramMessage returned false");
+      console.error(
+        "Mini App Telegram notify failed: sendTelegramChatMessage returned false"
+      );
     }
   } catch (error) {
     console.error("Mini App Telegram notify failed:", error);
