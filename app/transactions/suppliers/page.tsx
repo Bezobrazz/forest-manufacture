@@ -353,12 +353,18 @@ function SupplierTransactionsPageContent() {
           (item.data as SupplierDelivery).warehouse?.name
             ?.toLowerCase()
             .includes(query);
+        const additionalInfoMatch =
+          item.type === "delivery" &&
+          (item.data as SupplierDelivery).additional_info
+            ?.toLowerCase()
+            .includes(query);
         const advanceMatch =
           item.type === "advance" && query.includes("аванс");
         if (
           !supplierName.includes(query) &&
           !productMatch &&
           !warehouseMatch &&
+          !additionalInfoMatch &&
           !advanceMatch
         )
           return false;
@@ -1448,6 +1454,7 @@ function SupplierTransactionsPageContent() {
                         <TableHead>Постачальник</TableHead>
                         <TableHead>Хто вніс</TableHead>
                         <TableHead>Продукт</TableHead>
+                        <TableHead>Додаткова інформація</TableHead>
                         <TableHead className="text-right">
                           Матеріали (передано)
                         </TableHead>
@@ -1495,6 +1502,9 @@ function SupplierTransactionsPageContent() {
                                         Аванс
                                       </span>
                                     </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    —
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <span className="text-muted-foreground">
@@ -1604,6 +1614,9 @@ function SupplierTransactionsPageContent() {
                                     </span>
                                   </div>
                                 </TableCell>
+                                <TableCell className="max-w-[220px] text-sm text-muted-foreground whitespace-normal">
+                                  {delivery.additional_info?.trim() || "—"}
+                                </TableCell>
                                 <TableCell className="text-right">
                                   {delivery.material_quantity != null &&
                                   Number(delivery.material_quantity) > 0 ? (
@@ -1690,7 +1703,7 @@ function SupplierTransactionsPageContent() {
                             key={`subtotal-${group.dateStr}`}
                             className="bg-muted/40 font-medium"
                           >
-                            <TableCell colSpan={9} className="text-center">
+                            <TableCell colSpan={10} className="text-center">
                               Підсумок за {group.displayDate}:{" "}
                               <span className="font-semibold">
                                 {formatNumber(group.sum, {
