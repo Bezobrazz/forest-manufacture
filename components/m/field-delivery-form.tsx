@@ -718,7 +718,12 @@ export function FieldDeliveryForm({
         </div>
 
         <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-          <div className="text-sm font-semibold">Витрати на паливо</div>
+          <div>
+            <div className="text-sm font-semibold">Витрати на паливо</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Необовʼязково
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5 min-w-0">
               <Label htmlFor="fuel_expense_price">Ціна, ₴/л</Label>
@@ -728,7 +733,6 @@ export function FieldDeliveryForm({
                 className="h-11 text-base"
                 value={fuelExpensePrice}
                 onChange={(e) => setFuelExpensePrice(e.target.value)}
-                placeholder="Необовʼязково"
               />
             </div>
             <div className="space-y-1.5 min-w-0">
@@ -739,7 +743,6 @@ export function FieldDeliveryForm({
                 className="h-11 text-base"
                 value={fuelExpenseLiters}
                 onChange={(e) => setFuelExpenseLiters(e.target.value)}
-                placeholder="Необовʼязково"
               />
             </div>
           </div>
