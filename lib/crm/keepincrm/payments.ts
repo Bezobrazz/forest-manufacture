@@ -63,6 +63,7 @@ const KEEPIN_EXPENSE_KIND = "credit";
 
 let cachedPurseId: number | null | undefined;
 let cachedCategoryId: number | null | undefined;
+const cachedCategoryIdByName = new Map<string, number>();
 
 function normalizeLookupName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -194,6 +195,40 @@ export async function resolveKeepinSupplierExpenseRefs(): Promise<{
     resolveExpenseCategoryId(),
   ]);
   return { purseId, categoryId };
+}
+
+/** Резолвить ID категорії витрат KeepinCRM за назвою (kind=credit). */
+export async function resolveKeepinExpenseCategoryIdByName(
+  categoryName: string
+): Promise<number> {
+  const targetName = normalizeLookupName(categoryName);
+  if (!targetName) {
+    throw new Error("KeepinCRM: порожня назва категорії витрат");
+  }
+
+  const cached = cachedCategoryIdByName.get(targetName);
+  if (cached != null) return cached;
+
+  const categories = await fetchAllKeepinPaymentCategories();
+  const match = categories.find(
+    (c) =>
+      normalizeLookupName(c.name) === targetName &&
+      normalizeLookupName(c.kind) === KEEPIN_EXPENSE_KIND
+  );
+
+  if (!match) {
+    throw new Error(
+      `KeepinCRM: категорію витрат «${categoryName.trim()}» не знайдено`
+    );
+  }
+
+  cachedCategoryIdByName.set(targetName, match.id);
+  return match.id;
+}
+
+/** Гаманець для витрат (Петрович / env). */
+export async function resolveKeepinExpensePurseId(): Promise<number> {
+  return resolvePurseId();
 }
 
 /** Створює витрату в KeepinCRM (POST /payments). */
@@ -432,18 +467,28 @@ export function parseSupplierDeliveryIdFromExpenseComment(
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-/**
- * Шукає вже створену витрату для поставки (ідемпотентність retry/cron).
- * Сканує платежі від (atYmd − lookbackDays).
- */
-export async function findKeepinExpensePaymentByDeliveryId(
-  deliveryId: number,
+/** Коментар погашення доставки з Mini App: `Погашення доставки #<expenseId>: …` */
+export function vehicleRepaymentExpenseCommentMarker(expenseId: number): string {
+  return `Погашення доставки #${expenseId}:`;
+}
+
+export function parseExpenseIdFromVehicleRepaymentComment(
+  comment: string | null | undefined
+): number | null {
+  if (!comment) return null;
+  const match = comment.match(/Погашення доставки #(\d+):/);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+async function findKeepinExpensePaymentByCommentMarker(
+  marker: string,
   atYmd: string,
   options?: { lookbackDays?: number; maxPages?: number }
 ): Promise<number | null> {
   const lookbackDays = options?.lookbackDays ?? 3;
   const maxPages = options?.maxPages ?? 15;
-  const marker = supplierDeliveryExpenseCommentMarker(deliveryId);
   const since = new Date(`${atYmd.slice(0, 10)}T00:00:00.000Z`);
   if (!Number.isFinite(since.getTime())) {
     return null;
@@ -454,6 +499,37 @@ export async function findKeepinExpensePaymentByDeliveryId(
   const hit = payments.find((p) => (p.comment ?? "").includes(marker));
   const paymentId = Number(hit?.id);
   return Number.isFinite(paymentId) && paymentId > 0 ? paymentId : null;
+}
+
+/**
+ * Шукає вже створену витрату для поставки (ідемпотентність retry/cron).
+ * Сканує платежі від (atYmd − lookbackDays).
+ */
+export async function findKeepinExpensePaymentByDeliveryId(
+  deliveryId: number,
+  atYmd: string,
+  options?: { lookbackDays?: number; maxPages?: number }
+): Promise<number | null> {
+  return findKeepinExpensePaymentByCommentMarker(
+    supplierDeliveryExpenseCommentMarker(deliveryId),
+    atYmd,
+    options
+  );
+}
+
+/**
+ * Шукає вже створену витрату погашення доставки (ідемпотентність retry).
+ */
+export async function findKeepinExpensePaymentByExpenseId(
+  expenseId: number,
+  atYmd: string,
+  options?: { lookbackDays?: number; maxPages?: number }
+): Promise<number | null> {
+  return findKeepinExpensePaymentByCommentMarker(
+    vehicleRepaymentExpenseCommentMarker(expenseId),
+    atYmd,
+    options
+  );
 }
 
 export function isKeepinTransferListItem(

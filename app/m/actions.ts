@@ -9,6 +9,10 @@ import {
   syncSupplierDeliveryExpenseToKeepin,
 } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
 import { resolveKeepinSupplierExpenseRefs } from "@/lib/crm/keepincrm/payments";
+import {
+  syncVehicleRepaymentExpenseToKeepin,
+  type VehicleRepaymentExpenseKind,
+} from "@/lib/crm/keepincrm/sync-vehicle-repayment-expense";
 import { calculateTripMetrics } from "@/lib/trips/calc";
 import { tripFormSchema } from "@/lib/trips/schemas";
 import { TYPE_DEFAULTS } from "@/lib/trips/constants";
@@ -81,9 +85,16 @@ async function insertMiniAppVehicleExpense(params: {
   day: string;
   amount: number;
   vehicleId: string;
+  vehicleName: string;
   categoryName: string;
   description: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  repaymentKind: VehicleRepaymentExpenseKind;
+  crmDetail?: string | null;
+  keepinRefs?: { purseId: number; categoryId: number } | null;
+}): Promise<
+  | { ok: true; expenseId: number; crmWarning?: string }
+  | { ok: false; error: string }
+> {
   const categoryId = await ensureExpenseCategoryId(
     params.supabase,
     params.categoryName
@@ -92,21 +103,56 @@ async function insertMiniAppVehicleExpense(params: {
     return { ok: false, error: `Не знайдено категорію «${params.categoryName}»` };
   }
 
-  const { error } = await params.supabase.from("expenses").insert([
-    {
-      category_id: categoryId,
-      amount: params.amount,
-      description: params.description,
-      date: new Date(params.day).toISOString(),
-      vehicle_id: params.vehicleId,
-    },
-  ]);
+  const { data: created, error } = await params.supabase
+    .from("expenses")
+    .insert([
+      {
+        category_id: categoryId,
+        amount: params.amount,
+        description: params.description,
+        date: new Date(params.day).toISOString(),
+        vehicle_id: params.vehicleId,
+      },
+    ])
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || created?.id == null) {
     console.error("Mini App vehicle expense insert:", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: error?.message ?? "Не вдалося зберегти витрату" };
   }
-  return { ok: true };
+
+  const expenseId = Number(created.id);
+  let crmWarning: string | undefined;
+
+  try {
+    const paymentId = await syncVehicleRepaymentExpenseToKeepin({
+      expenseId,
+      amount: params.amount,
+      atYmd: params.day,
+      vehicleName: params.vehicleName,
+      kind: params.repaymentKind,
+      detail: params.crmDetail,
+      purseId: params.keepinRefs?.purseId,
+    });
+    if (paymentId != null) {
+      const { error: linkError } = await params.supabase
+        .from("expenses")
+        .update({ keepin_payment_id: paymentId })
+        .eq("id", expenseId);
+      if (linkError) {
+        console.error("Mini App expense keepin_payment_id update:", linkError);
+        crmWarning = `Витрату збережено (#${expenseId}), але не привʼязано до KeepinCRM`;
+      }
+    }
+  } catch (crmError) {
+    console.error("KeepinCRM Mini App repayment expense:", crmError);
+    const detail =
+      crmError instanceof Error ? crmError.message : "невідома помилка";
+    crmWarning = `Витрату збережено (#${expenseId}), але в KeepinCRM не проведено: ${detail}`;
+  }
+
+  return { ok: true, expenseId, crmWarning };
 }
 
 async function insertMiniAppFuelRepayment(params: {
@@ -114,16 +160,26 @@ async function insertMiniAppFuelRepayment(params: {
   day: string;
   amount: number;
   vehicleId: string;
+  vehicleName: string;
   priceUahPerL: number;
   liters: number;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  keepinRefs?: { purseId: number; categoryId: number } | null;
+}): Promise<
+  | { ok: true; expenseId: number; crmWarning?: string }
+  | { ok: false; error: string }
+> {
+  const detail = `${params.liters} л × ${params.priceUahPerL} ₴/л`;
   return insertMiniAppVehicleExpense({
     supabase: params.supabase,
     day: params.day,
     amount: params.amount,
     vehicleId: params.vehicleId,
+    vehicleName: params.vehicleName,
     categoryName: RAW_REPAYMENT_CATEGORY_NAME,
-    description: `Паливо (Mini App): ${params.liters} л × ${params.priceUahPerL} ₴/л`,
+    description: `Паливо (Mini App): ${detail}`,
+    repaymentKind: "fuel",
+    crmDetail: detail,
+    keepinRefs: params.keepinRefs,
   });
 }
 
@@ -1072,7 +1128,12 @@ export async function createFieldDeliveriesAndTrip(
     );
   }
 
+  const vehicleName = String(
+    (vehicle as { name?: string | null }).name ?? "—"
+  );
+
   let fuelRepaymentWarning: string | undefined;
+  let fuelExpenseSaved = false;
   if (
     fuelExpenseUah != null &&
     fuelExpenseUah > 0 &&
@@ -1084,11 +1145,18 @@ export async function createFieldDeliveriesAndTrip(
       day,
       amount: fuelExpenseUah,
       vehicleId: input.vehicleId,
+      vehicleName,
       priceUahPerL: fuelExpensePriceUahPerL,
       liters: fuelExpenseLiters,
+      keepinRefs,
     });
     if (!repayment.ok) {
       fuelRepaymentWarning = `Закупівлі і поїздку збережено, але погашення палива не записано: ${repayment.error}`;
+    } else {
+      fuelExpenseSaved = true;
+      if (repayment.crmWarning) {
+        fuelRepaymentWarning = repayment.crmWarning;
+      }
     }
   }
 
@@ -1104,24 +1172,15 @@ export async function createFieldDeliveriesAndTrip(
     accessName: auth.access.display_name,
     day,
     purchases: input.purchases,
-    vehicleName: String(
-      (vehicle as { name?: string | null }).name ?? "—"
-    ),
+    vehicleName,
     startOdometerKm: input.startOdometerKm,
     endOdometerKm: input.endOdometerKm,
     bagsTotal,
-    fuelExpenseUah:
-      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
-        ? fuelExpenseUah
-        : null,
-    fuelExpensePriceUahPerL:
-      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
-        ? fuelExpensePriceUahPerL
-        : null,
-    fuelExpenseLiters:
-      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
-        ? fuelExpenseLiters
-        : null,
+    fuelExpenseUah: fuelExpenseSaved ? fuelExpenseUah : null,
+    fuelExpensePriceUahPerL: fuelExpenseSaved
+      ? fuelExpensePriceUahPerL
+      : null,
+    fuelExpenseLiters: fuelExpenseSaved ? fuelExpenseLiters : null,
     crmFailures,
     supabase,
   });
@@ -1157,7 +1216,10 @@ export type MiniAppExpensesInput = {
 
 export async function createMiniAppExpenses(
   input: MiniAppExpensesInput
-): Promise<{ ok: true; savedCount: number } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; savedCount: number; crmWarning?: string }
+  | { ok: false; error: string }
+> {
   const auth = await requireMiniAppAccess();
   if (!auth.ok) return { ok: false, error: auth.error };
 
@@ -1238,7 +1300,19 @@ export async function createMiniAppExpenses(
     return { ok: false, error: "Оберіть транспорт" };
   }
 
+  const vehicleName = String(
+    (vehicle as { name?: string | null }).name ?? "—"
+  );
+
+  let keepinRefs: { purseId: number; categoryId: number } | null = null;
+  try {
+    keepinRefs = await resolveKeepinSupplierExpenseRefs();
+  } catch (error) {
+    console.error("KeepinCRM refs resolve (Mini App expenses):", error);
+  }
+
   let savedCount = 0;
+  const crmWarnings: string[] = [];
 
   if (hasFuel && fuelPrice != null && fuelLiters != null && fuelAmount != null) {
     const repayment = await insertMiniAppFuelRepayment({
@@ -1246,13 +1320,16 @@ export async function createMiniAppExpenses(
       day,
       amount: fuelAmount,
       vehicleId: input.vehicleId,
+      vehicleName,
       priceUahPerL: fuelPrice,
       liters: fuelLiters,
+      keepinRefs,
     });
     if (!repayment.ok) {
       return { ok: false, error: repayment.error };
     }
     savedCount += 1;
+    if (repayment.crmWarning) crmWarnings.push(repayment.crmWarning);
   }
 
   if (hasRepair && repairAmount != null) {
@@ -1265,8 +1342,12 @@ export async function createMiniAppExpenses(
       day,
       amount: repairAmount,
       vehicleId: input.vehicleId,
+      vehicleName,
       categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
+      repaymentKind: "repair",
+      crmDetail: comment || null,
+      keepinRefs,
     });
     if (!result.ok) {
       return {
@@ -1278,6 +1359,7 @@ export async function createMiniAppExpenses(
       };
     }
     savedCount += 1;
+    if (result.crmWarning) crmWarnings.push(result.crmWarning);
   }
 
   if (hasMaintenance && maintenanceAmount != null) {
@@ -1290,8 +1372,12 @@ export async function createMiniAppExpenses(
       day,
       amount: maintenanceAmount,
       vehicleId: input.vehicleId,
+      vehicleName,
       categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
+      repaymentKind: "maintenance",
+      crmDetail: comment || null,
+      keepinRefs,
     });
     if (!result.ok) {
       return {
@@ -1303,13 +1389,18 @@ export async function createMiniAppExpenses(
       };
     }
     savedCount += 1;
+    if (result.crmWarning) crmWarnings.push(result.crmWarning);
   }
 
   revalidatePath("/trips");
   revalidatePath("/expenses");
   revalidatePath("/m");
 
-  return { ok: true, savedCount };
+  return {
+    ok: true,
+    savedCount,
+    crmWarning: crmWarnings.length > 0 ? crmWarnings.join("; ") : undefined,
+  };
 }
 
 export type MiniAppOperation = {

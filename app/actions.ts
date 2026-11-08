@@ -20,6 +20,7 @@ import {
   syncSupplierDeliveryExpenseDeleteToKeepin,
   syncSupplierDeliveryExpenseToKeepin,
 } from "@/lib/crm/keepincrm/sync-supplier-delivery-expense";
+import { syncVehicleRepaymentExpenseDeleteToKeepin } from "@/lib/crm/keepincrm/sync-vehicle-repayment-expense";
 import {
   parseOptionalAmount,
   resolveSupplierDeliveryPayableAmount,
@@ -2871,11 +2872,27 @@ export async function deleteExpense(id: number) {
   try {
     const supabase = await createServerClient();
 
+    const { data: existing } = await supabase
+      .from("expenses")
+      .select("keepin_payment_id")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error } = await supabase.from("expenses").delete().eq("id", id);
 
     if (error) {
       console.error("Error deleting expense:", error);
       throw error;
+    }
+
+    const keepinPaymentId = (existing as { keepin_payment_id?: number | null } | null)
+      ?.keepin_payment_id;
+    if (keepinPaymentId != null) {
+      try {
+        await syncVehicleRepaymentExpenseDeleteToKeepin(keepinPaymentId);
+      } catch (crmError) {
+        console.error("KeepinCRM expense delete:", crmError);
+      }
     }
 
     revalidatePath("/expenses");

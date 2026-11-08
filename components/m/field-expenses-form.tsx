@@ -130,7 +130,11 @@ export function FieldExpensesForm({
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success("Витрати на паливо збережено");
+      if (result.crmWarning) {
+        toast.warning(result.crmWarning);
+      } else {
+        toast.success("Витрати на паливо збережено");
+      }
       setFuelExpensePrice("");
       setFuelExpenseLiters("");
       router.refresh();
@@ -161,7 +165,11 @@ export function FieldExpensesForm({
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success("Витрати на ремонт збережено");
+      if (result.crmWarning) {
+        toast.warning(result.crmWarning);
+      } else {
+        toast.success("Витрати на ремонт збережено");
+      }
       setRepairAmount("");
       setRepairComment("");
       router.refresh();
@@ -192,7 +200,11 @@ export function FieldExpensesForm({
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success("Витрати на обслуговування збережено");
+      if (result.crmWarning) {
+        toast.warning(result.crmWarning);
+      } else {
+        toast.success("Витрати на обслуговування збережено");
+      }
       setMaintenanceAmount("");
       setMaintenanceComment("");
       router.refresh();
