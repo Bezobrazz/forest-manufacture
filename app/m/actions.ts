@@ -17,6 +17,7 @@ import {
   sendTelegramChatMessage,
 } from "@/lib/telegram/bot";
 import type { Vehicle } from "@/app/vehicles/actions";
+import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import {
   mapPlanningOrderRowToCrmShape,
@@ -48,6 +49,64 @@ function formatMoneyUa(amount: number): string {
   })} ₴`;
 }
 
+async function ensureRawRepaymentCategoryId(
+  supabase: ReturnType<typeof createServiceRoleClient>
+): Promise<number | null> {
+  const { data: existing } = await supabase
+    .from("expense_categories")
+    .select("id")
+    .eq("name", RAW_REPAYMENT_CATEGORY_NAME)
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id != null) return Number(existing.id);
+
+  const { data: created, error } = await supabase
+    .from("expense_categories")
+    .insert([{ name: RAW_REPAYMENT_CATEGORY_NAME, description: null }])
+    .select("id")
+    .single();
+
+  if (error || created?.id == null) {
+    console.error("Mini App ensure raw repayment category:", error);
+    return null;
+  }
+  return Number(created.id);
+}
+
+async function insertMiniAppFuelRepayment(params: {
+  supabase: ReturnType<typeof createServiceRoleClient>;
+  day: string;
+  amount: number;
+  vehicleId: string;
+  priceUahPerL: number;
+  liters: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const categoryId = await ensureRawRepaymentCategoryId(params.supabase);
+  if (categoryId == null) {
+    return { ok: false, error: "Не знайдено категорію погашення доставки" };
+  }
+
+  const description = `Паливо (Mini App): ${params.liters} л × ${params.priceUahPerL} ₴/л`;
+
+  const { error } = await params.supabase.from("expenses").insert([
+    {
+      category_id: categoryId,
+      amount: params.amount,
+      description,
+      date: new Date(params.day).toISOString(),
+      vehicle_id: params.vehicleId,
+    },
+  ]);
+
+  if (error) {
+    console.error("Mini App fuel repayment insert:", error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 async function notifyFieldDeliveriesSubmitted(params: {
   accessName: string;
   day: string;
@@ -56,6 +115,9 @@ async function notifyFieldDeliveriesSubmitted(params: {
   startOdometerKm: number;
   endOdometerKm: number;
   bagsTotal: number;
+  fuelExpenseUah: number | null;
+  fuelExpensePriceUahPerL: number | null;
+  fuelExpenseLiters: number | null;
   crmFailures: string[];
   supabase: ReturnType<typeof createServiceRoleClient>;
 }) {
@@ -107,6 +169,20 @@ async function notifyFieldDeliveriesSubmitted(params: {
     `Транспорт: ${escapeTelegramHtml(params.vehicleName)}`,
     `Одометр: ${params.startOdometerKm} → ${params.endOdometerKm} (${distanceKm} км)`,
     `Мішків у поїздці: <b>${params.bagsTotal}</b>`,
+    ...(params.fuelExpenseUah != null && params.fuelExpenseUah > 0
+      ? [
+          `Паливо (погашення): <b>${escapeTelegramHtml(
+            formatMoneyUa(params.fuelExpenseUah)
+          )}</b>${
+            params.fuelExpenseLiters != null &&
+            params.fuelExpenseLiters > 0 &&
+            params.fuelExpensePriceUahPerL != null &&
+            params.fuelExpensePriceUahPerL > 0
+              ? ` · ${params.fuelExpenseLiters} л × ${params.fuelExpensePriceUahPerL} ₴/л`
+              : ""
+          }`,
+        ]
+      : []),
     ...(params.crmFailures.length
       ? [
           ``,
@@ -254,6 +330,9 @@ export type FieldDeliveriesAndTripInput = {
   startOdometerKm: number;
   endOdometerKm: number;
   fuelPriceUahPerL: number;
+  /** Касові витрати на паливо (ціна × літри) → погашення доставки по обраному авто */
+  fuelExpensePriceUahPerL?: number | null;
+  fuelExpenseLiters?: number | null;
 };
 
 async function syncSupplierAdvanceFromLedger(
@@ -750,7 +829,8 @@ async function retryUnsyncedFieldDeliveryExpenses(params: {
 export async function createFieldDeliveriesAndTrip(
   input: FieldDeliveriesAndTripInput
 ): Promise<
-  { ok: true; crmWarning?: string } | { ok: false; error: string }
+  | { ok: true; crmWarning?: string; fuelRepaymentWarning?: string }
+  | { ok: false; error: string }
 > {
   const auth = await requireMiniAppAccess();
   if (!auth.ok) return { ok: false, error: auth.error };
@@ -775,6 +855,40 @@ export async function createFieldDeliveriesAndTrip(
   ) {
     return { ok: false, error: "Вкажіть вартість пального за літр" };
   }
+
+  const fuelExpensePriceUahPerL =
+    input.fuelExpensePriceUahPerL != null &&
+    Number.isFinite(input.fuelExpensePriceUahPerL)
+      ? input.fuelExpensePriceUahPerL
+      : null;
+  const fuelExpenseLiters =
+    input.fuelExpenseLiters != null &&
+    Number.isFinite(input.fuelExpenseLiters)
+      ? input.fuelExpenseLiters
+      : null;
+
+  const hasFuelExpensePrice =
+    fuelExpensePriceUahPerL != null && fuelExpensePriceUahPerL > 0;
+  const hasFuelExpenseLiters =
+    fuelExpenseLiters != null && fuelExpenseLiters > 0;
+
+  if (fuelExpensePriceUahPerL != null && fuelExpensePriceUahPerL < 0) {
+    return { ok: false, error: "Ціна палива не може бути відʼємною" };
+  }
+  if (fuelExpenseLiters != null && fuelExpenseLiters < 0) {
+    return { ok: false, error: "Літри палива не можуть бути відʼємними" };
+  }
+  if (hasFuelExpensePrice !== hasFuelExpenseLiters) {
+    return {
+      ok: false,
+      error: "Для витрат на паливо вкажіть і ціну за літр, і кількість літрів",
+    };
+  }
+
+  const fuelExpenseUah =
+    hasFuelExpensePrice && hasFuelExpenseLiters
+      ? Math.round(fuelExpensePriceUahPerL! * fuelExpenseLiters! * 100) / 100
+      : null;
 
   const bagsTotal = input.purchases.reduce(
     (sum, p) => sum + Math.floor(Number(p.quantity) || 0),
@@ -938,6 +1052,26 @@ export async function createFieldDeliveriesAndTrip(
     );
   }
 
+  let fuelRepaymentWarning: string | undefined;
+  if (
+    fuelExpenseUah != null &&
+    fuelExpenseUah > 0 &&
+    fuelExpensePriceUahPerL != null &&
+    fuelExpenseLiters != null
+  ) {
+    const repayment = await insertMiniAppFuelRepayment({
+      supabase,
+      day,
+      amount: fuelExpenseUah,
+      vehicleId: input.vehicleId,
+      priceUahPerL: fuelExpensePriceUahPerL,
+      liters: fuelExpenseLiters,
+    });
+    if (!repayment.ok) {
+      fuelRepaymentWarning = `Закупівлі і поїздку збережено, але погашення палива не записано: ${repayment.error}`;
+    }
+  }
+
   // CRM лише після успішної пари «закупівлі + поїздка».
   const crmFailures = await retryUnsyncedFieldDeliveryExpenses({
     supabase,
@@ -956,20 +1090,35 @@ export async function createFieldDeliveriesAndTrip(
     startOdometerKm: input.startOdometerKm,
     endOdometerKm: input.endOdometerKm,
     bagsTotal,
+    fuelExpenseUah:
+      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
+        ? fuelExpenseUah
+        : null,
+    fuelExpensePriceUahPerL:
+      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
+        ? fuelExpensePriceUahPerL
+        : null,
+    fuelExpenseLiters:
+      fuelExpenseUah != null && fuelExpenseUah > 0 && !fuelRepaymentWarning
+        ? fuelExpenseLiters
+        : null,
     crmFailures,
     supabase,
   });
 
   revalidatePath("/transactions/suppliers");
   revalidatePath("/trips");
+  revalidatePath("/expenses");
   revalidatePath("/suppliers");
   revalidatePath("/m");
 
-  if (crmFailures.length > 0) {
-    return {
-      ok: true,
-      crmWarning: `Закупівлі і поїздку збережено, але в KeepinCRM не проведено: ${crmFailures.join("; ")}`,
-    };
+  const crmWarning =
+    crmFailures.length > 0
+      ? `Закупівлі і поїздку збережено, але в KeepinCRM не проведено: ${crmFailures.join("; ")}`
+      : undefined;
+
+  if (crmWarning || fuelRepaymentWarning) {
+    return { ok: true, crmWarning, fuelRepaymentWarning };
   }
 
   return { ok: true };

@@ -117,6 +117,8 @@ export function FieldDeliveryForm({
   const [startOdometer, setStartOdometer] = useState("");
   const [endOdometer, setEndOdometer] = useState("");
   const [fuelPrice, setFuelPrice] = useState("");
+  const [fuelExpensePrice, setFuelExpensePrice] = useState("");
+  const [fuelExpenseLiters, setFuelExpenseLiters] = useState("");
   const [pending, setPending] = useState(false);
 
   const filteredSuppliers = useMemo(() => {
@@ -141,7 +143,13 @@ export function FieldDeliveryForm({
   const sessionDirty = useMemo(() => {
     if (purchases.length > 1) return true;
     if (purchases.some(isLineDirty)) return true;
-    if (startOdometer.trim() || endOdometer.trim() || fuelPrice.trim()) {
+    if (
+      startOdometer.trim() ||
+      endOdometer.trim() ||
+      fuelPrice.trim() ||
+      fuelExpensePrice.trim() ||
+      fuelExpenseLiters.trim()
+    ) {
       return true;
     }
     if (vehicleId && vehicleId !== defaultVehicleId) return true;
@@ -151,9 +159,19 @@ export function FieldDeliveryForm({
     startOdometer,
     endOdometer,
     fuelPrice,
+    fuelExpensePrice,
+    fuelExpenseLiters,
     vehicleId,
     defaultVehicleId,
   ]);
+
+  const fuelExpenseSum = useMemo(() => {
+    const price = parseNum(fuelExpensePrice);
+    const liters = parseNum(fuelExpenseLiters);
+    if (price == null || liters == null || price < 0 || liters < 0) return null;
+    if (price === 0 && liters === 0) return null;
+    return Math.round(price * liters * 100) / 100;
+  }, [fuelExpensePrice, fuelExpenseLiters]);
 
   function updateLine(key: string, patch: Partial<PurchaseLine>) {
     setPurchases((prev) =>
@@ -179,6 +197,8 @@ export function FieldDeliveryForm({
     setStartOdometer("");
     setEndOdometer("");
     setFuelPrice("");
+    setFuelExpensePrice("");
+    setFuelExpenseLiters("");
     setVehicleId(defaultVehicleId);
   }
 
@@ -282,6 +302,30 @@ export function FieldDeliveryForm({
       return;
     }
 
+    const parsedFuelExpensePrice = parseNum(fuelExpensePrice);
+    const parsedFuelExpenseLiters = parseNum(fuelExpenseLiters);
+    const hasFuelExpensePrice =
+      fuelExpensePrice.trim() !== "" &&
+      parsedFuelExpensePrice != null &&
+      parsedFuelExpensePrice > 0;
+    const hasFuelExpenseLiters =
+      fuelExpenseLiters.trim() !== "" &&
+      parsedFuelExpenseLiters != null &&
+      parsedFuelExpenseLiters > 0;
+
+    if (fuelExpensePrice.trim() && (parsedFuelExpensePrice == null || parsedFuelExpensePrice < 0)) {
+      toast.error("Вкажіть коректну ціну палива за літр");
+      return;
+    }
+    if (fuelExpenseLiters.trim() && (parsedFuelExpenseLiters == null || parsedFuelExpenseLiters < 0)) {
+      toast.error("Вкажіть коректну кількість літрів");
+      return;
+    }
+    if (hasFuelExpensePrice !== hasFuelExpenseLiters) {
+      toast.error("Для витрат на паливо вкажіть і ціну за літр, і кількість літрів");
+      return;
+    }
+
     setPending(true);
     try {
       const result = await createFieldDeliveriesAndTrip({
@@ -293,6 +337,12 @@ export function FieldDeliveryForm({
         startOdometerKm: startKm,
         endOdometerKm: endKm,
         fuelPriceUahPerL: fuelPriceUah,
+        fuelExpensePriceUahPerL: hasFuelExpensePrice
+          ? parsedFuelExpensePrice
+          : null,
+        fuelExpenseLiters: hasFuelExpenseLiters
+          ? parsedFuelExpenseLiters
+          : null,
       });
       if (!result.ok) {
         const isSystemFailure = result.error.includes("збій програми");
@@ -303,7 +353,11 @@ export function FieldDeliveryForm({
       }
       if (result.crmWarning) {
         toast.warning(result.crmWarning);
-      } else {
+      }
+      if (result.fuelRepaymentWarning) {
+        toast.warning(result.fuelRepaymentWarning);
+      }
+      if (!result.crmWarning && !result.fuelRepaymentWarning) {
         toast.success(
           parsedPurchases.length > 1
             ? `Збережено ${parsedPurchases.length} закупівлі і поїздку`
@@ -661,6 +715,55 @@ export function FieldDeliveryForm({
             onChange={(e) => setFuelPrice(e.target.value)}
             required
           />
+        </div>
+
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div>
+            <div className="text-sm font-semibold">Витрати на паливо</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Необовʼязково. Ціна × літри піде в «Погашення доставки» для
+              обраного транспорту.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5 min-w-0">
+              <Label htmlFor="fuel_expense_price">Ціна, ₴/л</Label>
+              <Input
+                id="fuel_expense_price"
+                inputMode="decimal"
+                className="h-11 text-base"
+                value={fuelExpensePrice}
+                onChange={(e) => setFuelExpensePrice(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-1.5 min-w-0">
+              <Label htmlFor="fuel_expense_liters">Кількість, л</Label>
+              <Input
+                id="fuel_expense_liters"
+                inputMode="decimal"
+                className="h-11 text-base"
+                value={fuelExpenseLiters}
+                onChange={(e) => setFuelExpenseLiters(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fuel_expense_sum">Сума погашення, ₴</Label>
+            <Input
+              id="fuel_expense_sum"
+              className="h-11 text-base font-semibold tabular-nums"
+              value={
+                fuelExpenseSum != null
+                  ? formatNumberWithUnit(fuelExpenseSum, "₴")
+                  : ""
+              }
+              placeholder="—"
+              readOnly
+              disabled
+            />
+          </div>
         </div>
       </section>
 
