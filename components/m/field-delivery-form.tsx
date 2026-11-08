@@ -718,13 +718,7 @@ export function FieldDeliveryForm({
         </div>
 
         <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-          <div>
-            <div className="text-sm font-semibold">Витрати на паливо</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Необовʼязково. Ціна × літри піде в «Погашення доставки» для
-              обраного транспорту.
-            </p>
-          </div>
+          <div className="text-sm font-semibold">Витрати на паливо</div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5 min-w-0">
               <Label htmlFor="fuel_expense_price">Ціна, ₴/л</Label>
@@ -734,7 +728,7 @@ export function FieldDeliveryForm({
                 className="h-11 text-base"
                 value={fuelExpensePrice}
                 onChange={(e) => setFuelExpensePrice(e.target.value)}
-                placeholder="0"
+                placeholder="Необовʼязково"
               />
             </div>
             <div className="space-y-1.5 min-w-0">
@@ -745,12 +739,12 @@ export function FieldDeliveryForm({
                 className="h-11 text-base"
                 value={fuelExpenseLiters}
                 onChange={(e) => setFuelExpenseLiters(e.target.value)}
-                placeholder="0"
+                placeholder="Необовʼязково"
               />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="fuel_expense_sum">Сума погашення, ₴</Label>
+            <Label htmlFor="fuel_expense_sum">Сума витрат на пальне, ₴</Label>
             <Input
               id="fuel_expense_sum"
               className="h-11 text-base font-semibold tabular-nums"
