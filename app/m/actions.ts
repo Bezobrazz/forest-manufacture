@@ -49,13 +49,17 @@ function formatMoneyUa(amount: number): string {
   })} ₴`;
 }
 
-async function ensureRawRepaymentCategoryId(
-  supabase: ReturnType<typeof createServiceRoleClient>
+const MINI_APP_REPAIR_CATEGORY_NAME = "Ремонт";
+const MINI_APP_MAINTENANCE_CATEGORY_NAME = "Обслуговування";
+
+async function ensureExpenseCategoryId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  name: string
 ): Promise<number | null> {
   const { data: existing } = await supabase
     .from("expense_categories")
     .select("id")
-    .eq("name", RAW_REPAYMENT_CATEGORY_NAME)
+    .eq("name", name)
     .order("id", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -64,15 +68,48 @@ async function ensureRawRepaymentCategoryId(
 
   const { data: created, error } = await supabase
     .from("expense_categories")
-    .insert([{ name: RAW_REPAYMENT_CATEGORY_NAME, description: null }])
+    .insert([{ name, description: null }])
     .select("id")
     .single();
 
   if (error || created?.id == null) {
-    console.error("Mini App ensure raw repayment category:", error);
+    console.error(`Mini App ensure expense category "${name}":`, error);
     return null;
   }
   return Number(created.id);
+}
+
+async function insertMiniAppVehicleExpense(params: {
+  supabase: ReturnType<typeof createServiceRoleClient>;
+  day: string;
+  amount: number;
+  vehicleId: string;
+  categoryName: string;
+  description: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const categoryId = await ensureExpenseCategoryId(
+    params.supabase,
+    params.categoryName
+  );
+  if (categoryId == null) {
+    return { ok: false, error: `Не знайдено категорію «${params.categoryName}»` };
+  }
+
+  const { error } = await params.supabase.from("expenses").insert([
+    {
+      category_id: categoryId,
+      amount: params.amount,
+      description: params.description,
+      date: new Date(params.day).toISOString(),
+      vehicle_id: params.vehicleId,
+    },
+  ]);
+
+  if (error) {
+    console.error("Mini App vehicle expense insert:", error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
 
 async function insertMiniAppFuelRepayment(params: {
@@ -83,28 +120,14 @@ async function insertMiniAppFuelRepayment(params: {
   priceUahPerL: number;
   liters: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const categoryId = await ensureRawRepaymentCategoryId(params.supabase);
-  if (categoryId == null) {
-    return { ok: false, error: "Не знайдено категорію погашення доставки" };
-  }
-
-  const description = `Паливо (Mini App): ${params.liters} л × ${params.priceUahPerL} ₴/л`;
-
-  const { error } = await params.supabase.from("expenses").insert([
-    {
-      category_id: categoryId,
-      amount: params.amount,
-      description,
-      date: new Date(params.day).toISOString(),
-      vehicle_id: params.vehicleId,
-    },
-  ]);
-
-  if (error) {
-    console.error("Mini App fuel repayment insert:", error);
-    return { ok: false, error: error.message };
-  }
-  return { ok: true };
+  return insertMiniAppVehicleExpense({
+    supabase: params.supabase,
+    day: params.day,
+    amount: params.amount,
+    vehicleId: params.vehicleId,
+    categoryName: RAW_REPAYMENT_CATEGORY_NAME,
+    description: `Паливо (Mini App): ${params.liters} л × ${params.priceUahPerL} ₴/л`,
+  });
 }
 
 async function notifyFieldDeliveriesSubmitted(params: {
@@ -1124,16 +1147,20 @@ export async function createFieldDeliveriesAndTrip(
   return { ok: true };
 }
 
-export type MiniAppFuelExpenseInput = {
+export type MiniAppExpensesInput = {
   expenseDate: string;
   vehicleId: string;
-  fuelExpensePriceUahPerL: number;
-  fuelExpenseLiters: number;
+  fuelExpensePriceUahPerL?: number | null;
+  fuelExpenseLiters?: number | null;
+  repairAmountUah?: number | null;
+  repairComment?: string | null;
+  maintenanceAmountUah?: number | null;
+  maintenanceComment?: string | null;
 };
 
-export async function createMiniAppFuelExpense(
-  input: MiniAppFuelExpenseInput
-): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function createMiniAppExpenses(
+  input: MiniAppExpensesInput
+): Promise<{ ok: true; savedCount: number } | { ok: false; error: string }> {
   const auth = await requireMiniAppAccess();
   if (!auth.ok) return { ok: false, error: auth.error };
 
@@ -1145,18 +1172,62 @@ export async function createMiniAppFuelExpense(
     return { ok: false, error: "Оберіть транспорт" };
   }
 
-  const price = input.fuelExpensePriceUahPerL;
-  const liters = input.fuelExpenseLiters;
-  if (!Number.isFinite(price) || price <= 0) {
-    return { ok: false, error: "Вкажіть ціну палива за літр" };
+  const fuelPrice =
+    input.fuelExpensePriceUahPerL != null &&
+    Number.isFinite(input.fuelExpensePriceUahPerL)
+      ? input.fuelExpensePriceUahPerL
+      : null;
+  const fuelLiters =
+    input.fuelExpenseLiters != null && Number.isFinite(input.fuelExpenseLiters)
+      ? input.fuelExpenseLiters
+      : null;
+  const hasFuelPrice = fuelPrice != null && fuelPrice > 0;
+  const hasFuelLiters = fuelLiters != null && fuelLiters > 0;
+
+  if (fuelPrice != null && fuelPrice < 0) {
+    return { ok: false, error: "Ціна палива не може бути відʼємною" };
   }
-  if (!Number.isFinite(liters) || liters <= 0) {
-    return { ok: false, error: "Вкажіть кількість літрів" };
+  if (fuelLiters != null && fuelLiters < 0) {
+    return { ok: false, error: "Літри палива не можуть бути відʼємними" };
+  }
+  if (hasFuelPrice !== hasFuelLiters) {
+    return {
+      ok: false,
+      error: "Для витрат на паливо вкажіть і ціну за літр, і кількість літрів",
+    };
   }
 
-  const amount = Math.round(price * liters * 100) / 100;
-  if (!(amount > 0)) {
-    return { ok: false, error: "Сума витрат на паливо має бути більше нуля" };
+  const fuelAmount =
+    hasFuelPrice && hasFuelLiters
+      ? Math.round(fuelPrice! * fuelLiters! * 100) / 100
+      : null;
+
+  const repairAmount =
+    input.repairAmountUah != null && Number.isFinite(input.repairAmountUah)
+      ? Math.round(input.repairAmountUah * 100) / 100
+      : null;
+  if (repairAmount != null && repairAmount < 0) {
+    return { ok: false, error: "Сума ремонту не може бути відʼємною" };
+  }
+
+  const maintenanceAmount =
+    input.maintenanceAmountUah != null &&
+    Number.isFinite(input.maintenanceAmountUah)
+      ? Math.round(input.maintenanceAmountUah * 100) / 100
+      : null;
+  if (maintenanceAmount != null && maintenanceAmount < 0) {
+    return { ok: false, error: "Сума обслуговування не може бути відʼємною" };
+  }
+
+  const hasFuel = fuelAmount != null && fuelAmount > 0;
+  const hasRepair = repairAmount != null && repairAmount > 0;
+  const hasMaintenance = maintenanceAmount != null && maintenanceAmount > 0;
+
+  if (!hasFuel && !hasRepair && !hasMaintenance) {
+    return {
+      ok: false,
+      error: "Вкажіть хоча б одні витрати: паливо, ремонт або обслуговування",
+    };
   }
 
   const supabase = createServiceRoleClient();
@@ -1170,24 +1241,78 @@ export async function createMiniAppFuelExpense(
     return { ok: false, error: "Оберіть транспорт" };
   }
 
-  const repayment = await insertMiniAppFuelRepayment({
-    supabase,
-    day,
-    amount,
-    vehicleId: input.vehicleId,
-    priceUahPerL: price,
-    liters,
-  });
+  let savedCount = 0;
 
-  if (!repayment.ok) {
-    return { ok: false, error: repayment.error };
+  if (hasFuel && fuelPrice != null && fuelLiters != null && fuelAmount != null) {
+    const repayment = await insertMiniAppFuelRepayment({
+      supabase,
+      day,
+      amount: fuelAmount,
+      vehicleId: input.vehicleId,
+      priceUahPerL: fuelPrice,
+      liters: fuelLiters,
+    });
+    if (!repayment.ok) {
+      return { ok: false, error: repayment.error };
+    }
+    savedCount += 1;
+  }
+
+  if (hasRepair && repairAmount != null) {
+    const comment = input.repairComment?.trim() || "";
+    const description = comment
+      ? `Ремонт (Mini App): ${comment}`
+      : "Ремонт (Mini App)";
+    const result = await insertMiniAppVehicleExpense({
+      supabase,
+      day,
+      amount: repairAmount,
+      vehicleId: input.vehicleId,
+      categoryName: MINI_APP_REPAIR_CATEGORY_NAME,
+      description,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        error:
+          savedCount > 0
+            ? `Частину витрат збережено, але ремонт не записано: ${result.error}`
+            : result.error,
+      };
+    }
+    savedCount += 1;
+  }
+
+  if (hasMaintenance && maintenanceAmount != null) {
+    const comment = input.maintenanceComment?.trim() || "";
+    const description = comment
+      ? `Обслуговування (Mini App): ${comment}`
+      : "Обслуговування (Mini App)";
+    const result = await insertMiniAppVehicleExpense({
+      supabase,
+      day,
+      amount: maintenanceAmount,
+      vehicleId: input.vehicleId,
+      categoryName: MINI_APP_MAINTENANCE_CATEGORY_NAME,
+      description,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        error:
+          savedCount > 0
+            ? `Частину витрат збережено, але обслуговування не записано: ${result.error}`
+            : result.error,
+      };
+    }
+    savedCount += 1;
   }
 
   revalidatePath("/trips");
   revalidatePath("/expenses");
   revalidatePath("/m");
 
-  return { ok: true };
+  return { ok: true, savedCount };
 }
 
 export type MiniAppOperation = {

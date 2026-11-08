@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createMiniAppFuelExpense } from "@/app/m/actions";
+import { createMiniAppExpenses } from "@/app/m/actions";
 import type { Vehicle } from "@/app/vehicles/actions";
+import { FieldAmountExpenseFields } from "@/components/m/field-amount-expense-fields";
 import { FieldFuelExpenseFields } from "@/components/m/field-fuel-expense-fields";
 import { TripDateField } from "@/components/trip-date-field";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ export function FieldExpensesForm({
   const [vehicleId, setVehicleId] = useState(defaultVehicleId);
   const [fuelExpensePrice, setFuelExpensePrice] = useState("");
   const [fuelExpenseLiters, setFuelExpenseLiters] = useState("");
+  const [repairAmount, setRepairAmount] = useState("");
+  const [repairComment, setRepairComment] = useState("");
+  const [maintenanceAmount, setMaintenanceAmount] = useState("");
+  const [maintenanceComment, setMaintenanceComment] = useState("");
   const [pending, setPending] = useState(false);
 
   const fuelExpenseSum = useMemo(() => {
@@ -61,6 +66,10 @@ export function FieldExpensesForm({
   function resetForm() {
     setFuelExpensePrice("");
     setFuelExpenseLiters("");
+    setRepairAmount("");
+    setRepairComment("");
+    setMaintenanceAmount("");
+    setMaintenanceComment("");
     setVehicleId(defaultVehicleId);
   }
 
@@ -72,30 +81,92 @@ export function FieldExpensesForm({
       return;
     }
 
-    const price = parseNum(fuelExpensePrice);
-    const liters = parseNum(fuelExpenseLiters);
-    if (price == null || price <= 0) {
-      toast.error("Вкажіть ціну палива за літр");
+    const parsedFuelPrice = parseNum(fuelExpensePrice);
+    const parsedFuelLiters = parseNum(fuelExpenseLiters);
+    const hasFuelPrice =
+      fuelExpensePrice.trim() !== "" &&
+      parsedFuelPrice != null &&
+      parsedFuelPrice > 0;
+    const hasFuelLiters =
+      fuelExpenseLiters.trim() !== "" &&
+      parsedFuelLiters != null &&
+      parsedFuelLiters > 0;
+
+    if (
+      fuelExpensePrice.trim() &&
+      (parsedFuelPrice == null || parsedFuelPrice < 0)
+    ) {
+      toast.error("Вкажіть коректну ціну палива за літр");
       return;
     }
-    if (liters == null || liters <= 0) {
-      toast.error("Вкажіть кількість літрів");
+    if (
+      fuelExpenseLiters.trim() &&
+      (parsedFuelLiters == null || parsedFuelLiters < 0)
+    ) {
+      toast.error("Вкажіть коректну кількість літрів");
+      return;
+    }
+    if (hasFuelPrice !== hasFuelLiters) {
+      toast.error(
+        "Для витрат на паливо вкажіть і ціну за літр, і кількість літрів"
+      );
+      return;
+    }
+
+    const parsedRepairAmount = parseNum(repairAmount);
+    if (
+      repairAmount.trim() &&
+      (parsedRepairAmount == null || parsedRepairAmount < 0)
+    ) {
+      toast.error("Вкажіть коректну суму ремонту");
+      return;
+    }
+
+    const parsedMaintenanceAmount = parseNum(maintenanceAmount);
+    if (
+      maintenanceAmount.trim() &&
+      (parsedMaintenanceAmount == null || parsedMaintenanceAmount < 0)
+    ) {
+      toast.error("Вкажіть коректну суму обслуговування");
+      return;
+    }
+
+    const hasFuel = hasFuelPrice && hasFuelLiters;
+    const hasRepair =
+      parsedRepairAmount != null && parsedRepairAmount > 0;
+    const hasMaintenance =
+      parsedMaintenanceAmount != null && parsedMaintenanceAmount > 0;
+
+    if (!hasFuel && !hasRepair && !hasMaintenance) {
+      toast.error(
+        "Вкажіть хоча б одні витрати: паливо, ремонт або обслуговування"
+      );
       return;
     }
 
     setPending(true);
     try {
-      const result = await createMiniAppFuelExpense({
+      const result = await createMiniAppExpenses({
         expenseDate: dateToYYYYMMDD(eventDate),
         vehicleId,
-        fuelExpensePriceUahPerL: price,
-        fuelExpenseLiters: liters,
+        fuelExpensePriceUahPerL: hasFuel ? parsedFuelPrice : null,
+        fuelExpenseLiters: hasFuel ? parsedFuelLiters : null,
+        repairAmountUah: hasRepair ? parsedRepairAmount : null,
+        repairComment: repairComment.trim() || null,
+        maintenanceAmountUah: hasMaintenance
+          ? parsedMaintenanceAmount
+          : null,
+        maintenanceComment: maintenanceComment.trim() || null,
       });
       if (!result.ok) {
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success("Витрати на паливо збережено");
+      toast.success(
+        result.savedCount > 1
+          ? `Збережено ${result.savedCount} витрати`
+          : "Витрати збережено"
+      );
       resetForm();
       router.refresh();
     } finally {
@@ -152,7 +223,26 @@ export function FieldExpensesForm({
           sum={fuelExpenseSum}
           onPriceChange={setFuelExpensePrice}
           onLitersChange={setFuelExpenseLiters}
-          showOptionalHint={false}
+        />
+
+        <FieldAmountExpenseFields
+          title="Витрати на ремонт"
+          amountId="repair_amount"
+          commentId="repair_comment"
+          amount={repairAmount}
+          comment={repairComment}
+          onAmountChange={setRepairAmount}
+          onCommentChange={setRepairComment}
+        />
+
+        <FieldAmountExpenseFields
+          title="Витрати на обслуговування"
+          amountId="maintenance_amount"
+          commentId="maintenance_comment"
+          amount={maintenanceAmount}
+          comment={maintenanceComment}
+          onAmountChange={setMaintenanceAmount}
+          onCommentChange={setMaintenanceComment}
         />
       </section>
 
@@ -168,7 +258,7 @@ export function FieldExpensesForm({
             Збереження…
           </>
         ) : (
-          "Зберегти витрати на паливо"
+          "Зберегти витрати"
         )}
       </Button>
     </form>
