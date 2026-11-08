@@ -26,11 +26,41 @@ type Props = {
   lastVehicleId: string | null;
 };
 
+type PendingKind = "fuel" | "repair" | "maintenance" | null;
+
 function parseNum(value: string): number | null {
   const v = value.trim();
   if (v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function ExpenseSubmitButton({
+  pending,
+  disabled,
+  label,
+}: {
+  pending: boolean;
+  disabled: boolean;
+  label: string;
+}) {
+  return (
+    <Button
+      type="submit"
+      className="h-11 w-full text-base"
+      disabled={disabled}
+      aria-busy={pending}
+    >
+      {pending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Збереження…
+        </>
+      ) : (
+        label
+      )}
+    </Button>
+  );
 }
 
 export function FieldExpensesForm({
@@ -53,7 +83,7 @@ export function FieldExpensesForm({
   const [repairComment, setRepairComment] = useState("");
   const [maintenanceAmount, setMaintenanceAmount] = useState("");
   const [maintenanceComment, setMaintenanceComment] = useState("");
-  const [pending, setPending] = useState(false);
+  const [pendingKind, setPendingKind] = useState<PendingKind>(null);
 
   const fuelExpenseSum = useMemo(() => {
     const price = parseNum(fuelExpensePrice);
@@ -63,114 +93,111 @@ export function FieldExpensesForm({
     return Math.round(price * liters * 100) / 100;
   }, [fuelExpensePrice, fuelExpenseLiters]);
 
-  function resetForm() {
-    setFuelExpensePrice("");
-    setFuelExpenseLiters("");
-    setRepairAmount("");
-    setRepairComment("");
-    setMaintenanceAmount("");
-    setMaintenanceComment("");
-    setVehicleId(defaultVehicleId);
-  }
+  const anyPending = pendingKind != null;
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-
+  function requireSharedFields(): boolean {
     if (!vehicleId) {
       toast.error("Оберіть транспорт");
+      return false;
+    }
+    return true;
+  }
+
+  async function handleFuelSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!requireSharedFields()) return;
+
+    const price = parseNum(fuelExpensePrice);
+    const liters = parseNum(fuelExpenseLiters);
+    if (price == null || price <= 0) {
+      toast.error("Вкажіть ціну палива за літр");
+      return;
+    }
+    if (liters == null || liters <= 0) {
+      toast.error("Вкажіть кількість літрів");
       return;
     }
 
-    const parsedFuelPrice = parseNum(fuelExpensePrice);
-    const parsedFuelLiters = parseNum(fuelExpenseLiters);
-    const hasFuelPrice =
-      fuelExpensePrice.trim() !== "" &&
-      parsedFuelPrice != null &&
-      parsedFuelPrice > 0;
-    const hasFuelLiters =
-      fuelExpenseLiters.trim() !== "" &&
-      parsedFuelLiters != null &&
-      parsedFuelLiters > 0;
-
-    if (
-      fuelExpensePrice.trim() &&
-      (parsedFuelPrice == null || parsedFuelPrice < 0)
-    ) {
-      toast.error("Вкажіть коректну ціну палива за літр");
-      return;
-    }
-    if (
-      fuelExpenseLiters.trim() &&
-      (parsedFuelLiters == null || parsedFuelLiters < 0)
-    ) {
-      toast.error("Вкажіть коректну кількість літрів");
-      return;
-    }
-    if (hasFuelPrice !== hasFuelLiters) {
-      toast.error(
-        "Для витрат на паливо вкажіть і ціну за літр, і кількість літрів"
-      );
-      return;
-    }
-
-    const parsedRepairAmount = parseNum(repairAmount);
-    if (
-      repairAmount.trim() &&
-      (parsedRepairAmount == null || parsedRepairAmount < 0)
-    ) {
-      toast.error("Вкажіть коректну суму ремонту");
-      return;
-    }
-
-    const parsedMaintenanceAmount = parseNum(maintenanceAmount);
-    if (
-      maintenanceAmount.trim() &&
-      (parsedMaintenanceAmount == null || parsedMaintenanceAmount < 0)
-    ) {
-      toast.error("Вкажіть коректну суму обслуговування");
-      return;
-    }
-
-    const hasFuel = hasFuelPrice && hasFuelLiters;
-    const hasRepair =
-      parsedRepairAmount != null && parsedRepairAmount > 0;
-    const hasMaintenance =
-      parsedMaintenanceAmount != null && parsedMaintenanceAmount > 0;
-
-    if (!hasFuel && !hasRepair && !hasMaintenance) {
-      toast.error(
-        "Вкажіть хоча б одні витрати: паливо, ремонт або обслуговування"
-      );
-      return;
-    }
-
-    setPending(true);
+    setPendingKind("fuel");
     try {
       const result = await createMiniAppExpenses({
         expenseDate: dateToYYYYMMDD(eventDate),
         vehicleId,
-        fuelExpensePriceUahPerL: hasFuel ? parsedFuelPrice : null,
-        fuelExpenseLiters: hasFuel ? parsedFuelLiters : null,
-        repairAmountUah: hasRepair ? parsedRepairAmount : null,
+        fuelExpensePriceUahPerL: price,
+        fuelExpenseLiters: liters,
+      });
+      if (!result.ok) {
+        toast.error("Помилка", { description: result.error });
+        return;
+      }
+      toast.success("Витрати на паливо збережено");
+      setFuelExpensePrice("");
+      setFuelExpenseLiters("");
+      router.refresh();
+    } finally {
+      setPendingKind(null);
+    }
+  }
+
+  async function handleRepairSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!requireSharedFields()) return;
+
+    const amount = parseNum(repairAmount);
+    if (amount == null || amount <= 0) {
+      toast.error("Вкажіть суму ремонту");
+      return;
+    }
+
+    setPendingKind("repair");
+    try {
+      const result = await createMiniAppExpenses({
+        expenseDate: dateToYYYYMMDD(eventDate),
+        vehicleId,
+        repairAmountUah: amount,
         repairComment: repairComment.trim() || null,
-        maintenanceAmountUah: hasMaintenance
-          ? parsedMaintenanceAmount
-          : null,
+      });
+      if (!result.ok) {
+        toast.error("Помилка", { description: result.error });
+        return;
+      }
+      toast.success("Витрати на ремонт збережено");
+      setRepairAmount("");
+      setRepairComment("");
+      router.refresh();
+    } finally {
+      setPendingKind(null);
+    }
+  }
+
+  async function handleMaintenanceSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!requireSharedFields()) return;
+
+    const amount = parseNum(maintenanceAmount);
+    if (amount == null || amount <= 0) {
+      toast.error("Вкажіть суму обслуговування");
+      return;
+    }
+
+    setPendingKind("maintenance");
+    try {
+      const result = await createMiniAppExpenses({
+        expenseDate: dateToYYYYMMDD(eventDate),
+        vehicleId,
+        maintenanceAmountUah: amount,
         maintenanceComment: maintenanceComment.trim() || null,
       });
       if (!result.ok) {
         toast.error("Помилка", { description: result.error });
         return;
       }
-      toast.success(
-        result.savedCount > 1
-          ? `Збережено ${result.savedCount} витрати`
-          : "Витрати збережено"
-      );
-      resetForm();
+      toast.success("Витрати на обслуговування збережено");
+      setMaintenanceAmount("");
+      setMaintenanceComment("");
       router.refresh();
     } finally {
-      setPending(false);
+      setPendingKind(null);
     }
   }
 
@@ -183,7 +210,7 @@ export function FieldExpensesForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Ви входите як{" "}
         <span className="font-semibold text-foreground">{accessName}</span>
@@ -198,12 +225,17 @@ export function FieldExpensesForm({
             onSelect={setEventDate}
             open={dateOpen}
             onOpenChange={setDateOpen}
+            locked={anyPending}
           />
         </div>
 
         <div className="space-y-1.5">
           <Label>Транспорт *</Label>
-          <Select value={vehicleId} onValueChange={setVehicleId}>
+          <Select
+            value={vehicleId}
+            onValueChange={setVehicleId}
+            disabled={anyPending}
+          >
             <SelectTrigger className="h-11 text-base">
               <SelectValue placeholder="Оберіть транспорт" />
             </SelectTrigger>
@@ -216,15 +248,25 @@ export function FieldExpensesForm({
             </SelectContent>
           </Select>
         </div>
+      </section>
 
+      <form onSubmit={handleFuelSubmit} className="space-y-3">
         <FieldFuelExpenseFields
           price={fuelExpensePrice}
           liters={fuelExpenseLiters}
           sum={fuelExpenseSum}
           onPriceChange={setFuelExpensePrice}
           onLitersChange={setFuelExpenseLiters}
+          showOptionalHint={false}
         />
+        <ExpenseSubmitButton
+          pending={pendingKind === "fuel"}
+          disabled={anyPending}
+          label="Зберегти витрати на паливо"
+        />
+      </form>
 
+      <form onSubmit={handleRepairSubmit} className="space-y-3">
         <FieldAmountExpenseFields
           title="Витрати на ремонт"
           amountId="repair_amount"
@@ -233,8 +275,16 @@ export function FieldExpensesForm({
           comment={repairComment}
           onAmountChange={setRepairAmount}
           onCommentChange={setRepairComment}
+          showOptionalHint={false}
         />
+        <ExpenseSubmitButton
+          pending={pendingKind === "repair"}
+          disabled={anyPending}
+          label="Зберегти витрати на ремонт"
+        />
+      </form>
 
+      <form onSubmit={handleMaintenanceSubmit} className="space-y-3">
         <FieldAmountExpenseFields
           title="Витрати на обслуговування"
           amountId="maintenance_amount"
@@ -243,24 +293,14 @@ export function FieldExpensesForm({
           comment={maintenanceComment}
           onAmountChange={setMaintenanceAmount}
           onCommentChange={setMaintenanceComment}
+          showOptionalHint={false}
         />
-      </section>
-
-      <Button
-        type="submit"
-        className="h-12 w-full text-base"
-        disabled={pending}
-        aria-busy={pending}
-      >
-        {pending ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Збереження…
-          </>
-        ) : (
-          "Зберегти витрати"
-        )}
-      </Button>
-    </form>
+        <ExpenseSubmitButton
+          pending={pendingKind === "maintenance"}
+          disabled={anyPending}
+          label="Зберегти витрати на обслуговування"
+        />
+      </form>
+    </div>
   );
 }
