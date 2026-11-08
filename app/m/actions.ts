@@ -22,6 +22,7 @@ import {
 } from "@/lib/telegram/bot";
 import type { Vehicle } from "@/app/vehicles/actions";
 import { RAW_REPAYMENT_CATEGORY_NAME } from "@/lib/debts/raw-delivery-debt";
+import type { VehicleType } from "@/lib/trips/calc";
 import { mergeInventoryForDisplay } from "@/lib/inventory/inventoryView";
 import {
   mapPlanningOrderRowToCrmShape,
@@ -86,6 +87,7 @@ async function insertMiniAppVehicleExpense(params: {
   amount: number;
   vehicleId: string;
   vehicleName: string;
+  vehicleType?: VehicleType | null;
   categoryName: string;
   description: string;
   repaymentKind: VehicleRepaymentExpenseKind;
@@ -131,6 +133,7 @@ async function insertMiniAppVehicleExpense(params: {
       amount: params.amount,
       atYmd: params.day,
       vehicleName: params.vehicleName,
+      vehicleType: params.vehicleType,
       kind: params.repaymentKind,
       detail: params.crmDetail,
       purseId: params.keepinRefs?.purseId,
@@ -161,6 +164,7 @@ async function insertMiniAppFuelRepayment(params: {
   amount: number;
   vehicleId: string;
   vehicleName: string;
+  vehicleType?: VehicleType | null;
   priceUahPerL: number;
   liters: number;
   keepinRefs?: { purseId: number; categoryId: number } | null;
@@ -175,6 +179,7 @@ async function insertMiniAppFuelRepayment(params: {
     amount: params.amount,
     vehicleId: params.vehicleId,
     vehicleName: params.vehicleName,
+    vehicleType: params.vehicleType,
     categoryName: RAW_REPAYMENT_CATEGORY_NAME,
     description: `Паливо (Mini App): ${detail}`,
     repaymentKind: "fuel",
@@ -1146,6 +1151,7 @@ export async function createFieldDeliveriesAndTrip(
       amount: fuelExpenseUah,
       vehicleId: input.vehicleId,
       vehicleName,
+      vehicleType: (vehicle.type as VehicleType | null) ?? null,
       priceUahPerL: fuelExpensePriceUahPerL,
       liters: fuelExpenseLiters,
       keepinRefs,
@@ -1292,7 +1298,7 @@ export async function createMiniAppExpenses(
   const supabase = createServiceRoleClient();
   const { data: vehicle, error: vehicleError } = await supabase
     .from("vehicles")
-    .select("id, name")
+    .select("id, name, type")
     .eq("id", input.vehicleId)
     .maybeSingle();
 
@@ -1303,6 +1309,9 @@ export async function createMiniAppExpenses(
   const vehicleName = String(
     (vehicle as { name?: string | null }).name ?? "—"
   );
+  const vehicleType =
+    ((vehicle as { type?: VehicleType | null }).type as VehicleType | null) ??
+    null;
 
   let keepinRefs: { purseId: number; categoryId: number } | null = null;
   try {
@@ -1321,6 +1330,7 @@ export async function createMiniAppExpenses(
       amount: fuelAmount,
       vehicleId: input.vehicleId,
       vehicleName,
+      vehicleType,
       priceUahPerL: fuelPrice,
       liters: fuelLiters,
       keepinRefs,
@@ -1343,6 +1353,7 @@ export async function createMiniAppExpenses(
       amount: repairAmount,
       vehicleId: input.vehicleId,
       vehicleName,
+      vehicleType,
       categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
       repaymentKind: "repair",
@@ -1373,6 +1384,7 @@ export async function createMiniAppExpenses(
       amount: maintenanceAmount,
       vehicleId: input.vehicleId,
       vehicleName,
+      vehicleType,
       categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
       repaymentKind: "maintenance",

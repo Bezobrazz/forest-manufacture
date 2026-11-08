@@ -1,3 +1,4 @@
+import type { VehicleType } from "@/lib/trips/calc";
 import {
   createKeepinExpensePayment,
   deleteKeepinPayment,
@@ -16,6 +17,8 @@ export type VehicleRepaymentExpenseSyncInput = {
   atYmd: string;
   vehicleName: string;
   kind: VehicleRepaymentExpenseKind;
+  /** van = бус, truck = фура */
+  vehicleType?: VehicleType | null;
   /** Деталі для коментаря: «40 л × 55 ₴/л» або вільний текст */
   detail?: string | null;
   purseId?: number;
@@ -31,10 +34,10 @@ const KIND_LABEL: Record<VehicleRepaymentExpenseKind, string> = {
 };
 
 /**
- * Канонічні категорії KeepinCRM для фури (перевірено через API 08.11.2026):
- * Паливо Фура=94, Ремонт Фура=104, Обслуговування Фура=90.
+ * Канонічні категорії KeepinCRM (перевірено через API 08.11.2026):
+ * Паливо Фура=94, Паливо Бус=106, Ремонт Фура=104, Обслуговування Фура=90.
  */
-const DEFAULT_KEEPIN_CATEGORY_ID_BY_KIND: Record<
+const DEFAULT_TRUCK_CATEGORY_ID_BY_KIND: Record<
   VehicleRepaymentExpenseKind,
   number
 > = {
@@ -43,7 +46,7 @@ const DEFAULT_KEEPIN_CATEGORY_ID_BY_KIND: Record<
   maintenance: 90,
 };
 
-const DEFAULT_KEEPIN_CATEGORY_NAME_BY_KIND: Record<
+const DEFAULT_TRUCK_CATEGORY_NAME_BY_KIND: Record<
   VehicleRepaymentExpenseKind,
   string
 > = {
@@ -51,6 +54,10 @@ const DEFAULT_KEEPIN_CATEGORY_NAME_BY_KIND: Record<
   repair: "Ремонт Фура",
   maintenance: "Обслуговування Фура",
 };
+
+/** Для буса (van) окрема категорія лише для палива. */
+const DEFAULT_VAN_FUEL_CATEGORY_ID = 106;
+const DEFAULT_VAN_FUEL_CATEGORY_NAME = "Паливо Бус";
 
 const CATEGORY_ID_ENV_BY_KIND: Record<VehicleRepaymentExpenseKind, string> = {
   fuel: "KEEPINCRM_TRUCK_FUEL_CATEGORY_ID",
@@ -64,6 +71,9 @@ const CATEGORY_NAME_ENV_BY_KIND: Record<VehicleRepaymentExpenseKind, string> = {
   maintenance: "KEEPINCRM_TRUCK_MAINTENANCE_CATEGORY_NAME",
 };
 
+const VAN_FUEL_CATEGORY_ID_ENV = "KEEPINCRM_VAN_FUEL_CATEGORY_ID";
+const VAN_FUEL_CATEGORY_NAME_ENV = "KEEPINCRM_VAN_FUEL_CATEGORY_NAME";
+
 export function buildVehicleRepaymentExpenseComment(
   input: VehicleRepaymentExpenseSyncInput
 ): string {
@@ -74,13 +84,6 @@ export function buildVehicleRepaymentExpenseComment(
   return detail ? `${base}, ${detail}` : base;
 }
 
-export function keepinCategoryNameForVehicleRepaymentKind(
-  kind: VehicleRepaymentExpenseKind
-): string {
-  const fromEnv = process.env[CATEGORY_NAME_ENV_BY_KIND[kind]]?.trim();
-  return fromEnv || DEFAULT_KEEPIN_CATEGORY_NAME_BY_KIND[kind];
-}
-
 function parseEnvId(name: string): number | null {
   const raw = process.env[name]?.trim();
   if (!raw) return null;
@@ -88,18 +91,45 @@ function parseEnvId(name: string): number | null {
   return Number.isFinite(id) && id > 0 ? Math.trunc(id) : null;
 }
 
+function isVanVehicleType(vehicleType: VehicleType | null | undefined): boolean {
+  return vehicleType === "van";
+}
+
+export function keepinCategoryNameForVehicleRepaymentKind(
+  kind: VehicleRepaymentExpenseKind,
+  vehicleType?: VehicleType | null
+): string {
+  if (kind === "fuel" && isVanVehicleType(vehicleType)) {
+    return (
+      process.env[VAN_FUEL_CATEGORY_NAME_ENV]?.trim() ||
+      DEFAULT_VAN_FUEL_CATEGORY_NAME
+    );
+  }
+  const fromEnv = process.env[CATEGORY_NAME_ENV_BY_KIND[kind]]?.trim();
+  return fromEnv || DEFAULT_TRUCK_CATEGORY_NAME_BY_KIND[kind];
+}
+
 async function resolveCategoryIdForKind(
-  kind: VehicleRepaymentExpenseKind
+  kind: VehicleRepaymentExpenseKind,
+  vehicleType?: VehicleType | null
 ): Promise<number> {
+  if (kind === "fuel" && isVanVehicleType(vehicleType)) {
+    const vanFuelFromEnv = parseEnvId(VAN_FUEL_CATEGORY_ID_ENV);
+    if (vanFuelFromEnv) return vanFuelFromEnv;
+    if (DEFAULT_VAN_FUEL_CATEGORY_ID > 0) return DEFAULT_VAN_FUEL_CATEGORY_ID;
+    return resolveKeepinExpenseCategoryIdByName(
+      keepinCategoryNameForVehicleRepaymentKind(kind, vehicleType)
+    );
+  }
+
   const fromEnv = parseEnvId(CATEGORY_ID_ENV_BY_KIND[kind]);
   if (fromEnv) return fromEnv;
 
-  // Primary: known KeepinCRM category IDs (stable). Name lookup — лише fallback.
-  const defaultId = DEFAULT_KEEPIN_CATEGORY_ID_BY_KIND[kind];
+  const defaultId = DEFAULT_TRUCK_CATEGORY_ID_BY_KIND[kind];
   if (defaultId > 0) return defaultId;
 
   return resolveKeepinExpenseCategoryIdByName(
-    keepinCategoryNameForVehicleRepaymentKind(kind)
+    keepinCategoryNameForVehicleRepaymentKind(kind, vehicleType)
   );
 }
 
@@ -109,7 +139,8 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Проводить погашення доставки (паливо / ремонт / ТО) у KeepinCRM.
- * Гаманець — як у закупівель (Петрович); категорія — окрема для кожного типу фури.
+ * Гаманець — як у закупівель (Петрович).
+ * Паливо: фура → «Паливо Фура», бус (van) → «Паливо Бус».
  */
 export async function syncVehicleRepaymentExpenseToKeepin(
   input: VehicleRepaymentExpenseSyncInput
@@ -140,7 +171,7 @@ export async function syncVehicleRepaymentExpenseToKeepin(
     input.purseId && input.purseId > 0
       ? Promise.resolve(input.purseId)
       : resolveKeepinExpensePurseId(),
-    resolveCategoryIdForKind(input.kind),
+    resolveCategoryIdForKind(input.kind, input.vehicleType),
   ]);
 
   let lastError: unknown;
