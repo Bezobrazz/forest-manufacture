@@ -42,7 +42,7 @@ const TAB_META: Record<
   expenses: {
     label: "Витрати",
     title: "Витрати",
-    description: "Паливо, ремонт і обслуговування транспорту",
+    description: "Паливо, ремонт і обслуговування — погашення доставки",
   },
   operations: {
     label: "Операції",

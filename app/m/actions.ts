@@ -49,9 +49,6 @@ function formatMoneyUa(amount: number): string {
   })} ₴`;
 }
 
-const MINI_APP_REPAIR_CATEGORY_NAME = "Ремонт";
-const MINI_APP_MAINTENANCE_CATEGORY_NAME = "Обслуговування";
-
 async function ensureExpenseCategoryId(
   supabase: ReturnType<typeof createServiceRoleClient>,
   name: string
@@ -1268,7 +1265,7 @@ export async function createMiniAppExpenses(
       day,
       amount: repairAmount,
       vehicleId: input.vehicleId,
-      categoryName: MINI_APP_REPAIR_CATEGORY_NAME,
+      categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
     });
     if (!result.ok) {
@@ -1293,7 +1290,7 @@ export async function createMiniAppExpenses(
       day,
       amount: maintenanceAmount,
       vehicleId: input.vehicleId,
-      categoryName: MINI_APP_MAINTENANCE_CATEGORY_NAME,
+      categoryName: RAW_REPAYMENT_CATEGORY_NAME,
       description,
     });
     if (!result.ok) {
