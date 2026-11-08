@@ -109,6 +109,7 @@ export const FOOTER_NAV_SECTIONS: FooterNavSection[] = [
         items: [
           { href: "/m", label: "Внесення" },
           { href: "/m?tab=operations", label: "Операції" },
+          { href: "/m?tab=expenses", label: "Витрати" },
           { href: "/m?tab=warehouse", label: "Склад" },
           { href: "/m?tab=orders", label: "Замовлення" },
         ],

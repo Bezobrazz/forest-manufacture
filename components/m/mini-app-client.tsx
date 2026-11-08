@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { FieldDeliveryForm } from "@/components/m/field-delivery-form";
+import { FieldExpensesForm } from "@/components/m/field-expenses-form";
 import { FieldOperationsPanel } from "@/components/m/field-operations-panel";
 import { FieldOrdersPanel } from "@/components/m/field-orders-panel";
 import { FieldWarehousePanel } from "@/components/m/field-warehouse-panel";
@@ -23,6 +24,7 @@ import type { Supplier } from "@/lib/types";
 export const MINI_APP_TABS = [
   "entry",
   "operations",
+  "expenses",
   "warehouse",
   "orders",
 ] as const;
@@ -36,6 +38,11 @@ const TAB_META: Record<
     label: "Внесення",
     title: "Польове внесення",
     description: "Закупівля і поїздка сировини одним збереженням",
+  },
+  expenses: {
+    label: "Витрати",
+    title: "Витрати",
+    description: "Витрати на паливо для погашення доставки",
   },
   operations: {
     label: "Операції",
@@ -155,6 +162,14 @@ export function MiniAppClient({
               lastVehicleId={lastVehicleId}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="expenses" className="mt-0 space-y-4">
+          <FieldExpensesForm
+            accessName={accessName}
+            vehicles={vehicles}
+            lastVehicleId={lastVehicleId}
+          />
         </TabsContent>
 
         <TabsContent value="operations" className="mt-0 space-y-4">

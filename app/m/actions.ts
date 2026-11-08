@@ -1124,6 +1124,72 @@ export async function createFieldDeliveriesAndTrip(
   return { ok: true };
 }
 
+export type MiniAppFuelExpenseInput = {
+  expenseDate: string;
+  vehicleId: string;
+  fuelExpensePriceUahPerL: number;
+  fuelExpenseLiters: number;
+};
+
+export async function createMiniAppFuelExpense(
+  input: MiniAppFuelExpenseInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireMiniAppAccess();
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const day = input.expenseDate.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return { ok: false, error: "Некоректна дата" };
+  }
+  if (!input.vehicleId?.trim()) {
+    return { ok: false, error: "Оберіть транспорт" };
+  }
+
+  const price = input.fuelExpensePriceUahPerL;
+  const liters = input.fuelExpenseLiters;
+  if (!Number.isFinite(price) || price <= 0) {
+    return { ok: false, error: "Вкажіть ціну палива за літр" };
+  }
+  if (!Number.isFinite(liters) || liters <= 0) {
+    return { ok: false, error: "Вкажіть кількість літрів" };
+  }
+
+  const amount = Math.round(price * liters * 100) / 100;
+  if (!(amount > 0)) {
+    return { ok: false, error: "Сума витрат на паливо має бути більше нуля" };
+  }
+
+  const supabase = createServiceRoleClient();
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from("vehicles")
+    .select("id, name")
+    .eq("id", input.vehicleId)
+    .maybeSingle();
+
+  if (vehicleError || !vehicle) {
+    return { ok: false, error: "Оберіть транспорт" };
+  }
+
+  const repayment = await insertMiniAppFuelRepayment({
+    supabase,
+    day,
+    amount,
+    vehicleId: input.vehicleId,
+    priceUahPerL: price,
+    liters,
+  });
+
+  if (!repayment.ok) {
+    return { ok: false, error: repayment.error };
+  }
+
+  revalidatePath("/trips");
+  revalidatePath("/expenses");
+  revalidatePath("/m");
+
+  return { ok: true };
+}
+
 export type MiniAppOperation = {
   id: number;
   created_at: string;

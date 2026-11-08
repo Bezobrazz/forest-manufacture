@@ -11,6 +11,7 @@ import {
 import type { Vehicle } from "@/app/vehicles/actions";
 import type { Supplier } from "@/lib/types";
 import { dateToYYYYMMDD, formatNumberWithUnit } from "@/lib/utils";
+import { FieldFuelExpenseFields } from "@/components/m/field-fuel-expense-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -717,51 +718,13 @@ export function FieldDeliveryForm({
           />
         </div>
 
-        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-          <div>
-            <div className="text-sm font-semibold">Витрати на паливо</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Необовʼязково
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5 min-w-0">
-              <Label htmlFor="fuel_expense_price">Ціна, ₴/л</Label>
-              <Input
-                id="fuel_expense_price"
-                inputMode="decimal"
-                className="h-11 text-base"
-                value={fuelExpensePrice}
-                onChange={(e) => setFuelExpensePrice(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5 min-w-0">
-              <Label htmlFor="fuel_expense_liters">Кількість, л</Label>
-              <Input
-                id="fuel_expense_liters"
-                inputMode="decimal"
-                className="h-11 text-base"
-                value={fuelExpenseLiters}
-                onChange={(e) => setFuelExpenseLiters(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="fuel_expense_sum">Сума витрат на пальне, ₴</Label>
-            <Input
-              id="fuel_expense_sum"
-              className="h-11 text-base font-semibold tabular-nums"
-              value={
-                fuelExpenseSum != null
-                  ? formatNumberWithUnit(fuelExpenseSum, "₴")
-                  : ""
-              }
-              placeholder="—"
-              readOnly
-              disabled
-            />
-          </div>
-        </div>
+        <FieldFuelExpenseFields
+          price={fuelExpensePrice}
+          liters={fuelExpenseLiters}
+          sum={fuelExpenseSum}
+          onPriceChange={setFuelExpensePrice}
+          onLitersChange={setFuelExpenseLiters}
+        />
       </section>
 
       <Button
